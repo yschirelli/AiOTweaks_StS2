@@ -143,6 +143,37 @@ public static class CombatHooks
         }
     }
 
+    [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Commands.CardCmd), "Exhaust")]
+    public static class CardCmdExhaustPatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix(MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext choiceContext, MegaCrit.Sts2.Core.Models.CardModel card, bool causedByEthereal, bool skipVisuals, ref System.Threading.Tasks.Task<MegaCrit.Sts2.Core.Entities.Cards.CardPileAddResult?> __result)
+        {
+            if (RuntimeStateManager.NoCardExhaustEnabled || ConfigManager.Current.CombatSandbox.NoCardExhaust)
+            {
+                ModLogger.Info($"NoCardExhaust active: retaining card '{card?.GetType().Name}' to Discard pile instead of exhausting.");
+                __result = RedirectToDiscardAsync(card, skipVisuals);
+                return false;
+            }
+            return true;
+        }
+
+        private static async System.Threading.Tasks.Task<MegaCrit.Sts2.Core.Entities.Cards.CardPileAddResult?> RedirectToDiscardAsync(MegaCrit.Sts2.Core.Models.CardModel? card, bool skipVisuals)
+        {
+            if (card == null) return null;
+            try
+            {
+                var results = await MegaCrit.Sts2.Core.Commands.CardPileCmd.Add(new[] { card }, MegaCrit.Sts2.Core.Entities.Cards.PileType.Discard, MegaCrit.Sts2.Core.Entities.Cards.CardPilePosition.Bottom, null, skipVisuals);
+                return results.Count > 0 ? results[0] : null;
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error($"Failed redirecting exhausted card to discard: {ex.Message}", ex);
+                return null;
+            }
+        }
+    }
+
     /// <summary>
     /// Processes incoming damage to the player. If GodMode is active, prevents damage.
     /// </summary>

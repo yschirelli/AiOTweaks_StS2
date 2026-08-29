@@ -3,6 +3,7 @@ using System.Linq;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Entities.Cards;
+using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Nodes.Cards;
 using MegaCrit.Sts2.Core.Nodes.Combat;
 using AIOTweaks.Core;
@@ -180,34 +181,15 @@ public static class CardDirector
                             catch { }
                         }
 
-                        bool spawnedVisually = false;
                         try
                         {
-                            _ = CardPileCmd.Add(handCard, PileType.Hand, CardPilePosition.Top, null, false);
-                            spawnedVisually = true;
+                            TaskHelper.RunSafely(CardPileCmd.Add(handCard, PileType.Hand, CardPilePosition.Top, null, false));
                         }
                         catch (Exception ex)
                         {
-                            ModLogger.Debug($"CardPileCmd.Add notice: {ex.Message}");
-                        }
-
-                        if (!spawnedVisually || !player.PlayerCombatState.Hand.Cards.Contains(handCard))
-                        {
+                            ModLogger.Warn($"CardPileCmd.Add notice: {ex.Message}");
                             player.PlayerCombatState.Hand.AddInternal(handCard, -1, false);
                             player.PlayerCombatState.Hand.InvokeContentsChanged();
-                            if (NPlayerHand.Instance != null)
-                            {
-                                try
-                                {
-                                    var ncard = NCard.Create(handCard);
-                                    if (ncard != null)
-                                    {
-                                        NPlayerHand.Instance.Add(ncard, -1);
-                                        NPlayerHand.Instance.ForceRefreshCardIndices();
-                                    }
-                                }
-                                catch { }
-                            }
                         }
 
                         ModLogger.Info($"Card '{canonical.GetType().Name}' spawned directly into Hand. (Hand count: {player.PlayerCombatState.Hand.Cards.Count})");
@@ -268,18 +250,12 @@ public static class CardDirector
                     player.Deck.InvokeContentsChanged();
                     removed = true;
                 }
-                else
+                else if (card.DeckVersion != null && player.Deck.Cards.Contains(card.DeckVersion))
                 {
-                    var masterCard = card.DeckVersion ?? card.CloneOf ?? player.Deck.Cards.FirstOrDefault(m => 
-                        m == card || 
-                        (m.GetType() == card.GetType() && m.IsUpgraded == card.IsUpgraded));
-                    if (masterCard != null)
-                    {
-                        ModLogger.Verbose("CardDirector", $"Removing corresponding master deck card for combat clone: {masterCard.GetType().Name}");
-                        player.Deck.RemoveInternal(masterCard, false);
-                        player.Deck.InvokeContentsChanged();
-                        removed = true;
-                    }
+                    ModLogger.Verbose("CardDirector", $"Removing corresponding master deck card for combat clone: {card.DeckVersion.GetType().Name}");
+                    player.Deck.RemoveInternal(card.DeckVersion, false);
+                    player.Deck.InvokeContentsChanged();
+                    removed = true;
                 }
             }
 
@@ -291,9 +267,9 @@ public static class CardDirector
                     .SelectMany(p => p.Cards)
                     .Where(c => c != null && (
                         c == card || 
+                        (card.DeckVersion != null && c.DeckVersion == card.DeckVersion) ||
                         c.DeckVersion == card || 
-                        c.CloneOf == card || 
-                        (c.GetType() == card.GetType() && c.IsUpgraded == card.IsUpgraded)
+                        c.CloneOf == card
                     ))
                     .Distinct()
                     .ToList();
@@ -483,23 +459,30 @@ public static class CardDirector
             var player = GameHelper.GetActivePlayer();
             if (player != null)
             {
-                if (player.Deck?.Cards != null && !player.Deck.Cards.Contains(card))
+                // If this is a combat card with a linked master deck counterpart, sync master deck
+                if (card.DeckVersion != null && player.Deck?.Cards != null && player.Deck.Cards.Contains(card.DeckVersion))
                 {
-                    var master = card.DeckVersion ?? card.CloneOf ?? player.Deck.Cards.FirstOrDefault(m => m == card || m.GetType() == card.GetType());
-                    if (master != null && master.IsUpgraded != targetUpgraded)
+                    var master = card.DeckVersion;
+                    if (master.IsUpgraded != targetUpgraded)
                     {
                         if (targetUpgraded) master.UpgradeInternal(); else master.DowngradeInternal();
                         player.Deck.InvokeContentsChanged();
                     }
                 }
-
-                if (player.PlayerCombatState != null)
+                // If this is a master deck card, sync any combat card spawned directly from it
+                else if (player.PlayerCombatState != null && player.Deck?.Cards != null && player.Deck.Cards.Contains(card))
                 {
-                    var combatCard = player.PlayerCombatState.AllCards?.FirstOrDefault(c => c != null && (c == card || c.DeckVersion == card || c.CloneOf == card || c.GetType() == card.GetType()));
-                    if (combatCard != null && combatCard != card && combatCard.IsUpgraded != targetUpgraded)
+                    var combatCards = player.PlayerCombatState.AllCards?.Where(c => c != null && (c.DeckVersion == card || c.CloneOf == card)).ToList();
+                    if (combatCards != null)
                     {
-                        if (targetUpgraded) combatCard.UpgradeInternal(); else combatCard.DowngradeInternal();
-                        combatCard.Pile?.InvokeContentsChanged();
+                        foreach (var combatCard in combatCards)
+                        {
+                            if (combatCard.IsUpgraded != targetUpgraded)
+                            {
+                                if (targetUpgraded) combatCard.UpgradeInternal(); else combatCard.DowngradeInternal();
+                                combatCard.Pile?.InvokeContentsChanged();
+                            }
+                        }
                     }
                 }
             }
@@ -598,61 +581,22 @@ public static class CardDirector
                 return true;
             }
 
-            bool drawn = false;
             try
             {
-                _ = CardPileCmd.Add(card, PileType.Hand, CardPilePosition.Top, null, false);
-                drawn = true;
+                TaskHelper.RunSafely(CardPileCmd.Add(card, PileType.Hand, CardPilePosition.Top, null, false));
                 ModLogger.Verbose("CardDirector", "Drawn to hand via CardPileCmd.Add.");
             }
             catch (Exception ex)
             {
                 ModLogger.Debug($"CardPileCmd.Add fallback notice: {ex.Message}");
-            }
-
-            if (!drawn || card.Pile != player.PlayerCombatState.Hand)
-            {
                 var oldPile = card.Pile;
                 if (oldPile != null)
                 {
                     oldPile.RemoveInternal(card, false);
                     oldPile.InvokeContentsChanged();
                 }
-                else
-                {
-                    if (player.PlayerCombatState.DrawPile?.Cards != null && player.PlayerCombatState.DrawPile.Cards.Contains(card))
-                    {
-                        player.PlayerCombatState.DrawPile.RemoveInternal(card, false);
-                        player.PlayerCombatState.DrawPile.InvokeContentsChanged();
-                    }
-                    else if (player.PlayerCombatState.DiscardPile?.Cards != null && player.PlayerCombatState.DiscardPile.Cards.Contains(card))
-                    {
-                        player.PlayerCombatState.DiscardPile.RemoveInternal(card, false);
-                        player.PlayerCombatState.DiscardPile.InvokeContentsChanged();
-                    }
-                    else if (player.PlayerCombatState.ExhaustPile?.Cards != null && player.PlayerCombatState.ExhaustPile.Cards.Contains(card))
-                    {
-                        player.PlayerCombatState.ExhaustPile.RemoveInternal(card, false);
-                        player.PlayerCombatState.ExhaustPile.InvokeContentsChanged();
-                    }
-                }
-
                 player.PlayerCombatState.Hand?.AddInternal(card, -1, false);
                 player.PlayerCombatState.Hand?.InvokeContentsChanged();
-
-                if (NPlayerHand.Instance != null)
-                {
-                    try
-                    {
-                        var ncard = NCard.Create(card);
-                        if (ncard != null)
-                        {
-                            NPlayerHand.Instance.Add(ncard, -1);
-                            NPlayerHand.Instance.ForceRefreshCardIndices();
-                        }
-                    }
-                    catch { }
-                }
             }
 
             ModLogger.Info($"Card '{cardName}' drawn directly to combat hand. (Hand count: {player.PlayerCombatState.Hand?.Cards.Count ?? 0})");
@@ -701,9 +645,9 @@ public static class CardDirector
                     .SelectMany(p => p.Cards)
                     .FirstOrDefault(c => c != null && (
                         c == card ||
+                        (card.DeckVersion != null && c.DeckVersion == card.DeckVersion) ||
                         c.DeckVersion == card ||
-                        c.CloneOf == card ||
-                        (c.GetType() == card.GetType() && c.IsUpgraded == card.IsUpgraded)
+                        c.CloneOf == card
                     ));
 
                 if (match != null)
@@ -718,38 +662,15 @@ public static class CardDirector
                 return true;
             }
 
-            bool exhausted = false;
-
-            // 1. Try engine CardCmd.Exhaust
+            // Execute engine CardPileCmd.Add to Exhaust pile safely
             try
             {
-                _ = CardCmd.Exhaust(null!, targetCombatCard, false, false);
-                exhausted = true;
-                ModLogger.Verbose("CardDirector", "Exhausted via CardCmd.Exhaust.");
+                TaskHelper.RunSafely(CardPileCmd.Add(targetCombatCard, PileType.Exhaust, CardPilePosition.Bottom, null, false));
+                ModLogger.Info($"Card '{cardName}' force exhausted via CardPileCmd.Add.");
             }
             catch (Exception ex)
             {
-                ModLogger.Debug($"CardCmd.Exhaust notice: {ex.Message}");
-            }
-
-            // 2. Try CardPileCmd.Add to Exhaust pile
-            if (!exhausted || targetCombatCard.Pile != combatState.ExhaustPile)
-            {
-                try
-                {
-                    _ = CardPileCmd.Add(targetCombatCard, PileType.Exhaust, CardPilePosition.Top, null, false);
-                    exhausted = true;
-                    ModLogger.Verbose("CardDirector", "Exhausted via CardPileCmd.Add(PileType.Exhaust).");
-                }
-                catch (Exception ex)
-                {
-                    ModLogger.Debug($"CardPileCmd.Add(Exhaust) notice: {ex.Message}");
-                }
-            }
-
-            // 3. Fallback: direct pile manipulation
-            if (targetCombatCard.Pile != combatState.ExhaustPile)
-            {
+                ModLogger.Warn($"CardPileCmd.Add notice: {ex.Message}, falling back to manual pile manipulation.");
                 var oldPile = targetCombatCard.Pile;
                 if (oldPile != null)
                 {
@@ -772,18 +693,6 @@ public static class CardDirector
                 combatState.ExhaustPile?.InvokeContentsChanged();
             }
 
-            // Clean up visual node if card was in hand
-            if (NPlayerHand.Instance != null)
-            {
-                try
-                {
-                    NPlayerHand.Instance.Remove(targetCombatCard);
-                    NPlayerHand.Instance.ForceRefreshCardIndices();
-                }
-                catch { }
-            }
-
-            ModLogger.Info($"Card '{cardName}' force exhausted to Exhaust pile. (Exhaust count: {combatState.ExhaustPile?.Cards.Count ?? 0})");
             OnDeckChanged?.Invoke();
             return true;
         }
@@ -881,25 +790,26 @@ public static class CardDirector
             var player = GameHelper.GetActivePlayer();
             if (player != null)
             {
-                if (player.Deck?.Cards != null && !player.Deck.Cards.Contains(card))
+                // If this is a combat card with a linked master deck counterpart, sync master deck
+                if (card.DeckVersion != null && player.Deck?.Cards != null && player.Deck.Cards.Contains(card.DeckVersion))
                 {
-                    var master = card.DeckVersion ?? card.CloneOf ?? player.Deck.Cards.FirstOrDefault(m => m == card || m.GetType() == card.GetType());
-                    if (master != null)
-                    {
-                        var masterEnch = GameHelper.CreateEnchantment(canonical, amount) ?? canonical;
-                        try { _ = CardCmd.Enchant(masterEnch, master, amount); } catch { master.EnchantInternal(masterEnch, amount); }
-                        player.Deck.InvokeContentsChanged();
-                    }
+                    var master = card.DeckVersion;
+                    var masterEnch = GameHelper.CreateEnchantment(canonical, amount) ?? canonical;
+                    try { _ = CardCmd.Enchant(masterEnch, master, amount); } catch { master.EnchantInternal(masterEnch, amount); }
+                    player.Deck.InvokeContentsChanged();
                 }
-
-                if (player.PlayerCombatState != null)
+                // If this is a master deck card, sync any combat card spawned directly from it
+                else if (player.PlayerCombatState != null && player.Deck?.Cards != null && player.Deck.Cards.Contains(card))
                 {
-                    var combatCard = player.PlayerCombatState.AllCards?.FirstOrDefault(c => c != null && c != card && (c == card || c.DeckVersion == card || c.CloneOf == card || c.GetType() == card.GetType()));
-                    if (combatCard != null)
+                    var combatCards = player.PlayerCombatState.AllCards?.Where(c => c != null && (c.DeckVersion == card || c.CloneOf == card)).ToList();
+                    if (combatCards != null)
                     {
-                        var combatEnch = GameHelper.CreateEnchantment(canonical, amount) ?? canonical;
-                        try { _ = CardCmd.Enchant(combatEnch, combatCard, amount); } catch { combatCard.EnchantInternal(combatEnch, amount); }
-                        combatCard.Pile?.InvokeContentsChanged();
+                        foreach (var combatCard in combatCards)
+                        {
+                            var combatEnch = GameHelper.CreateEnchantment(canonical, amount) ?? canonical;
+                            try { _ = CardCmd.Enchant(combatEnch, combatCard, amount); } catch { combatCard.EnchantInternal(combatEnch, amount); }
+                            combatCard.Pile?.InvokeContentsChanged();
+                        }
                     }
                 }
             }
@@ -945,23 +855,24 @@ public static class CardDirector
             var player = GameHelper.GetActivePlayer();
             if (player != null)
             {
-                if (player.Deck?.Cards != null && !player.Deck.Cards.Contains(card))
+                // If this is a combat card with a linked master deck counterpart, sync master deck
+                if (card.DeckVersion != null && player.Deck?.Cards != null && player.Deck.Cards.Contains(card.DeckVersion))
                 {
-                    var master = card.DeckVersion ?? card.CloneOf ?? player.Deck.Cards.FirstOrDefault(m => m == card || m.GetType() == card.GetType());
-                    if (master != null)
-                    {
-                        try { CardCmd.ClearEnchantment(master); } catch { master.ClearEnchantmentInternal(); }
-                        player.Deck.InvokeContentsChanged();
-                    }
+                    var master = card.DeckVersion;
+                    try { CardCmd.ClearEnchantment(master); } catch { master.ClearEnchantmentInternal(); }
+                    player.Deck.InvokeContentsChanged();
                 }
-
-                if (player.PlayerCombatState != null)
+                // If this is a master deck card, sync any combat card spawned directly from it
+                else if (player.PlayerCombatState != null && player.Deck?.Cards != null && player.Deck.Cards.Contains(card))
                 {
-                    var combatCard = player.PlayerCombatState.AllCards?.FirstOrDefault(c => c != null && c != card && (c == card || c.DeckVersion == card || c.CloneOf == card || c.GetType() == card.GetType()));
-                    if (combatCard != null)
+                    var combatCards = player.PlayerCombatState.AllCards?.Where(c => c != null && (c.DeckVersion == card || c.CloneOf == card)).ToList();
+                    if (combatCards != null)
                     {
-                        try { CardCmd.ClearEnchantment(combatCard); } catch { combatCard.ClearEnchantmentInternal(); }
-                        combatCard.Pile?.InvokeContentsChanged();
+                        foreach (var combatCard in combatCards)
+                        {
+                            try { CardCmd.ClearEnchantment(combatCard); } catch { combatCard.ClearEnchantmentInternal(); }
+                            combatCard.Pile?.InvokeContentsChanged();
+                        }
                     }
                 }
             }
