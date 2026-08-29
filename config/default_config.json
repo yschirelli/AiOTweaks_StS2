@@ -1,0 +1,39 @@
+{
+  "general": {
+    "enabled": true,
+    "debugLogging": false,
+    "consoleHotkey": "F1",
+    "guiOverlayHotkey": "F3",
+    "quickGodModeKey": "F2",
+    "quickKillEnemiesKey": "F4"
+  },
+  "preRunTweaks": {
+    "goldRewardMultiplier": 1.0,
+    "shopDiscountMultiplier": 1.0,
+    "cardRewardCount": 3,
+    "startingGoldBonus": 0,
+    "startingMaxHpBonus": 0,
+    "mapNodeDistribution": {
+      "eliteWeightMultiplier": 1.0,
+      "shopWeightMultiplier": 1.0,
+      "eventWeightMultiplier": 1.0,
+      "restSiteWeightMultiplier": 1.0,
+      "combatWeightMultiplier": 1.0
+    }
+  },
+  "combatSandbox": {
+    "godMode": false,
+    "infiniteEnergy": false,
+    "oneHitKill": false,
+    "bonusDrawPerTurn": 0,
+    "maxHandSizeOverride": 10,
+    "infinitePotions": false,
+    "noCardExhaust": false
+  },
+  "ui": {
+    "overlayScale": 1.0,
+    "overlayOpacity": 0.95,
+    "showDebugConsoleOnStart": false,
+    "enableAudioCues": true
+  }
+}

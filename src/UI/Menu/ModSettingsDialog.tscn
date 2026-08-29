@@ -1,0 +1,7 @@
+[gd_scene load_steps=2 format=3 uid="uid://e4r8t2y9w1m0x"]
+
+[ext_resource type="Script" path="res://src/UI/Menu/ModSettingsDialog.cs" id="1_j2k9l"]
+
+[node name="ModSettingsDialog" type="CanvasLayer"]
+layer = 130
+script = ExtResource("1_j2k9l")

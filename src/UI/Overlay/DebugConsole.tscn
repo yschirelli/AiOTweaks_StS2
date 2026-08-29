@@ -1,0 +1,7 @@
+[gd_scene load_steps=2 format=3 uid="uid://c8y6w1k4l7o0m"]
+
+[ext_resource type="Script" path="res://src/UI/Overlay/DebugConsole.cs" id="1_d7h4k"]
+
+[node name="DebugConsole" type="CanvasLayer"]
+layer = 128
+script = ExtResource("1_d7h4k")

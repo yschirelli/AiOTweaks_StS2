@@ -1,0 +1,72 @@
+using System;
+using AIOTweaks.Core.Logging;
+using AIOTweaks.Cheats;
+using HarmonyLib;
+using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Runs;
+
+namespace AIOTweaks.Hooks;
+
+/// <summary>
+/// Intercepts event room resolution to allow forcing specific narrative events.
+/// </summary>
+public static class EventHooks
+{
+    public static void ApplyPatches(Harmony harmony)
+    {
+        ModLogger.Verbose("EventHooks", "Applying EventHooks Harmony patches...");
+        try
+        {
+            harmony.CreateClassProcessor(typeof(EventHooks)).Patch();
+            ModLogger.Info("EventHooks successfully initialized.");
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Warn($"EventHooks patch notice: {ex.Message}");
+        }
+    }
+
+    [HarmonyPatch(typeof(ActModel), nameof(ActModel.PullNextEvent))]
+    public static class ActModelPullNextEventPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(ref EventModel __result, RunState runState)
+        {
+            try
+            {
+                ModLogger.Verbose("EventHooks", $"ActModel.PullNextEvent intercepted. Rolled event: '{__result?.Id}'");
+                if (EventDirector.TryConsumeForcedEvent(out var forcedModel) && forcedModel != null)
+                {
+                    ModLogger.Info($"EventHook: Overriding rolled event '{__result?.Id}' with forced event '{forcedModel.Id}'");
+                    __result = forcedModel;
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Warn($"ActModel.PullNextEvent patch error: {ex.Message}");
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(ActModel), nameof(ActModel.PullAncient))]
+    public static class ActModelPullAncientPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(ref EventModel __result)
+        {
+            try
+            {
+                ModLogger.Verbose("EventHooks", $"ActModel.PullAncient intercepted. Rolled ancient: '{__result?.Id}'");
+                if (EventDirector.TryConsumeForcedEvent(out var forcedModel) && forcedModel != null)
+                {
+                    ModLogger.Info($"EventHook: Overriding rolled ancient '{__result?.Id}' with forced event '{forcedModel.Id}'");
+                    __result = forcedModel;
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Warn($"ActModel.PullAncient patch error: {ex.Message}");
+            }
+        }
+    }
+}
