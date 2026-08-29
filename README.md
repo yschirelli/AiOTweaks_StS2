@@ -1,128 +1,218 @@
-# AIOTweaks - Slay the Spire 2 Mod
+# AIOTweaks — Slay the Spire 2 Mod & Sandbox Suite
 
-An all-in-one customizable settings, tweak suite, and sandbox debug toolkit for **Slay the Spire 2** built with Godot C# / .NET 8 and HarmonyLib.
+[![Game](https://img.shields.io/badge/Game-Slay%20the%20Spire%202-red.svg)](https://store.steampowered.com/app/2868840/Slay_the_Spire_2/)
+[![Framework](https://img.shields.io/badge/Engine-Godot%204.3%20%28Mono%29-blue.svg)](https://godotengine.org/)
+[![Target](https://img.shields.io/badge/.NET-9.0-purple.svg)](https://dotnet.microsoft.com/)
+[![Patching](https://img.shields.io/badge/Patching-HarmonyX-orange.svg)](https://github.com/BepInEx/HarmonyX)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+**AIOTweaks** (All-in-One Tweaks) is an advanced Quality of Life (QoL), modding API sandbox, and real-time debugging suite designed specifically for **Slay the Spire 2** (built on Godot 4.3 Mono / C# .NET 9). 
+
+Whether you are testing new card synergies, prototyping custom balance patches, exploring procedural map generation, or experimenting with sandbox cheats, AIOTweaks gives you full runtime control over game systems through non-destructive Harmony hooks and an in-game HUD overlay.
+
+---
+
+## Table of Contents
+- [Features](#features)
+- [Keybindings & Controls](#keybindings--controls)
+- [Console Commands](#console-commands)
+- [Project Architecture](#project-architecture)
+- [Required Dependencies](#required-dependencies)
+- [Building from Source](#building-from-source)
+- [Installation Guide](#installation-guide)
+- [Configuration](#configuration)
+- [Troubleshooting](#troubleshooting)
+- [License](#license)
 
 ---
 
 ## Features
 
-### 1. Pre-Run Tweaks & Modifiers
-- **Map Node Generation:** Custom multipliers for Elite encounters, Shops, Unknown/Events, Rest sites, and Standard combats without breaking base game PRNG determinism.
-- **Fair Play Enforcement:** Modifying any map generation multipliers automatically treats the run as **Seeded / Custom mode** (`GameMode.Custom`), disabling standard progression unlocks and achievements to protect base game integrity. When all map multipliers remain at default `1.0x`, the run proceeds normally as standard.
-- **Economy Scaling:** Configurable gold drop multipliers, shop price discounts, and starting gold bonuses.
-- **Card Rewards & Stats:** Adjust number of card choices per combat reward and starting max HP.
+### 🛠️ In-Game Debug Console & Cheat Engine
+- Toggleable overlay console (`F1` or `` ` ``) with auto-scroll, command history, and color-coded status output.
+- Instant godmode, infinite energy, one-hit kills, enemy clears, custom card/relic spawning, and direct combat manipulation.
+- Safe lifecycle reset: Transient cheats and overrides automatically reset when exiting runs or returning to the main menu.
 
-### 2. In-Run Mod Settings & Debug Controls
-- **GUI Menu Overlay (`F3`):** Press `F3` (or your configured GUI overlay key) anytime in-run to open the complete tabbed configuration suite, item spawners, and sandbox tools. You can also open this via BaseLib's in-game Mod Configuration screen.
-- **AIOTweaks Console (`F1`):** Press `F1` or `` ` `` (Backquote) anytime in-run to toggle the interactive cheat and debug console.
-- **Quick Action Bar:** Instant toggles for:
-  - **God Mode** (`F2`): Absorb all incoming player damage.
-  - **Infinite Energy**: Energy does not deplete on playing cards.
-  - **1-Hit Kill**: Instantly eliminate monsters when dealing damage.
-  - **Kill All Enemies** (`F4`): Clear the combat encounter immediately.
-  - **+500 Gold / Heal +50 / Draw 3**: One-click instant resource actions.
-- **Interactive Command Console:** Full terminal input with auto-scrolling live logs and command history.
+### ⚙️ Pause Menu & Pre-Run GUI Settings
+- Direct integration into Slay the Spire 2's Pause Menu: click **"⚙ AIOTweaks Settings"** to modify run multipliers on the fly.
+- Configurable economic bonuses: starting gold bonus, starting max HP bonus, gold reward multipliers, and shop discount percentages.
+- Custom card reward draft counts (expand beyond the standard 3 card choices).
 
-### 3. Cheat & Sandbox Directors
-- **Relic Director:** Add or remove relics dynamically (`relic <id>`, `rmrelic <id>`).
-- **Card Director:** Spawn cards in hand or add upgraded cards into master deck (`card <id> [true/false]`, `handcard <id>`).
-- **Inventory Director:** Adjust currency, heal, damage, or set maximum HP (`gold <amount>`, `setgold <amount>`, `heal <amount>`, `damage <amount>`, `setmaxhp <amount>`).
-- **Event Director:** Force upcoming narrative events (`event <id>`, `clearevent`).
-- **Combat Director:** Modify combat state, draw cards, add energy, or end turns on demand (`draw <count>`, `energy <amount>`, `killall`, `endturn`).
+### 🗺️ Procedural Map Generation Tweaks
+- Customizable node distribution weights: fine-tune the frequency of Elites, Shops, Unknown/Events, Rest Sites, and Normal Combats.
+- Non-destructive post-generation patches to prevent soft-locking or unroutable floor trees.
 
-### 4. Non-Destructive Modding Safety
-- Safe prefix/postfix patching via **HarmonyLib**.
-- Does not corrupt base game save files or serialize illegal runtime overrides.
-- In-memory state automatically resets cleanly upon returning to the main menu.
+### 🛡️ Non-Destructive Hook Architecture
+- Built with **HarmonyX** prefix and postfix patches across core game assemblies.
+- Patches fail open and wrap all reflection queries in safe try-catch blocks to prevent game crashes.
 
 ---
 
-## Keybindings (Configurable)
+## Keybindings & Controls
 
-| Key | Action |
-| --- | --- |
-| `F1` or `` ` `` | Toggle AIOTweaks Debug Console |
-| `F2` | Quick Toggle God Mode |
-| `F3` | Toggle GUI Menu Overlay & Mod Settings |
-| `F4` | Quick Kill All Enemies |
+| Key | Action | Context |
+| :--- | :--- | :--- |
+| **`F1`** or **`` ` ``** (Tilde) | Toggle AIOTweaks Debug Console | In-Run / Combat |
+| **`F2`** | Quick Toggle God Mode (Invulnerability) | In-Run / Combat |
+| **`F3`** | Quick Kill All Active Enemies | Combat |
+| **`Escape`** | Open Pause Menu (Access Settings GUI) | In-Run |
+
+*(All hotkeys are customizable in `config/default_config.json` or your user configuration).*
 
 ---
 
 ## Console Commands
 
-| Command | Description |
-| --- | --- |
-| `help` | List all available console commands |
-| `god` | Toggle God Mode (invulnerability) |
-| `infenergy` | Toggle Infinite Energy |
-| `onehitkill` / `ohk` | Toggle One-Hit Kill |
-| `killall` | Kill all active enemies in combat |
-| `endturn` | Instantly end player's turn |
-| `gold <amount>` | Add gold to player |
-| `setgold <amount>` | Set exact player gold amount |
-| `heal <amount>` | Heal player by specified HP |
-| `damage <amount>` | Damage player by specified amount |
-| `setmaxhp <amount>` | Set player maximum HP |
-| `relic <id>` | Add a relic by ID |
-| `rmrelic <id>` | Remove a relic by ID |
-| `card <id> [upgraded]` | Add a card to master deck (optional upgraded flag) |
-| `handcard <id>` | Spawn a card into current combat hand |
-| `event <id>` | Force the next rolled event to this ID |
-| `clearevent` | Clear active forced event override |
-| `draw <count>` | Draw cards immediately in combat |
-| `energy <amount>` | Add combat energy |
-| `clear` | Clear the console log window |
-| `reset` | Reset all active cheats and session overrides |
+Open the console with `F1` or `` ` `` and execute any of the following commands:
+
+| Command | Syntax / Example | Description |
+| :--- | :--- | :--- |
+| `help` | `help` | Lists all registered console commands with syntax. |
+| `god` | `god` | Toggles God Mode (player becomes immune to all incoming damage). |
+| `infenergy` | `infenergy` | Toggles Infinite Energy in combat. |
+| `onehitkill` / `ohk` | `ohk` | Toggles One-Hit Kill (all player attacks deal fatal damage). |
+| `killall` | `killall` | Instantly defeats all active enemies in combat. |
+| `endturn` | `endturn` | Instantly forces the player's turn to conclude. |
+| `gold` | `gold 500` | Adds the specified amount of gold to the player inventory. |
+| `setgold` | `setgold 999` | Sets player gold to an exact value. |
+| `heal` | `heal 50` | Restores the specified amount of HP. |
+| `damage` | `damage 20` | Deals direct damage to the player. |
+| `setmaxhp` | `setmaxhp 120` | Modifies the player's maximum HP. |
+| `relic` | `relic BurningBlood` | Adds a relic to the player by ID or class name. |
+| `rmrelic` | `rmrelic BurningBlood` | Removes an active relic from the player. |
+| `card` | `card Strike_R true` | Adds a card to the master deck (optional `true`/`false` for upgraded). |
+| `handcard` | `handcard Defend_R` | Spawns a card directly into current combat hand. |
+| `draw` | `draw 3` | Immediately draws specified number of cards in combat. |
+| `energy` | `energy 2` | Adds specified energy points in combat. |
+| `event` | `event BigFish` | Forces the next rolled unknown room to be a specific event ID. |
+| `clearevent` | `clearevent` | Clears active forced event overrides. |
+| `clear` | `clear` | Clears text from the console log window. |
+| `reset` | `reset` | Clears all transient cheats and resets state to default. |
 
 ---
 
-## Project Structure
+## Project Architecture
 
 ```text
-aiotweaks/
-├── AGENTS.md                    # Project guidelines & architectural specification
-├── README.md                    # Mod documentation & usage guide
+AiOTweaks_StS2/
 ├── aiotweaks.sln                # .NET Solution file
-├── src/
-│   ├── AIOTweaks.csproj         # C# project targeting net8.0 with Godot & Harmony
-│   ├── Core/
-│   │   ├── ModEntry.cs          # Mod lifecycle entry point & scene hook
-│   │   ├── Logging/
-│   │   │   └── ModLogger.cs     # Centralized logger with [AIOTweaks] tagging
-│   │   ├── Config/
-│   │   │   ├── ModConfig.cs     # Strongly typed config schema
-│   │   │   ├── RunSettings.cs   # Per-run profile & modifier settings
-│   │   │   └── ConfigManager.cs # Safe JSON persistence & fallbacks
-│   │   └── State/
-│   │       └── RuntimeStateManager.cs # Transient cheat tracking & lifecycle reset
-│   ├── Hooks/
-│   │   ├── EconomyHooks.cs      # Gold rewards & shop discount patches
-│   │   ├── MapGenerationHooks.cs# Node distribution weight patches
-│   │   ├── RelicHooks.cs        # Relic drops & injection patches
-│   │   ├── EventHooks.cs        # Event room routing & forcing patches
-│   │   └── CombatHooks.cs       # Damage, energy, and draw sandbox patches
-│   ├── Cheats/
-│   │   ├── RelicDirector.cs     # Atomic relic operations
-│   │   ├── EventDirector.cs     # Atomic event manipulation
-│   │   ├── InventoryDirector.cs # Currency & HP operations
-│   │   ├── CardDirector.cs      # Deck & hand card spawning
-│   │   └── CombatDirector.cs    # Combat sandbox & turn management
-│   └── UI/
-│       ├── Overlay/
-│       │   ├── DebugConsole.cs  # In-run CanvasLayer overlay logic
-│       │   └── DebugConsole.tscn# Godot scene for overlay
-│       └── Menu/
-│           ├── PreRunSettingsMenu.cs # Pre-run configuration menu logic
-│           └── PreRunSettingsMenu.tscn # Godot scene for pre-run menu
+├── AIOTweaks.json               # Slay the Spire 2 Mod Manifest
+├── README.md                    # Documentation & user guide
+├── AGENTS.md                    # Architecture guidelines & agent rules
+├── config/
+│   └── default_config.json      # Default schema and fallback config
 ├── assets/
-│   └── icons/                   # UI texture assets
-└── config/
-    └── default_config.json      # Default configuration file
+│   └── icons/                   # UI texture icons & assets
+└── src/
+    ├── AIOTweaks.csproj         # C# project targeting net9.0 + Godot Mono
+    ├── Core/
+    │   ├── ModEntry.cs          # Mod lifecycle entry point & scene injector
+    │   ├── GameHelper.cs        # Reflection & engine helper utilities
+    │   ├── Logging/ModLogger.cs # Centralized [AIOTweaks] logging
+    │   ├── Config/              # Strongly typed JSON config & profile manager
+    │   └── State/               # Transient cheat tracking & lifecycle resets
+    ├── Hooks/                   # Harmony patching modules
+    │   ├── CombatHooks.cs       # Invulnerability, energy, damage, and draw
+    │   ├── EconomyHooks.cs      # Gold reward & shop price patches
+    │   ├── EventHooks.cs        # Event manipulation & forcing
+    │   ├── MapGenerationHooks.cs# Node weight & map generation patches
+    │   ├── RelicHooks.cs        # Relic pool & drop manipulation
+    │   └── ModdingScreenHooks.cs# Pause menu UI integration
+    ├── Cheats/                  # Domain-specific cheat managers
+    │   ├── CombatDirector.cs    # Combat sandbox & turn management
+    │   ├── InventoryDirector.cs # Currency, HP, and potion operations
+    │   ├── CardDirector.cs      # Deck and hand card spawning
+    │   ├── RelicDirector.cs     # Atomic relic injection/removal
+    │   └── EventDirector.cs     # Event routing and queue forcing
+    └── UI/                      # Godot scene overlays and controls
+        ├── Overlay/             # In-run CanvasLayer Debug Console
+        └── Menu/                # Pre-run & pause menu settings
 ```
 
 ---
 
-## Configuration (`config/default_config.json`)
+## Required Dependencies
+
+- **[.NET 9.0 SDK](https://dotnet.microsoft.com/download/dotnet/9.0)** (or later)
+- **[Godot Engine 4.3+ (.NET / Mono Build)](https://godotengine.org/download)**
+- **Slay the Spire 2** (Installed via Steam)
+- NuGet packages (automatically resolved via `dotnet restore`):
+  - `Lib.Harmony` (>= 2.3.3)
+  - `System.Text.Json`
+
+---
+
+## Building from Source
+
+1. Clone or open the repository:
+   ```bash
+   git clone https://github.com/yschirelli/AiOTweaks_StS2.git
+   cd AiOTweaks_StS2
+   ```
+
+2. Restore dependencies and compile the release binary:
+   ```bash
+   dotnet restore aiotweaks.sln
+   dotnet build aiotweaks.sln -c Release
+   ```
+
+3. The compiled assembly and assets will be output to:
+   ```text
+   src/.godot/mono/temp/bin/Release/
+   ├── AIOTweaks.dll
+   ├── AIOTweaks.json
+   ├── 0Harmony.dll
+   ├── System.Text.Json.dll
+   ├── assets/
+   └── config/
+   ```
+
+---
+
+## Installation Guide
+
+### Step 1: Locate your Slay the Spire 2 `mods` Directory
+Open **Steam** → Right-click **Slay the Spire 2** → **Manage** → **Browse local files**.
+Inside the game folder, open or create a folder named `mods`.
+
+**Default Platform Paths:**
+- **Windows:** `C:\Program Files (x86)\Steam\steamapps\common\Slay the Spire 2\mods\AIOTweaks\`
+- **Linux (Native / Proton):** `~/.local/share/Steam/steamapps/common/Slay the Spire 2/mods/AIOTweaks/`
+- **Steam Deck:** `~/.var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps/common/Slay the Spire 2/mods/AIOTweaks/`
+
+### Step 2: Copy Mod Files
+Copy the mod bundle into `mods/AIOTweaks/`:
+```text
+Slay the Spire 2/
+└── mods/
+    └── AIOTweaks/
+        ├── AIOTweaks.json
+        ├── AIOTweaks.dll
+        ├── 0Harmony.dll
+        ├── System.Text.Json.dll
+        ├── assets/
+        └── config/
+```
+
+*(Linux one-line deploy from build directory)*:
+```bash
+mkdir -p ~/.local/share/Steam/steamapps/common/"Slay the Spire 2"/mods/AIOTweaks
+cp AIOTweaks.json assets config ~/.local/share/Steam/steamapps/common/"Slay the Spire 2"/mods/AIOTweaks/ -r
+cp src/.godot/mono/temp/bin/Release/*.dll ~/.local/share/Steam/steamapps/common/"Slay the Spire 2"/mods/AIOTweaks/
+```
+
+### Step 3: Launch and Activate
+1. Start **Slay the Spire 2**.
+2. Click **Mods** in the Main Menu and verify **AIOTweaks** is enabled.
+3. Start any run and press **`F1`** to verify the debug console opens.
+
+---
+
+## Configuration
+
+Settings are configured via `config/default_config.json` and persist per-user in Godot's app data directory:
+- **Windows:** `%APPDATA%\Godot\app_userdata\Slay the Spire 2\AIOTweaks\config.json`
+- **Linux / Steam Deck:** `~/.local/share/godot/app_userdata/Slay the Spire 2/AIOTweaks/config.json`
 
 ```json
 {
@@ -167,95 +257,14 @@ aiotweaks/
 
 ---
 
-## Building from Source
+## Troubleshooting
 
-### Prerequisites
-- **[.NET 9.0 SDK](https://dotnet.microsoft.com/download/dotnet/9.0)** (or newer)
-- **[Godot Engine .NET 4.3+](https://godotengine.org/download)** (Mono / .NET build)
-- Git (optional, for cloning)
-
-### CLI Build
-1. Open terminal or command prompt in the repository root:
-   ```bash
-   dotnet restore aiotweaks.sln
-   dotnet build aiotweaks.sln -c Release
-   ```
-2. The output binaries will be generated at:
-   ```text
-   src/.godot/mono/temp/bin/Release/
-   ├── AIOTweaks.dll
-   ├── AIOTweaks.json
-   ├── 0Harmony.dll
-   ├── System.Text.Json.dll
-   ├── assets/
-   └── config/
-   ```
-
----
-
-## Installation Guide
-
-Follow these simple steps to install **AIOTweaks**:
-
-### Step 1: Get the Mod Files
-- **Download:** Download and extract the latest release archive (or build the binaries following the [Building from Source](#building-from-source) section).
-- Ensure your `AIOTweaks` folder contains:
-  - `AIOTweaks.json` (Required Slay the Spire 2 mod manifest)
-  - `AIOTweaks.dll`
-  - `0Harmony.dll`
-  - `System.Text.Json.dll`
-  - `assets/`
-  - `config/`
-
-### Step 2: Open the Game's `mods` Directory
-1. Open **Steam** and navigate to your Library.
-2. Right-click **Slay the Spire 2** → **Manage** → **Browse local files**.
-3. Open the `mods` folder (if it doesn't exist, create a folder named `mods`).
-
-<details>
-<summary><b>Default Installation Paths</b></summary>
-
-- **Windows:** `C:\Program Files (x86)\Steam\steamapps\common\Slay the Spire 2\mods\AIOTweaks\`
-- **Linux:** `~/.local/share/Steam/steamapps/common/Slay the Spire 2/mods/AIOTweaks/`
-- **Steam Deck:** `~/.var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps/common/Slay the Spire 2/mods/AIOTweaks/`
-</details>
-
-### Step 3: Deploy the Mod
-Place the entire `AIOTweaks` folder into the `mods/` directory:
-
-```text
-Slay the Spire 2/
-└── mods/
-    └── AIOTweaks/
-        ├── AIOTweaks.json
-        ├── AIOTweaks.dll
-        ├── 0Harmony.dll
-        ├── System.Text.Json.dll
-        ├── assets/
-        └── config/
-```
-
-*(Linux command to deploy directly from local build)*:
-```bash
-mkdir -p ~/.local/share/Steam/steamapps/common/"Slay the Spire 2"/mods/AIOTweaks
-cp AIOTweaks.json assets config ~/.local/share/Steam/steamapps/common/"Slay the Spire 2"/mods/AIOTweaks/ -r
-cp src/.godot/mono/temp/bin/Release/*.dll ~/.local/share/Steam/steamapps/common/"Slay the Spire 2"/mods/AIOTweaks/
-```
-
-### Step 4: Launch and Play
-1. Launch **Slay the Spire 2**.
-2. On the Main Menu, click **Mods** and verify **AIOTweaks** is checked and enabled.
-3. In-run, open the Pause Menu (`Escape`) and click **"⚙ AIOTweaks Settings"**, or press **`F1`** / **``` ` ```** to toggle the overlay console.
-
----
-
-### ⚙️ User Configuration Path (Optional)
-User settings persist automatically in-game, or can be edited directly at:
-- **Windows:** `%APPDATA%\Godot\app_userdata\Slay the Spire 2\AIOTweaks\config.json`
-- **Linux / Steam Deck:** `~/.local/share/godot/app_userdata/Slay the Spire 2/AIOTweaks/config.json`
+- **Console doesn't open on `F1`:** Check if another overlay (Steam Overlay, Discord, MangoHud) intercepts the `F1` key. You can change the key in `config.json`.
+- **Mod not showing up in Mods list:** Verify `AIOTweaks.json` is located directly in `mods/AIOTweaks/AIOTweaks.json` alongside `AIOTweaks.dll`.
+- **Build error with missing Godot assemblies:** Ensure the Godot .NET SDK / targeting packs are installed and the .NET 9 SDK is active (`dotnet --version`).
 
 ---
 
 ## License
 
-MIT License.
+This project is licensed under the [MIT License](LICENSE).
