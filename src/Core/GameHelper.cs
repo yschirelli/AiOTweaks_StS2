@@ -795,6 +795,162 @@ public static class GameHelper
         return norm;
     }
 
+    public static CharacterModel? GetSelectedCharacterModel()
+    {
+        try
+        {
+            var player = GetActivePlayer();
+            if (player?.Character != null)
+            {
+                return player.Character;
+            }
+        }
+        catch { }
+
+        try
+        {
+            var tree = Engine.GetMainLoop() as SceneTree;
+            var root = tree?.Root;
+            if (root != null)
+            {
+                var selectScreen = FindNodeOfType<MegaCrit.Sts2.Core.Nodes.Screens.CharacterSelect.NCharacterSelectScreen>(root);
+                if (selectScreen != null)
+                {
+                    var field = typeof(MegaCrit.Sts2.Core.Nodes.Screens.CharacterSelect.NCharacterSelectScreen).GetField("_selectedButton", BindingFlags.NonPublic | BindingFlags.Instance);
+                    if (field?.GetValue(selectScreen) is MegaCrit.Sts2.Core.Nodes.Screens.CharacterSelect.NCharacterSelectButton btn && btn.Character != null)
+                    {
+                        return btn.Character;
+                    }
+                }
+            }
+        }
+        catch { }
+
+        try
+        {
+            if (ModelDb.AllCharacters != null)
+            {
+                return ModelDb.AllCharacters.FirstOrDefault(c => c != null && c.Id.Entry.Equals("IRONCLAD", StringComparison.OrdinalIgnoreCase))
+                    ?? ModelDb.AllCharacters.FirstOrDefault(c => c != null);
+            }
+        }
+        catch { }
+
+        return null;
+    }
+
+    public static T? FindNodeOfType<T>(Node parent) where T : Node
+    {
+        if (parent is T match) return match;
+        int count = parent.GetChildCount();
+        for (int i = 0; i < count; i++)
+        {
+            var child = parent.GetChild(i);
+            var res = FindNodeOfType<T>(child);
+            if (res != null) return res;
+        }
+        return null;
+    }
+
+    public static string GetEventDescription(EventModel? ev)
+    {
+        if (ev == null) return "";
+        try
+        {
+            var initDesc = ev.InitialDescription?.GetFormattedText();
+            if (!string.IsNullOrWhiteSpace(initDesc)) return initDesc.Trim();
+
+            var desc = ev.Description?.GetFormattedText();
+            if (!string.IsNullOrWhiteSpace(desc)) return desc.Trim();
+
+            foreach (var prop in ev.GetType().GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+            {
+                if (prop.Name.Contains("Desc", StringComparison.OrdinalIgnoreCase) ||
+                    prop.Name.Contains("Text", StringComparison.OrdinalIgnoreCase) ||
+                    prop.Name.Contains("Story", StringComparison.OrdinalIgnoreCase))
+                {
+                    var val = prop.GetValue(ev);
+                    if (val != null)
+                    {
+                        var method = val.GetType().GetMethod("GetFormattedText");
+                        if (method != null)
+                        {
+                            string? text = method.Invoke(val, null) as string;
+                            if (!string.IsNullOrWhiteSpace(text)) return text.Trim();
+                        }
+                    }
+                }
+            }
+        }
+        catch { }
+        return "";
+    }
+
+    public static string GetEventFullTooltip(EventInfo info)
+    {
+        if (info == null) return "";
+        try
+        {
+            var ev = GetEventModel(info.Id);
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine(info.DisplayName);
+            sb.AppendLine($"Category: {(info.IsAncient ? "Ancient Event" : "Standard Event")} | Type: {info.TypeName} | ID: {info.Id}");
+
+            if (ev != null)
+            {
+                string desc = GetEventDescription(ev);
+                if (!string.IsNullOrWhiteSpace(desc))
+                {
+                    sb.AppendLine();
+                    sb.AppendLine(desc);
+                }
+
+                // Extract Choices / Options if available
+                var optionsProp = ev.GetType().GetProperty("GameInfoOptions") ?? ev.GetType().GetProperty("CurrentOptions");
+                var options = optionsProp?.GetValue(ev) as System.Collections.IEnumerable;
+                if (options != null)
+                {
+                    var optionLines = new List<string>();
+                    foreach (var opt in options)
+                    {
+                        if (opt == null) continue;
+                        var tProp = opt.GetType().GetProperty("Title");
+                        var dProp = opt.GetType().GetProperty("Description");
+                        string oTitle = (tProp?.GetValue(opt) as MegaCrit.Sts2.Core.Localization.LocString)?.GetFormattedText() ?? opt.ToString() ?? "";
+                        string oDesc = (dProp?.GetValue(opt) as MegaCrit.Sts2.Core.Localization.LocString)?.GetFormattedText() ?? "";
+                        if (!string.IsNullOrWhiteSpace(oTitle))
+                        {
+                            if (!string.IsNullOrWhiteSpace(oDesc))
+                            {
+                                optionLines.Add($"• {oTitle}: {oDesc}");
+                            }
+                            else
+                            {
+                                optionLines.Add($"• {oTitle}");
+                            }
+                        }
+                    }
+                    if (optionLines.Count > 0)
+                    {
+                        sb.AppendLine();
+                        sb.AppendLine("Choices / Selections:");
+                        foreach (var line in optionLines)
+                        {
+                            sb.AppendLine(line);
+                        }
+                    }
+                }
+            }
+
+            return sb.ToString().TrimEnd();
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Debug($"GetEventFullTooltip error: {ex.Message}");
+            return info.DisplayName;
+        }
+    }
+
     public static string ConvertPascalToScreamingSnake(string input)
     {
         if (string.IsNullOrWhiteSpace(input)) return "";

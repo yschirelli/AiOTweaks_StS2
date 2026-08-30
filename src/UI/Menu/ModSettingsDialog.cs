@@ -542,6 +542,11 @@ public partial class ModSettingsDialog : CanvasLayer
             {
                 GameHelper.EnsureCustomRunMode();
             }
+            try
+            {
+                MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen.Instance?.RefreshAllPointVisuals();
+            }
+            catch { }
         };
         vbox.AddChild(_freeMapNavCheck);
 
@@ -901,8 +906,17 @@ public partial class ModSettingsDialog : CanvasLayer
 
     private Control BuildAvailableCardsSubTab()
     {
-        var scroll = new ScrollContainer { Name = "Available Cards" };
-        var vbox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        var scroll = new ScrollContainer 
+        { 
+            Name = "Available Cards", 
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, 
+            SizeFlagsVertical = Control.SizeFlags.ExpandFill 
+        };
+        var vbox = new VBoxContainer 
+        { 
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, 
+            SizeFlagsVertical = Control.SizeFlags.ExpandFill 
+        };
         scroll.AddChild(vbox);
 
         var titleBox = new HBoxContainer();
@@ -919,8 +933,8 @@ public partial class ModSettingsDialog : CanvasLayer
         titleBox.AddChild(addAllBtn);
         vbox.AddChild(titleBox);
 
-        // Filter Controls Row (Search Box + Character/Pool Dropdown)
-        var filterRow = new HBoxContainer();
+        // Filter Controls Row (Search Box + Multi-Select Pools, Types, and Rarities)
+        var filterRow = new HBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         var searchInput = new LineEdit
         {
             PlaceholderText = "Search cards (e.g. 'Strike', 'Bash', 'DemonForm')...",
@@ -928,97 +942,435 @@ public partial class ModSettingsDialog : CanvasLayer
         };
         filterRow.AddChild(searchInput);
 
-        var filterLabel = new Label { Text = " Character / Pool: " };
-        filterRow.AddChild(filterLabel);
-
-        var poolFilterDropdown = new OptionButton { CustomMinimumSize = new Vector2(180, 0) };
-        poolFilterDropdown.AddItem("All Characters / Pools", 0);
-        poolFilterDropdown.SetItemMetadata(0, "ALL");
+        // 1. Character / Pool Multi-Select Filter
+        var poolFilterButton = new MenuButton 
+        { 
+            Text = "All Pools", 
+            CustomMinimumSize = new Vector2(160, 0),
+            Flat = false 
+        };
+        var poolPopup = poolFilterButton.GetPopup();
+        poolPopup.HideOnCheckableItemSelection = false;
 
         var charPools = GameHelper.GetAvailableCharacterCardPools();
-        int itemIdx = 1;
+        var selectedPools = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        poolPopup.AddItem("Select All Pools", 0);
+        poolPopup.AddItem("Clear All Pools", 1);
+        poolPopup.AddSeparator();
+
+        int poolItemOffset = 3;
+        int pIdx = 0;
         foreach (var (poolId, displayName) in charPools)
         {
-            poolFilterDropdown.AddItem(displayName, itemIdx);
-            poolFilterDropdown.SetItemMetadata(itemIdx, poolId);
-            itemIdx++;
+            poolPopup.AddCheckItem(displayName, poolItemOffset + pIdx);
+            poolPopup.SetItemMetadata(poolItemOffset + pIdx, poolId);
+            pIdx++;
         }
 
         // Auto-select current character's pool if currently in a run
         string? activePoolId = GameHelper.GetCurrentPlayerCharacterPoolId();
         if (!string.IsNullOrEmpty(activePoolId))
         {
-            for (int i = 1; i < poolFilterDropdown.ItemCount; i++)
+            for (int i = poolItemOffset; i < poolPopup.ItemCount; i++)
             {
-                if (poolFilterDropdown.GetItemMetadata(i).AsString() == activePoolId)
+                if (poolPopup.GetItemMetadata(i).AsString() == activePoolId)
                 {
-                    // If active player found, select their pool by default
-                    poolFilterDropdown.Selected = i;
+                    poolPopup.SetItemChecked(i, true);
+                    selectedPools.Add(activePoolId);
                     break;
                 }
             }
         }
-        else
+
+        void UpdatePoolButtonText()
         {
-            poolFilterDropdown.Selected = 0;
+            if (selectedPools.Count == 0)
+            {
+                poolFilterButton.Text = "All Pools";
+            }
+            else if (selectedPools.Count == 1)
+            {
+                string cur = selectedPools.First();
+                string name = cur;
+                for (int i = poolItemOffset; i < poolPopup.ItemCount; i++)
+                {
+                    if (poolPopup.GetItemMetadata(i).AsString() == cur)
+                    {
+                        name = poolPopup.GetItemText(i);
+                        break;
+                    }
+                }
+                poolFilterButton.Text = name;
+            }
+            else
+            {
+                poolFilterButton.Text = $"{selectedPools.Count} Pools Selected";
+            }
         }
 
-        filterRow.AddChild(poolFilterDropdown);
+        // 2. Card Type Multi-Select Filter
+        var typeFilterButton = new MenuButton
+        {
+            Text = "All Types",
+            CustomMinimumSize = new Vector2(140, 0),
+            Flat = false
+        };
+        var typePopup = typeFilterButton.GetPopup();
+        typePopup.HideOnCheckableItemSelection = false;
+
+        var selectedTypes = new System.Collections.Generic.HashSet<MegaCrit.Sts2.Core.Entities.Cards.CardType>();
+        typePopup.AddItem("Select All Types", 0);
+        typePopup.AddItem("Clear All Types", 1);
+        typePopup.AddSeparator();
+
+        var cardTypes = new[] 
+        { 
+            MegaCrit.Sts2.Core.Entities.Cards.CardType.Attack,
+            MegaCrit.Sts2.Core.Entities.Cards.CardType.Skill,
+            MegaCrit.Sts2.Core.Entities.Cards.CardType.Power,
+            MegaCrit.Sts2.Core.Entities.Cards.CardType.Status,
+            MegaCrit.Sts2.Core.Entities.Cards.CardType.Curse
+        };
+
+        int typeItemOffset = 3;
+        for (int i = 0; i < cardTypes.Length; i++)
+        {
+            typePopup.AddCheckItem(cardTypes[i].ToString(), typeItemOffset + i);
+            typePopup.SetItemMetadata(typeItemOffset + i, (int)cardTypes[i]);
+        }
+
+        void UpdateTypeButtonText()
+        {
+            if (selectedTypes.Count == 0)
+            {
+                typeFilterButton.Text = "All Types";
+            }
+            else if (selectedTypes.Count == 1)
+            {
+                typeFilterButton.Text = selectedTypes.First().ToString();
+            }
+            else
+            {
+                typeFilterButton.Text = $"{selectedTypes.Count} Types Selected";
+            }
+        }
+
+        // 3. Card Rarity Multi-Select Filter
+        var rarityFilterButton = new MenuButton
+        {
+            Text = "All Rarities",
+            CustomMinimumSize = new Vector2(140, 0),
+            Flat = false
+        };
+        var rarityPopup = rarityFilterButton.GetPopup();
+        rarityPopup.HideOnCheckableItemSelection = false;
+
+        var selectedRarities = new System.Collections.Generic.HashSet<MegaCrit.Sts2.Core.Entities.Cards.CardRarity>();
+        rarityPopup.AddItem("Select All Rarities", 0);
+        rarityPopup.AddItem("Clear All Rarities", 1);
+        rarityPopup.AddSeparator();
+
+        var cardRarities = new[]
+        {
+            MegaCrit.Sts2.Core.Entities.Cards.CardRarity.Basic,
+            MegaCrit.Sts2.Core.Entities.Cards.CardRarity.Common,
+            MegaCrit.Sts2.Core.Entities.Cards.CardRarity.Uncommon,
+            MegaCrit.Sts2.Core.Entities.Cards.CardRarity.Rare,
+            MegaCrit.Sts2.Core.Entities.Cards.CardRarity.Ancient,
+            MegaCrit.Sts2.Core.Entities.Cards.CardRarity.Event,
+            MegaCrit.Sts2.Core.Entities.Cards.CardRarity.Curse
+        };
+
+        int rarityItemOffset = 3;
+        for (int i = 0; i < cardRarities.Length; i++)
+        {
+            rarityPopup.AddCheckItem(cardRarities[i].ToString(), rarityItemOffset + i);
+            rarityPopup.SetItemMetadata(rarityItemOffset + i, (int)cardRarities[i]);
+        }
+
+        void UpdateRarityButtonText()
+        {
+            if (selectedRarities.Count == 0)
+            {
+                rarityFilterButton.Text = "All Rarities";
+            }
+            else if (selectedRarities.Count == 1)
+            {
+                rarityFilterButton.Text = selectedRarities.First().ToString();
+            }
+            else
+            {
+                rarityFilterButton.Text = $"{selectedRarities.Count} Rarities Selected";
+            }
+        }
+
+        UpdatePoolButtonText();
+        UpdateTypeButtonText();
+        UpdateRarityButtonText();
+
+        filterRow.AddChild(poolFilterButton);
+        filterRow.AddChild(typeFilterButton);
+        filterRow.AddChild(rarityFilterButton);
         vbox.AddChild(filterRow);
 
-        var grid = new GridContainer { Columns = 3, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        var grid = new GridContainer 
+        { 
+            Columns = 4, 
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            SizeFlagsVertical = Control.SizeFlags.ExpandFill
+        };
+        grid.AddThemeConstantOverride("h_separation", 15);
+        grid.AddThemeConstantOverride("v_separation", 15);
         vbox.AddChild(grid);
 
         var allCards = AIOTweaks.Core.GameHelper.GetAllCardIds();
         var cardToPool = AIOTweaks.Core.GameHelper.GetCardPoolMapping();
-        var cardBoxes = new System.Collections.Generic.List<ItemEntry>();
+        _availableCardEntries.Clear();
 
         foreach (var c in allCards)
         {
-            var btnBox = new HBoxContainer();
-            var lbl = new Label { Text = c, CustomMinimumSize = new Vector2(120, 0), ClipText = true };
-            
             var canonical = GameHelper.FindCanonicalCardModel(c);
-            string tooltip = canonical != null ? GameHelper.GetCardFullTooltip(canonical) : c;
-            lbl.TooltipText = tooltip;
-            btnBox.TooltipText = tooltip;
+            string fullTooltip = canonical != null ? GameHelper.GetCardFullTooltip(canonical) : c;
 
+            var panel = new PanelContainer 
+            { 
+                SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+                TooltipText = fullTooltip
+            };
+            var style = new StyleBoxFlat 
+            { 
+                BgColor = new Color(0.14f, 0.15f, 0.20f, 0.95f), 
+                BorderColor = new Color(0.28f, 0.32f, 0.45f, 0.8f),
+                BorderWidthLeft = 1,
+                BorderWidthRight = 1,
+                BorderWidthTop = 1,
+                BorderWidthBottom = 1,
+                CornerRadiusTopLeft = 8, 
+                CornerRadiusTopRight = 8, 
+                CornerRadiusBottomLeft = 8, 
+                CornerRadiusBottomRight = 8 
+            };
+            panel.AddThemeStyleboxOverride("panel", style);
+
+            var margin = new MarginContainer();
+            margin.AddThemeConstantOverride("margin_top", 8);
+            margin.AddThemeConstantOverride("margin_bottom", 8);
+            margin.AddThemeConstantOverride("margin_left", 8);
+            margin.AddThemeConstantOverride("margin_right", 8);
+            panel.AddChild(margin);
+
+            var cardVbox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, Alignment = BoxContainer.AlignmentMode.Center };
+            margin.AddChild(cardVbox);
+
+            // 1. Portrait texture from card model
+            Texture2D? tex = canonical?.Portrait;
+            if (tex == null && !string.IsNullOrEmpty(canonical?.PortraitPath))
+            {
+                try { tex = GD.Load<Texture2D>(canonical.PortraitPath); } catch {}
+            }
+            if (tex == null)
+            {
+                var texPath = GameHelper.GetCardPortraitPath(c);
+                if (!string.IsNullOrEmpty(texPath))
+                {
+                    try { tex = GD.Load<Texture2D>(texPath); } catch {}
+                }
+            }
+
+            if (tex != null)
+            {
+                var texRect = new TextureRect 
+                { 
+                    Texture = tex, 
+                    ExpandMode = TextureRect.ExpandModeEnum.FitWidth, 
+                    StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+                    CustomMinimumSize = new Vector2(100, 110),
+                    SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter,
+                    TooltipText = fullTooltip
+                };
+                cardVbox.AddChild(texRect);
+            }
+
+            // 2. Card Title & Count Label
+            string cardTitle = !string.IsNullOrWhiteSpace(canonical?.Title) ? canonical.Title : c;
+            var lbl = new Label 
+            { 
+                Text = cardTitle, 
+                CustomMinimumSize = new Vector2(110, 24), 
+                ClipText = true, 
+                HorizontalAlignment = HorizontalAlignment.Center,
+                TooltipText = fullTooltip
+            };
+            cardVbox.AddChild(lbl);
+
+            // 3. Card Type / Rarity mini badge
+            if (canonical != null)
+            {
+                string costText = canonical.EnergyCost?.CostsX == true ? "X" : (canonical.EnergyCost?.Canonical >= 0 ? canonical.EnergyCost.Canonical.ToString() : "-");
+                var badgeLbl = new Label
+                {
+                    Text = $"[{costText}E | {canonical.Type}]",
+                    CustomMinimumSize = new Vector2(110, 18),
+                    ClipText = true,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    Modulate = new Color(0.7f, 0.75f, 0.85f, 0.8f),
+                    TooltipText = fullTooltip
+                };
+                cardVbox.AddChild(badgeLbl);
+            }
+
+            // 4. Action Buttons Grid
+            var actionGrid = new GridContainer 
+            { 
+                Columns = 2, 
+                SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter 
+            };
+            actionGrid.AddThemeConstantOverride("h_separation", 6);
+            actionGrid.AddThemeConstantOverride("v_separation", 4);
+
+            string cardId = c;
             var addBtn = new Button { Text = "+Deck", TooltipText = "Add to Master Deck (and active Draw Pile in combat)" };
-            addBtn.Pressed += () => { CardDirector.AddCardToDeck(c); RefreshRealTimeCardTabs(); };
+            addBtn.Pressed += () => { CardDirector.AddCardToDeck(cardId); RefreshRealTimeCardTabs(); };
             var addUpBtn = new Button { Text = "+Deck(Up)", TooltipText = "Add Upgraded to Master Deck" };
-            addUpBtn.Pressed += () => { CardDirector.AddCardToDeck(c, true); RefreshRealTimeCardTabs(); };
+            addUpBtn.Pressed += () => { CardDirector.AddCardToDeck(cardId, true); RefreshRealTimeCardTabs(); };
             var handBtn = new Button { Text = "+Hand", TooltipText = "Spawn directly into combat Hand" };
-            handBtn.Pressed += () => { CardDirector.SpawnCardInHand(c); RefreshRealTimeCardTabs(); };
-            
-            btnBox.AddChild(lbl);
-            btnBox.AddChild(addBtn);
-            btnBox.AddChild(addUpBtn);
-            btnBox.AddChild(handBtn);
-            grid.AddChild(btnBox);
+            handBtn.Pressed += () => { CardDirector.SpawnCardInHand(cardId); RefreshRealTimeCardTabs(); };
+            var enchBtn = new Button { Text = "Enchant", TooltipText = "Apply custom enchantment" };
+            enchBtn.Pressed += () => 
+            {
+                var inst = canonical != null ? GameHelper.CreateCardForPlayer(canonical) : null;
+                if (inst != null) ShowEnchantmentPicker(inst);
+            };
+
+            actionGrid.AddChild(addBtn);
+            actionGrid.AddChild(addUpBtn);
+            actionGrid.AddChild(handBtn);
+            actionGrid.AddChild(enchBtn);
+            cardVbox.AddChild(actionGrid);
+
+            grid.AddChild(panel);
             string poolId = cardToPool.TryGetValue(c, out var pId) ? pId : "";
-            var entry = new ItemEntry(c, btnBox, lbl, poolId);
-            cardBoxes.Add(entry);
+            var cardType = canonical?.Type ?? MegaCrit.Sts2.Core.Entities.Cards.CardType.Attack;
+            var cardRarity = canonical?.Rarity ?? MegaCrit.Sts2.Core.Entities.Cards.CardRarity.Common;
+            var entry = new ItemEntry(c, panel, lbl, poolId, cardType, cardRarity);
             _availableCardEntries.Add(entry);
         }
 
         Action applyFilter = () =>
         {
             string q = searchInput.Text.Trim();
-            int selectedIdx = poolFilterDropdown.Selected;
-            string selectedPool = selectedIdx >= 0 ? poolFilterDropdown.GetItemMetadata(selectedIdx).AsString() : "ALL";
 
-            foreach (var entry in cardBoxes)
+            foreach (var entry in _availableCardEntries)
             {
-                bool matchesSearch = string.IsNullOrEmpty(q) || entry.Id.Contains(q, StringComparison.OrdinalIgnoreCase);
-                bool matchesPool = selectedPool == "ALL" || string.Equals(entry.PoolId, selectedPool, StringComparison.OrdinalIgnoreCase);
-                entry.Container.Visible = matchesSearch && matchesPool;
+                bool matchesSearch = string.IsNullOrEmpty(q) || 
+                                     entry.Id.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                                     (entry.Label != null && entry.Label.TooltipText.Contains(q, StringComparison.OrdinalIgnoreCase));
+                bool matchesPool = selectedPools.Count == 0 || (!string.IsNullOrEmpty(entry.PoolId) && selectedPools.Contains(entry.PoolId));
+                bool matchesType = selectedTypes.Count == 0 || selectedTypes.Contains(entry.CardType);
+                bool matchesRarity = selectedRarities.Count == 0 || selectedRarities.Contains(entry.CardRarity);
+
+                entry.Container.Visible = matchesSearch && matchesPool && matchesType && matchesRarity;
             }
         };
 
-        searchInput.TextChanged += _ => applyFilter();
-        poolFilterDropdown.ItemSelected += _ => applyFilter();
+        // Pool Popup Selection Handlers
+        poolPopup.IndexPressed += (long index) =>
+        {
+            int idx = (int)index;
+            if (idx == 0) // Select All
+            {
+                for (int i = poolItemOffset; i < poolPopup.ItemCount; i++)
+                {
+                    poolPopup.SetItemChecked(i, true);
+                    selectedPools.Add(poolPopup.GetItemMetadata(i).AsString());
+                }
+            }
+            else if (idx == 1) // Clear All
+            {
+                for (int i = poolItemOffset; i < poolPopup.ItemCount; i++)
+                {
+                    poolPopup.SetItemChecked(i, false);
+                }
+                selectedPools.Clear();
+            }
+            else if (idx >= poolItemOffset)
+            {
+                bool isChecked = !poolPopup.IsItemChecked(idx);
+                poolPopup.SetItemChecked(idx, isChecked);
+                string poolId = poolPopup.GetItemMetadata(idx).AsString();
+                if (isChecked) selectedPools.Add(poolId);
+                else selectedPools.Remove(poolId);
+            }
+            UpdatePoolButtonText();
+            applyFilter();
+        };
 
-        // Run filter initially to respect any default selection
+        // Type Popup Selection Handlers
+        typePopup.IndexPressed += (long index) =>
+        {
+            int idx = (int)index;
+            if (idx == 0) // Select All
+            {
+                for (int i = typeItemOffset; i < typePopup.ItemCount; i++)
+                {
+                    typePopup.SetItemChecked(i, true);
+                    selectedTypes.Add((MegaCrit.Sts2.Core.Entities.Cards.CardType)typePopup.GetItemMetadata(i).AsInt32());
+                }
+            }
+            else if (idx == 1) // Clear All
+            {
+                for (int i = typeItemOffset; i < typePopup.ItemCount; i++)
+                {
+                    typePopup.SetItemChecked(i, false);
+                }
+                selectedTypes.Clear();
+            }
+            else if (idx >= typeItemOffset)
+            {
+                bool isChecked = !typePopup.IsItemChecked(idx);
+                typePopup.SetItemChecked(idx, isChecked);
+                var cType = (MegaCrit.Sts2.Core.Entities.Cards.CardType)typePopup.GetItemMetadata(idx).AsInt32();
+                if (isChecked) selectedTypes.Add(cType);
+                else selectedTypes.Remove(cType);
+            }
+            UpdateTypeButtonText();
+            applyFilter();
+        };
+
+        // Rarity Popup Selection Handlers
+        rarityPopup.IndexPressed += (long index) =>
+        {
+            int idx = (int)index;
+            if (idx == 0) // Select All
+            {
+                for (int i = rarityItemOffset; i < rarityPopup.ItemCount; i++)
+                {
+                    rarityPopup.SetItemChecked(i, true);
+                    selectedRarities.Add((MegaCrit.Sts2.Core.Entities.Cards.CardRarity)rarityPopup.GetItemMetadata(i).AsInt32());
+                }
+            }
+            else if (idx == 1) // Clear All
+            {
+                for (int i = rarityItemOffset; i < rarityPopup.ItemCount; i++)
+                {
+                    rarityPopup.SetItemChecked(i, false);
+                }
+                selectedRarities.Clear();
+            }
+            else if (idx >= rarityItemOffset)
+            {
+                bool isChecked = !rarityPopup.IsItemChecked(idx);
+                rarityPopup.SetItemChecked(idx, isChecked);
+                var cRarity = (MegaCrit.Sts2.Core.Entities.Cards.CardRarity)rarityPopup.GetItemMetadata(idx).AsInt32();
+                if (isChecked) selectedRarities.Add(cRarity);
+                else selectedRarities.Remove(cRarity);
+            }
+            UpdateRarityButtonText();
+            applyFilter();
+        };
+
+        searchInput.TextChanged += _ => applyFilter();
         applyFilter();
 
         return scroll;
@@ -1165,7 +1517,10 @@ public partial class ModSettingsDialog : CanvasLayer
                     }
                 }
 
-                string displayText = entry.Id;
+                var canonical = GameHelper.FindCanonicalCardModel(entry.Id);
+                string baseTitle = !string.IsNullOrWhiteSpace(canonical?.Title) ? canonical.Title : entry.Id;
+                string displayText = baseTitle;
+
                 if (deckCount > 0)
                 {
                     displayText += $" (x{deckCount})";
@@ -1597,15 +1952,20 @@ public partial class ModSettingsDialog : CanvasLayer
     private sealed class ItemEntry
     {
         public string Id { get; }
-        public HBoxContainer Container { get; }
+        public Control Container { get; }
         public Label? Label { get; }
         public string PoolId { get; }
-        public ItemEntry(string id, HBoxContainer container, Label? label = null, string poolId = "")
+        public MegaCrit.Sts2.Core.Entities.Cards.CardType CardType { get; }
+        public MegaCrit.Sts2.Core.Entities.Cards.CardRarity CardRarity { get; }
+
+        public ItemEntry(string id, Control container, Label? label = null, string poolId = "", MegaCrit.Sts2.Core.Entities.Cards.CardType type = MegaCrit.Sts2.Core.Entities.Cards.CardType.Attack, MegaCrit.Sts2.Core.Entities.Cards.CardRarity rarity = MegaCrit.Sts2.Core.Entities.Cards.CardRarity.Common)
         {
             Id = id;
             Container = container;
             Label = label;
             PoolId = poolId;
+            CardType = type;
+            CardRarity = rarity;
         }
     }
 
@@ -1615,9 +1975,16 @@ public partial class ModSettingsDialog : CanvasLayer
         var vbox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         scroll.AddChild(vbox);
 
+        var selectedChar = GameHelper.GetSelectedCharacterModel();
+        var activePlayer = GameHelper.GetActivePlayer();
+
+        int defaultGold = activePlayer != null ? activePlayer.Gold : (selectedChar != null ? selectedChar.StartingGold : 99);
+        int defaultMaxHp = (activePlayer?.Creature != null) ? (int)activePlayer.Creature.MaxHp : (selectedChar != null ? selectedChar.StartingHp : 80);
+        int defaultCurrentHp = (activePlayer?.Creature != null) ? (int)activePlayer.Creature.CurrentHp : defaultMaxHp;
+
         vbox.AddChild(new Label { Text = "--- Gold & Health Manipulation ---", Modulate = new Color(0.3f, 1f, 0.5f) });
         var goldRow = new HBoxContainer();
-        _goldAmountSpin = new SpinBox { MinValue = -9999, MaxValue = 9999, Step = 50, Value = 500 };
+        _goldAmountSpin = new SpinBox { MinValue = -9999, MaxValue = 9999, Step = 50, Value = defaultGold };
         var addGoldBtn = new Button { Text = " Add Gold " };
         addGoldBtn.Pressed += () => InventoryDirector.AddGold((int)_goldAmountSpin.Value);
         var setGoldBtn = new Button { Text = " Set Exact Gold " };
@@ -1629,7 +1996,7 @@ public partial class ModSettingsDialog : CanvasLayer
         vbox.AddChild(goldRow);
 
         var healRow = new HBoxContainer();
-        _currentHpAmountSpin = new SpinBox { MinValue = 1, MaxValue = 999, Step = 10, Value = 50 };
+        _currentHpAmountSpin = new SpinBox { MinValue = 1, MaxValue = 999, Step = 10, Value = defaultCurrentHp };
         var healBtn = new Button { Text = " Heal Player " };
         healBtn.Pressed += () => InventoryDirector.Heal((int)_currentHpAmountSpin.Value);
         healRow.AddChild(new Label { Text = "Heal Amount: ", CustomMinimumSize = new Vector2(120, 0) });
@@ -1647,7 +2014,7 @@ public partial class ModSettingsDialog : CanvasLayer
         vbox.AddChild(damageRow);
 
         var maxHpRow = new HBoxContainer();
-        _maxHpAmountSpin = new SpinBox { MinValue = 1, MaxValue = 999, Step = 10, Value = 80 };
+        _maxHpAmountSpin = new SpinBox { MinValue = 1, MaxValue = 999, Step = 10, Value = defaultMaxHp };
         var maxHpBtn = new Button { Text = " Set Max HP " };
         maxHpBtn.Pressed += () => InventoryDirector.SetMaxHp((int)_maxHpAmountSpin.Value);
         maxHpRow.AddChild(new Label { Text = "Max HP Amount: ", CustomMinimumSize = new Vector2(120, 0) });
@@ -1678,7 +2045,7 @@ public partial class ModSettingsDialog : CanvasLayer
                 }
                 else
                 {
-                    var info = AIOTweaks.Core.GameHelper.GetAllEventInfos().FirstOrDefault(e => e.Id.Equals(eventId, StringComparison.OrdinalIgnoreCase));
+                    var info = GameHelper.GetAllEventInfos().FirstOrDefault(e => e.Id.Equals(eventId, StringComparison.OrdinalIgnoreCase));
                     _eventOverrideLabel.Text = info != null ? $"{info.DisplayName} [{info.Id}]" : eventId;
                 }
             }
@@ -1696,33 +2063,32 @@ public partial class ModSettingsDialog : CanvasLayer
         var grid = new GridContainer { Columns = 2, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         vbox.AddChild(grid);
 
-        var allEvents = AIOTweaks.Core.GameHelper.GetAllEventInfos();
-        var eventEntries = new System.Collections.Generic.List<(AIOTweaks.Core.GameHelper.EventInfo Info, HBoxContainer Container)>();
+        var allEvents = GameHelper.GetAllEventInfos();
+        var eventEntries = new System.Collections.Generic.List<(GameHelper.EventInfo Info, HBoxContainer Container)>();
 
         foreach (var info in allEvents)
         {
             var btnBox = new HBoxContainer();
             string labelText = info.IsAncient ? $"[Ancient] {info.DisplayName}" : info.DisplayName;
+            string fullTooltip = GameHelper.GetEventFullTooltip(info);
             var lbl = new Label 
             { 
                 Text = labelText, 
-                CustomMinimumSize = new Vector2(180, 0), 
+                CustomMinimumSize = new Vector2(240, 0), 
                 ClipText = true,
-                TooltipText = $"ID: {info.Id}\nType: {info.TypeName}{(info.IsAncient ? "\nCategory: Ancient Event" : "")}"
+                TooltipText = fullTooltip
             };
             if (info.IsAncient)
             {
                 lbl.Modulate = new Color(1f, 0.85f, 0.4f);
             }
 
-            var nowBtn = new Button { Text = "Force Now" };
-            nowBtn.Pressed += () => EventDirector.ForceImmediateEvent(info.Id);
-            var nextBtn = new Button { Text = "Force Next" };
-            nextBtn.Pressed += () => EventDirector.ForceNextEvent(info.Id);
+            var forceBtn = new Button { Text = " Force ", TooltipText = $"Force immediate travel/trigger for {info.DisplayName}" };
+            forceBtn.Pressed += () => EventDirector.ForceImmediateEvent(info.Id);
             
+            btnBox.TooltipText = fullTooltip;
             btnBox.AddChild(lbl);
-            btnBox.AddChild(nowBtn);
-            btnBox.AddChild(nextBtn);
+            btnBox.AddChild(forceBtn);
             grid.AddChild(btnBox);
             eventEntries.Add((info, btnBox));
         }
@@ -1819,9 +2185,22 @@ public partial class ModSettingsDialog : CanvasLayer
         if (_bonusDrawSpin != null) _bonusDrawSpin.Value = sandbox.BonusDrawPerTurn;
 
         var player = InventoryDirector.GetActivePlayer();
-        if (player?.Creature != null)
+        var selectedChar = GameHelper.GetSelectedCharacterModel();
+
+        if (player != null)
         {
-            if (_maxHpAmountSpin != null) _maxHpAmountSpin.Value = player.Creature.MaxHp;
+            if (_goldAmountSpin != null) _goldAmountSpin.Value = player.Gold;
+            if (player.Creature != null)
+            {
+                if (_maxHpAmountSpin != null) _maxHpAmountSpin.Value = player.Creature.MaxHp;
+                if (_currentHpAmountSpin != null) _currentHpAmountSpin.Value = player.Creature.CurrentHp;
+            }
+        }
+        else if (selectedChar != null)
+        {
+            if (_goldAmountSpin != null) _goldAmountSpin.Value = selectedChar.StartingGold;
+            if (_maxHpAmountSpin != null) _maxHpAmountSpin.Value = selectedChar.StartingHp;
+            if (_currentHpAmountSpin != null) _currentHpAmountSpin.Value = selectedChar.StartingHp;
         }
     }
 

@@ -115,6 +115,32 @@ public static class MapGenerationHooks
     }
 
     /// <summary>
+    /// Adjusts generated map length (room/floor count) during ActModel room count calculation across all acts.
+    /// StandardActMap and SpoilsActMap invoke ActModel.GetNumberOfRooms() to determine map length.
+    /// </summary>
+    [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Models.ActModel), nameof(MegaCrit.Sts2.Core.Models.ActModel.GetNumberOfRooms))]
+    public static class ActModelGetNumberOfRoomsPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(bool isMultiplayer, ref int __result)
+        {
+            try
+            {
+                int desiredRooms = ConfigManager.Current.PreRunTweaks.MapRoomCount;
+                if (desiredRooms > 0 && desiredRooms != 15)
+                {
+                    __result = isMultiplayer ? desiredRooms + 1 : desiredRooms;
+                    ModLogger.Info($"ActModel.GetNumberOfRooms: Custom MapRoomCount applied -> {__result} rooms for act.");
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error("Error in ActModelGetNumberOfRoomsPatch setting map room count", ex);
+            }
+        }
+    }
+
+    /// <summary>
     /// Adjusts generated map length (room/floor count) during StandardActMap construction.
     /// </summary>
     [HarmonyPatch(typeof(StandardActMap), MethodType.Constructor, new Type[] {
@@ -220,7 +246,23 @@ public static class MapGenerationHooks
     }
 
     /// <summary>
-    /// When traveling on map with Free Map Navigation active, marks active run as Custom mode.
+    /// Enables debug travel on NMapScreen when Free Map Navigation is enabled.
+    /// </summary>
+    [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen), "get_IsDebugTravelEnabled")]
+    public static class NMapScreenIsDebugTravelEnabledPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(ref bool __result)
+        {
+            if (RuntimeStateManager.FreeMapNavigationEnabled || ConfigManager.Current.PreRunTweaks.FreeMapNavigation)
+            {
+                __result = true;
+            }
+        }
+    }
+
+    /// <summary>
+    /// When traveling on map with Free Map Navigation active, marks active run as Custom mode and resets IsTraveling.
     /// </summary>
     [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen), nameof(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen.TravelToMapCoord))]
     public static class NMapScreenTravelToMapCoordPatch
@@ -231,6 +273,50 @@ public static class MapGenerationHooks
             if (RuntimeStateManager.FreeMapNavigationEnabled || ConfigManager.Current.PreRunTweaks.FreeMapNavigation)
             {
                 GameHelper.EnsureCustomRunMode();
+            }
+        }
+
+        [HarmonyPostfix]
+        public static void Postfix(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen __instance)
+        {
+            if (RuntimeStateManager.FreeMapNavigationEnabled || ConfigManager.Current.PreRunTweaks.FreeMapNavigation)
+            {
+                __instance.IsTraveling = false;
+                __instance.RefreshAllPointVisuals();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Ensures map points remain travelable and IsTraveling is reset when opening the map screen.
+    /// </summary>
+    [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen), nameof(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen.Open))]
+    public static class NMapScreenOpenPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen __instance)
+        {
+            if (RuntimeStateManager.FreeMapNavigationEnabled || ConfigManager.Current.PreRunTweaks.FreeMapNavigation)
+            {
+                __instance.IsTraveling = false;
+                __instance.RefreshAllPointVisuals();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Ensures map points are refreshed when a new act or map is loaded.
+    /// </summary>
+    [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen), nameof(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen.SetMap))]
+    public static class NMapScreenSetMapPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen __instance)
+        {
+            if (RuntimeStateManager.FreeMapNavigationEnabled || ConfigManager.Current.PreRunTweaks.FreeMapNavigation)
+            {
+                __instance.IsTraveling = false;
+                __instance.RefreshAllPointVisuals();
             }
         }
     }

@@ -50,34 +50,40 @@ public static class CombatDirector
 
     public static void KillAllEnemies()
     {
-        ModLogger.Verbose("CombatDirector", "KillAllEnemies: Invoked. Attempting to eliminate all active combat enemies...");
+        ModLogger.Verbose("CombatDirector", "KillAllEnemies: Invoked. Attempting to eliminate all active combat enemies with animations and instant win resolution...");
         try
         {
-            var enemies = GameHelper.GetActiveCombatEnemies();
+            var enemies = GameHelper.GetActiveCombatEnemies()?.Where(e => e != null && !e.IsDead && e.CurrentHp > 0).ToList();
             if (enemies != null && enemies.Count > 0)
             {
-                int killedCount = 0;
-                var enemyList = enemies.ToList();
-                foreach (var enemy in enemyList)
-                {
-                    if (enemy != null && !enemy.IsDead && enemy.CurrentHp > 0)
-                    {
-                        enemy.LoseHpInternal(999999, ValueProp.Unpowered);
-                        killedCount++;
-                    }
-                }
-                ModLogger.Info($"Executed Kill All Enemies: eliminated {killedCount} active enemies.");
+                MegaCrit.Sts2.Core.Helpers.TaskHelper.RunSafely(KillEnemiesAsync(enemies));
+                ModLogger.Info($"Executed lethal kill on {enemies.Count} active enemies with death animation and win condition check.");
                 return;
             }
 
             // Fallback to dev console if combat state not resolved
-            GameHelper.ExecuteConsoleCommand("kill");
-            ModLogger.Info("Executed Kill command via DevConsole (fallback).");
+            GameHelper.ExecuteConsoleCommand("kill all");
+            ModLogger.Info("Executed 'kill all' command via DevConsole (fallback).");
         }
         catch (Exception ex)
         {
             ModLogger.Error("Failed to execute direct Kill All Enemies, attempting dev console fallback.", ex);
-            GameHelper.ExecuteConsoleCommand("kill");
+            GameHelper.ExecuteConsoleCommand("kill all");
+        }
+    }
+
+    private static async System.Threading.Tasks.Task KillEnemiesAsync(System.Collections.Generic.List<MegaCrit.Sts2.Core.Entities.Creatures.Creature> enemies)
+    {
+        foreach (var enemy in enemies)
+        {
+            if (enemy != null && !enemy.IsDead)
+            {
+                await MegaCrit.Sts2.Core.Commands.CreatureCmd.Kill(enemy);
+            }
+        }
+        if (MegaCrit.Sts2.Core.Combat.CombatManager.Instance != null)
+        {
+            await MegaCrit.Sts2.Core.Combat.CombatManager.Instance.CheckWinCondition();
         }
     }
 
