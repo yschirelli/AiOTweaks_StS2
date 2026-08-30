@@ -948,9 +948,18 @@ public static class GameHelper
 
             if (card.EnergyCost != null)
             {
-                sb.AppendLine($"Energy Cost: {card.EnergyCost}");
+                string energyCostText = card.EnergyCost.CostsX 
+                    ? "X" 
+                    : (card.EnergyCost.HasLocalModifiers 
+                        ? card.EnergyCost.GetResolved().ToString() 
+                        : (card.EnergyCost.Canonical >= 0 ? card.EnergyCost.Canonical.ToString() : "Unplayable"));
+                sb.AppendLine($"Energy Cost: {energyCostText}");
             }
-            if (card.CurrentStarCost > 0 || card.CanonicalStarCost > 0)
+            if (card.HasStarCostX)
+            {
+                sb.AppendLine("Star Cost: X");
+            }
+            else if (card.CurrentStarCost > 0 || card.CanonicalStarCost > 0)
             {
                 sb.AppendLine($"Star Cost: {(card.CurrentStarCost > 0 ? card.CurrentStarCost : card.CanonicalStarCost)}");
             }

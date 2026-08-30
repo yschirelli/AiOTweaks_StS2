@@ -165,6 +165,39 @@ public partial class DebugConsole : CanvasLayer
         }
     }
 
+    private static Theme CreateConsoleTheme()
+    {
+        var theme = new Theme();
+        var tooltipStyle = new StyleBoxFlat
+        {
+            BgColor = new Color(0.06f, 0.07f, 0.10f, 0.98f),
+            BorderColor = new Color(0.35f, 0.6f, 0.95f, 0.9f),
+            BorderWidthBottom = 1,
+            BorderWidthLeft = 1,
+            BorderWidthRight = 1,
+            BorderWidthTop = 1,
+            CornerRadiusBottomLeft = 6,
+            CornerRadiusBottomRight = 6,
+            CornerRadiusTopLeft = 6,
+            CornerRadiusTopRight = 6,
+            ContentMarginBottom = 10,
+            ContentMarginLeft = 12,
+            ContentMarginRight = 12,
+            ContentMarginTop = 10,
+            ShadowColor = new Color(0, 0, 0, 0.85f),
+            ShadowSize = 6
+        };
+
+        theme.SetStylebox("panel", "TooltipPanel", tooltipStyle);
+        theme.SetColor("font_color", "TooltipLabel", new Color(0.95f, 0.95f, 0.98f, 1f));
+        theme.SetColor("font_shadow_color", "TooltipLabel", new Color(0, 0, 0, 0.95f));
+        theme.SetConstant("shadow_offset_x", "TooltipLabel", 1);
+        theme.SetConstant("shadow_offset_y", "TooltipLabel", 1);
+        theme.SetConstant("font_size", "TooltipLabel", 14);
+
+        return theme;
+    }
+
     private void SetupUI()
     {
         _rootPanel = new PanelContainer
@@ -174,6 +207,7 @@ public partial class DebugConsole : CanvasLayer
             AnchorTop = 0.05f,
             AnchorRight = 0.95f,
             AnchorBottom = 0.65f,
+            Theme = CreateConsoleTheme(),
             Visible = false
         };
         AddChild(_rootPanel);
