@@ -53,9 +53,9 @@ public partial class DebugConsole : CanvasLayer
     {
         if (@event is InputEventKey keyEvent && keyEvent.Pressed && !keyEvent.Echo)
         {
-            // Toggle AIOTweaks Console (Default: F1)
+            // Toggle AIOTweaks Console
             string consoleHotkey = ConfigManager.Current.General.ConsoleHotkey;
-            if (GameHelper.IsKeyMatch(keyEvent, consoleHotkey) || keyEvent.Keycode == Key.Quoteleft || keyEvent.Keycode == Key.F1)
+            if (GameHelper.IsKeyMatch(keyEvent, consoleHotkey))
             {
                 ModLogger.Verbose("DebugConsole", $"Console hotkey matched ({keyEvent.Keycode}). Toggling visibility...");
                 ToggleConsoleVisibility();

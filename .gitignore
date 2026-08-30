@@ -1,8 +1,22 @@
+# Build & Godot outputs
 bin/
 obj/
+src/bin/
+src/obj/
+.godot/
+src/.godot/
+
+# IDE & OS
 *.user
 *.suo
 .vs/
 .idea/
 *.DotSettings.user
 .DS_Store
+
+# AI analysis, scratch scripts & temporary artifacts
+*.csx
+scratch/
+temp/
+*.tmp
+*.log

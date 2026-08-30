@@ -1,7 +1,9 @@
 using System;
+using System.Linq;
 using AIOTweaks.Core;
 using AIOTweaks.Core.Logging;
 using AIOTweaks.Core.State;
+using MegaCrit.Sts2.Core.ValueProps;
 
 namespace AIOTweaks.Cheats;
 
@@ -48,15 +50,34 @@ public static class CombatDirector
 
     public static void KillAllEnemies()
     {
-        ModLogger.Verbose("CombatDirector", "KillAllEnemies: Invoked. Dispatching 'kill' command to DevConsole...");
+        ModLogger.Verbose("CombatDirector", "KillAllEnemies: Invoked. Attempting to eliminate all active combat enemies...");
         try
         {
+            var enemies = GameHelper.GetActiveCombatEnemies();
+            if (enemies != null && enemies.Count > 0)
+            {
+                int killedCount = 0;
+                var enemyList = enemies.ToList();
+                foreach (var enemy in enemyList)
+                {
+                    if (enemy != null && !enemy.IsDead && enemy.CurrentHp > 0)
+                    {
+                        enemy.LoseHpInternal(999999, ValueProp.Unpowered);
+                        killedCount++;
+                    }
+                }
+                ModLogger.Info($"Executed Kill All Enemies: eliminated {killedCount} active enemies.");
+                return;
+            }
+
+            // Fallback to dev console if combat state not resolved
             GameHelper.ExecuteConsoleCommand("kill");
-            ModLogger.Info("Executed Kill All Enemies command via DevConsole.");
+            ModLogger.Info("Executed Kill command via DevConsole (fallback).");
         }
         catch (Exception ex)
         {
-            ModLogger.Error("Failed to execute Kill All Enemies.", ex);
+            ModLogger.Error("Failed to execute direct Kill All Enemies, attempting dev console fallback.", ex);
+            GameHelper.ExecuteConsoleCommand("kill");
         }
     }
 
@@ -98,9 +119,7 @@ public static class CombatDirector
         }
         catch (Exception ex)
         {
-            ModLogger.Error("Failed to execute End Turn.", ex);
+            ModLogger.Error("Failed to end turn.", ex);
         }
     }
 }
-
-

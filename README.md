@@ -29,41 +29,52 @@ Whether you are testing new card synergies, prototyping custom balance patches, 
 ## Features
 
 ### 🛠️ In-Game Debug Console & Cheat Engine
-- Toggleable overlay console (**`F1`** or **`` ` ``**) with auto-scroll, command history, and color-coded status output.
-- Instant godmode, infinite energy, one-hit kills, enemy clears, custom card/relic spawning, and direct combat manipulation.
+- Toggleable overlay console with auto-scroll, command history (Up/Down navigation), and color-coded status output.
+- Instant godmode, infinite energy, one-hit kills, full enemy sweep clears, custom card/relic spawning, and direct combat manipulation.
 - Safe lifecycle reset: Transient cheats and overrides automatically reset when exiting runs or returning to the main menu.
 
 ### ⚙️ Tabbed Mod Settings GUI & Pre-Run Tweaks
-- Open the dedicated **Mod Settings Dialog** at any time by pressing **`F3`** (or through the in-game Mods screen and Character Select screen).
-- Configure run modifiers in real time: starting gold bonus, starting max HP bonus, gold reward multipliers, and shop discount percentages.
-- Custom card reward draft counts (expand beyond the standard 3 card choices).
+- Open the dedicated **Mod Settings Dialog** at any time (via in-game Mods screen, Character Select screen, or user-configured hotkey). Accessible during combat and active runs!
+- **Run-Lock Safety**: Pre-run generation parameters (Map Room Count, Starting Bonuses, Node Weights, Neow Bonus) are safely locked while a run is active to prevent illegal mid-run map mutation.
+- Configure run modifiers: starting gold bonus, starting max HP bonus, gold reward multipliers, shop discount percentages, and spawn Neow at start.
+- Custom card reward draft counts (expand beyond standard 3 choices).
+- Standalone **Enemy Health Multiplier**, **Enemy Damage Multiplier**, and **Enemy Defend Multiplier** (scales enemy block proportionally).
 
-### 🗺️ Procedural Map Generation Tweaks
+### ♾️ Endless Mode with Compounding Enemy Scaling
+- Configurable Endless Mode loop reset scaling: $\text{Effective Multiplier} = \text{NormalMultiplier} \times (\text{EndlessMultiplier})^{\text{LoopCount}}$.
+- Dynamically scales enemy HP, incoming damage, and block values across infinite loops.
+
+### 🗺️ Map Generation, Size & Free Navigation
+- Customizable map floor/room length (5 to 30 rooms).
 - Customizable node distribution weights: fine-tune the frequency of Elites, Shops, Unknown/Events, Rest Sites, and Normal Combats.
-- Non-destructive post-generation patches to prevent soft-locking or unroutable floor trees.
+- **Free Map Navigation ("Flying Boots" mode)**: Click and travel to ANY room freely on the map, omni-directionally without pathing restrictions.
+- Pre-run map generation and starting bonus settings are locked during active runs and fully editable in the Main Menu.
 
-### 🛡️ Non-Destructive Hook Architecture
+### 🛡️ Non-Destructive Hook Architecture & BaseLib Integration
 - Built with **HarmonyX** prefix and postfix patches across core game assemblies.
 - Patches fail open and wrap all reflection queries in safe try-catch blocks to prevent game crashes.
+- Seamlessly registers with **BaseLib**'s `ModConfigRegistry` for native menu integration.
 
 ---
 
 ## Keybindings & Controls
 
-| Key | Action | Context |
-| :--- | :--- | :--- |
-| **`F1`** or **`` ` ``** (Tilde) | Toggle AIOTweaks Debug Console | In-Run / Combat |
-| **`F2`** | Quick Toggle God Mode (Invulnerability) | In-Run / Combat |
-| **`F3`** | Toggle Tabbed Mod Settings & Sandbox GUI | Anywhere / In-Run |
-| **`F4`** | Quick Kill All Active Enemies | Combat |
+All hotkeys are unassigned by default (`""` / `None`) so they never conflict with your existing key mappings. You can configure any desired key in the **Mod Settings Dialog (open via Mods menu or Character Select)**:
 
-*(All hotkeys are customizable in `config/default_config.json` or your user configuration).*
+| Action | Config Key | Default |
+| :--- | :--- | :--- |
+| Toggle AIOTweaks Debug Console | `consoleHotkey` | *Unassigned (configure in GUI / `config.json`)* |
+| Quick Toggle God Mode (Invulnerability) | `quickGodModeKey` | *Unassigned (configure in GUI / `config.json`)* |
+| Toggle Tabbed Mod Settings & Sandbox GUI | `guiOverlayHotkey` | *Unassigned (configure in GUI / open via Mods menu)* |
+| Quick Kill All Active Enemies | `quickKillEnemiesKey` | *Unassigned (configure in GUI / `config.json`)* |
+
+*(Set any hotkey like `F1`, `F2`, `F3`, `F4`, `Quoteleft`, or custom keys in Mod Settings or `config.json`).*
 
 ---
 
 ## Console Commands
 
-Open the console with `F1` or `` ` `` and execute any of the following commands:
+Open the console with your configured keybind and execute any of the following commands:
 
 | Command | Syntax / Example | Description |
 | :--- | :--- | :--- |
@@ -99,14 +110,13 @@ AiOTweaks_StS2/
 ├── AIOTweaks.json               # Slay the Spire 2 Mod Manifest
 ├── README.md                    # Documentation & user guide
 ├── AGENTS.md                    # Architecture guidelines & agent rules
-├── ExploreStS.csx               # C# Script for game API exploration
-├── ReflectionTest.csx           # C# Script for reflection verification
 ├── config/
-│   └── default_config.json      # Default schema and fallback config
+│   └── default_config.json      # Default schema and fallback reference
 ├── assets/
 │   └── icons/                   # UI texture icons & assets
 │       └── README.md
 └── src/
+
     ├── AIOTweaks.csproj         # C# project targeting net9.0 + Godot Mono
     ├── Core/
     │   ├── ModEntry.cs          # Mod lifecycle entry point & scene injector
@@ -137,12 +147,12 @@ AiOTweaks_StS2/
     │   └── RelicDirector.cs     # Atomic relic injection/removal
     └── UI/                      # Godot scene overlays and controls
         ├── Menu/
-        │   ├── ModSettingsDialog.cs   # Tabbed Mod Settings & Sandbox Dialog (F3)
+        │   ├── ModSettingsDialog.cs   # Tabbed Mod Settings & Sandbox Dialog
         │   ├── ModSettingsDialog.tscn
         │   ├── PreRunSettingsMenu.cs  # Character select pre-run tweaks panel
         │   └── PreRunSettingsMenu.tscn
         └── Overlay/
-            ├── DebugConsole.cs  # In-run CanvasLayer Debug Console (F1 / `)
+            ├── DebugConsole.cs  # In-run CanvasLayer Debug Console
             └── DebugConsole.tscn
 ```
 
@@ -153,9 +163,8 @@ AiOTweaks_StS2/
 - **[.NET 9.0 SDK](https://dotnet.microsoft.com/download/dotnet/9.0)** (or later)
 - **[Godot Engine 4.3+ (.NET / Mono Build)](https://godotengine.org/download)**
 - **Slay the Spire 2** (Installed via Steam)
-- NuGet packages (automatically resolved via `dotnet restore`):
+- NuGet packages (resolved automatically at compile-time):
   - `Lib.Harmony` (>= 2.3.3)
-  - `System.Text.Json`
 
 ---
 
@@ -173,15 +182,11 @@ AiOTweaks_StS2/
    dotnet build aiotweaks.sln -c Release
    ```
 
-3. The compiled assembly and assets will be output to:
+3. The compiled assembly and manifest will be output to:
    ```text
    src/.godot/mono/temp/bin/Release/
    ├── AIOTweaks.dll
-   ├── AIOTweaks.json
-   ├── 0Harmony.dll
-   ├── System.Text.Json.dll
-   ├── assets/
-   └── config/
+   └── AIOTweaks.json
    ```
 
 ---
@@ -198,36 +203,37 @@ Inside the game folder, open or create a folder named `mods`.
 - **Steam Deck:** `~/.var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps/common/Slay the Spire 2/mods/AIOTweaks/`
 
 ### Step 2: Copy Mod Files
-Copy the mod bundle into `mods/AIOTweaks/`:
+Deploy only the compiled mod binary and manifest into `mods/AIOTweaks/`:
 ```text
 Slay the Spire 2/
 └── mods/
     └── AIOTweaks/
-        ├── AIOTweaks.json
         ├── AIOTweaks.dll
-        ├── 0Harmony.dll
-        ├── System.Text.Json.dll
-        ├── assets/
-        └── config/
+        └── AIOTweaks.json
 ```
 
-*(Linux one-line deploy from build directory)*:
+> [!NOTE]
+> **Why extra DLLs and folders are not needed in `mods/AIOTweaks/`:**
+> - `0Harmony.dll`, `System.Text.Json.dll`, and `GodotSharp.dll` are already bundled natively with Slay the Spire 2.
+> - Mod configuration is generated in C# and saved automatically to Godot's user data directory, so no external `config/` folder is required in the mod folder.
+> - UI is procedurally rendered in C#, so no external `assets/` folder is needed in the mod folder.
+
+*(Linux one-line deploy from project directory)*:
 ```bash
 mkdir -p ~/.local/share/Steam/steamapps/common/"Slay the Spire 2"/mods/AIOTweaks
-cp AIOTweaks.json assets config ~/.local/share/Steam/steamapps/common/"Slay the Spire 2"/mods/AIOTweaks/ -r
-cp src/.godot/mono/temp/bin/Release/*.dll ~/.local/share/Steam/steamapps/common/"Slay the Spire 2"/mods/AIOTweaks/
+cp src/.godot/mono/temp/bin/Release/AIOTweaks.dll AIOTweaks.json ~/.local/share/Steam/steamapps/common/"Slay the Spire 2"/mods/AIOTweaks/
 ```
 
 ### Step 3: Launch and Activate
 1. Start **Slay the Spire 2**.
 2. Click **Mods** in the Main Menu and verify **AIOTweaks** is enabled.
-3. Start any run and press **`F1`** (or **`` ` ``**) to open the debug console, or press **`F3`** to open the Mod Settings GUI.
+3. Click the **AIOTweaks Settings** button in the Mods menu or Character Select screen to configure tweaks and keybindings.
 
 ---
 
 ## Configuration
 
-Settings are configured via `config/default_config.json` and persist per-user in Godot's app data directory:
+Settings persist per-user in Godot's application user data directory:
 - **Windows:** `%APPDATA%\Godot\app_userdata\Slay the Spire 2\AIOTweaks\config.json`
 - **Linux / Steam Deck:** `~/.local/share/godot/app_userdata/Slay the Spire 2/AIOTweaks/config.json`
 
@@ -236,9 +242,10 @@ Settings are configured via `config/default_config.json` and persist per-user in
   "general": {
     "enabled": true,
     "debugLogging": false,
-    "toggleOverlayKey": "F1",
-    "quickGodModeKey": "F2",
-    "quickKillEnemiesKey": "F3"
+    "consoleHotkey": "",
+    "guiOverlayHotkey": "",
+    "quickGodModeKey": "",
+    "quickKillEnemiesKey": ""
   },
   "preRunTweaks": {
     "goldRewardMultiplier": 1.0,
@@ -246,6 +253,16 @@ Settings are configured via `config/default_config.json` and persist per-user in
     "cardRewardCount": 3,
     "startingGoldBonus": 0,
     "startingMaxHpBonus": 0,
+    "forceNeowBonus": true,
+    "mapRoomCount": 15,
+    "enemyHealthMultiplier": 1.0,
+    "enemyDamageMultiplier": 1.0,
+    "enemyDefendMultiplier": 1.0,
+    "freeMapNavigation": false,
+    "endlessMode": {
+      "enabled": false,
+      "enemyScalingMultiplier": 2.0
+    },
     "mapNodeDistribution": {
       "eliteWeightMultiplier": 1.0,
       "shopWeightMultiplier": 1.0,
@@ -276,7 +293,7 @@ Settings are configured via `config/default_config.json` and persist per-user in
 
 ## Troubleshooting
 
-- **Console doesn't open on `F1`:** Check if another overlay (Steam Overlay, Discord, MangoHud) intercepts the `F1` key. You can change the key in `config.json` or press `` ` ``.
+- **Opening Mod Settings or Console:** Hotkeys are unassigned by default. Open the **Mods** menu from the Main Menu or Character Select screen to click the AIOTweaks configuration button and assign your favorite hotkeys (e.g. `F1`, `F3`).
 - **Mod not showing up in Mods list:** Verify `AIOTweaks.json` is located directly in `mods/AIOTweaks/AIOTweaks.json` alongside `AIOTweaks.dll`.
 - **Build error with missing Godot assemblies:** Ensure the Godot .NET SDK / targeting packs are installed and the .NET 9 SDK is active (`dotnet --version`).
 

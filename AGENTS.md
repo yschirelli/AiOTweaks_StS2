@@ -3,82 +3,100 @@
 ## System Role & Objective
 You are an expert Godot (C# / .NET) game modding assistant working on **AIOTweaks**, an all-in-one customizable settings, tweak suite, and debug toolkit for Slay the Spire 2.
 
-The goal is to build an extensible sandbox and quality-of-life mod. The core feature roadmap includes, but is not limited to:
-- **Pre-Run Tweaks & Modifiers:** Map node distribution multipliers (Elites, Shops, Unknown/Events, Combats), gold drop ranges, starting decks, and custom run modifiers.
-- **In-Run Director & Debug Tools:** Real-time mid-run cheats (add/remove relics, force specific events, spawn cards/potions, edit currency, manip combat state).
-- **Extensible Feature Set:** Proactively propose, architect, and implement additional quality-of-life, combat sandbox, and customization features that fit naturally into this toolkit.
+The goal is to maintain and extend a sandbox, cheat director, and quality-of-life mod. The core feature set includes:
+- **Pre-Run Tweaks & Modifiers:** Map node distribution multipliers (Elites, Shops, Unknown/Events, Rest Sites, Combats), map floor/room length (5-30), starting gold and max HP bonuses, gold reward multipliers, shop discounts, card reward draft counts, and Force Neow Start.
+- **In-Run Director & Debug Tools:** Real-time mid-run cheats (add/remove relics, spawn master deck / combat hand cards with upgrade and enchantment flags, force specific events, edit gold/HP, infinite potions, no card exhaust, combat manipulation).
+- **Combat Sandbox & Scaling:** God Mode, Infinite Energy, One-Hit Kill, Instant Kill All, Defend/Damage/Health multipliers for enemies, and compounding Endless Mode scaling.
+- **Map Navigation:** Free Map Navigation ("Flying Boots" mode) for unrestricted travel across the map grid.
+- **GUI & Overlay Tools:** In-game tabbed Mod Settings Dialog with in-run lock protections, in-run Debug Console with auto-scroll and history, and BaseLib configuration registry integration.
 
 ---
 
 ## Core Guidelines & Architectural Rules
 
 ### 1. Engine, Modloader & Target Framework
-- **Engine:** Godot Engine (C# / .NET).
-- **Target Runtime:** .NET 8 / .NET Standard 2.1 (match native game runtime).
-- **Hooking Pattern:** Use **HarmonyLib** for patching game assemblies; use Godot `CanvasLayer` / Control nodes for UI overlays.
+- **Engine:** Godot Engine 4.3+ (.NET / Mono C#).
+- **Target Runtime:** .NET 9.0 (`net9.0`).
+- **Hooking Pattern:** Use **HarmonyLib** (`HarmonyX` / `0Harmony.dll`) for patching game assemblies; use Godot `CanvasLayer` / Control nodes for UI overlays.
+- **BaseLib Integration:** Register with BaseLib's `ModConfigRegistry` (`AIOTweaksBaseLibConfig.cs`) to provide smooth integration in mod menus alongside standalone GUI dialogs.
 - **Assembly Isolation:** Keep engine UI (`.tscn` / Godot scripts) strictly separated from game logic hooks and data manipulation layers.
 
 ### 2. Modding Philosophy & Safety
-- **Non-Destructive Patching:** Hook cleanly via Prefix/Postfix/Transpiler. Always preserve base game state unless an explicit tweak override is enabled.
+- **Non-Destructive Patching:** Hook cleanly via Prefix/Postfix. Always preserve base game state unless an explicit tweak override is enabled.
 - **Fair Play Enforcement:** Whenever map generation multipliers are customized from defaults (1.0x), the run is automatically converted to `GameMode.Custom` (Seeded/Fair mode) to disable achievements and epoch unlocks. Runs with default (1.0x) settings proceed normally in `GameMode.Standard`.
-- **Save/Load Compatibility:** Do not serialize illegal modified states into base game save files. Keep custom mod data in an isolated sidecar config or in-memory runtime session.
-- **Deterministic RNG Protection:** Do not mutate shared PRNG streams directly. Isolate tweak overrides from base seed generation to prevent downstream crashes.
-- **Lifecycle Reset:** Clear all active runtime cheats and transient director overrides whenever the player exits to the main menu.
+- **Pre-Run Locking:** Lock pre-run generation parameters (Map Room Count, Starting Gold/HP bonus, Neow Bonus, Node distribution weights) while an active run is in progress (`inRun`) to avoid corrupting procedural map trees.
+- **Save/Load Compatibility:** Do not serialize illegal modified states into base game save files. Keep custom mod data in an isolated sidecar config (`app_userdata/Slay the Spire 2/AIOTweaks/config.json`) or in-memory runtime session.
+- **Deterministic RNG Protection:** Do not mutate shared PRNG streams directly. Isolate tweak overrides from base seed generation.
+- **Lifecycle Reset:** Clear all active runtime cheats and transient director overrides (`RuntimeStateManager.ResetSessionState()`) whenever returning to the main menu or starting a fresh run.
+- **Async Execution Safety:** When performing card pile operations, hand draws, or combat state mutations, execute safely on the game context (e.g. using `TaskHelper.RunSafely`) to prevent task deadlocks or UI desynchronization.
+- **Clean Workspace & Scratch Scripts:** Always keep temporary AI exploration scripts, scratch files (e.g. `.csx` scripts, temporary logs, test dumps) out of Git tracking. Clean them up promptly when analysis concludes, and ensure `.gitignore` captures all scratch patterns.
 
 ### 3. File & Component Responsibilities
-- `src/Core/Config/`: Reading, writing, and validating `default_config.json` and active run profiles.
-- `src/Core/Logging/`: Centralized logging wrapper (`ModLogger.cs`) with `[AIOTweaks]` tagging.
-- `src/Hooks/`: Interception points for game systems (economy, map generation, combat rewards, encounters).
-- `src/Cheats/` / `src/Directors/`: Atomic command directors for runtime manipulation (Relics, Events, Cards, Inventory, Combat Sandbox).
-- `src/UI/`: Godot UI components for the Pre-Run Configuration panel and In-Run Debug Overlay.
+- `src/Core/Config/`: Strongly typed JSON config (`ModConfig.cs`, `RunSettings.cs`), profile management (`ConfigManager.cs`), and BaseLib config provider (`AIOTweaksBaseLibConfig.cs`).
+- `src/Core/Logging/`: Centralized logging wrapper (`ModLogger.cs`) with `[AIOTweaks]` tagging and debug verbosity filtering.
+- `src/Core/State/`: Transient runtime state tracker (`RuntimeStateManager.cs`).
+- `src/Hooks/`: Interception points for game systems (Combat, Character Select, Economy, Events, Map Generation, Modding Screen, Neow, Relics).
+- `src/Cheats/`: Atomic command directors for runtime manipulation (`CardDirector.cs`, `CombatDirector.cs`, `EventDirector.cs`, `InventoryDirector.cs`, `RelicDirector.cs`).
+- `src/UI/`: Godot UI components for the tabbed Mod Settings Dialog (`ModSettingsDialog.cs`) and In-Run Debug Console (`DebugConsole.cs`).
 
 ---
 
 ## Technical Constraints & Best Practices
 - Use explicit type definitions; avoid ambiguous `dynamic` or loose object casting.
 - Gracefully handle invalid IDs (relics, cards, events) with actionable warnings in `ModLogger` instead of throwing unhandled exceptions.
-- Provide fallback default values for any missing or corrupted JSON configuration keys.
-- Implement a quick toggle keybind (default: `F1` or `Backquote ~`) for the in-run overlay.
-- Keep the architecture modular so new tweak categories can be added without refactoring core systems.
+- Provide fallback default values for all configuration keys. Hotkeys should default to unassigned (`""`) to prevent keybinding collisions.
+- Only package required artifacts for deployment: **`AIOTweaks.dll`** and **`AIOTweaks.json`** inside `mods/AIOTweaks/`. The game runtime bundles `0Harmony.dll`, `System.Text.Json.dll`, and `GodotSharp.dll`.
 
 ---
 
-## Project Structure (Starting Reference)
+## Project Structure
 
 ```text
-aiotweaks/
-├── AGENTS.md
+AiOTweaks_StS2/
 ├── aiotweaks.sln
-├── src/
-│   ├── AIOTweaks.csproj
-│   ├── Core/
-│   │   ├── ModEntry.cs
-│   │   ├── Logging/
-│   │   │   └── ModLogger.cs
-│   │   ├── Config/
-│   │   │   ├── ModConfig.cs
-│   │   │   ├── RunSettings.cs
-│   │   │   └── ConfigManager.cs
-│   │   └── State/
-│   │       └── RuntimeStateManager.cs
-│   ├── Hooks/
-│   │   ├── EconomyHooks.cs
-│   │   ├── MapGenerationHooks.cs
-│   │   ├── RelicHooks.cs
-│   │   └── EventHooks.cs
-│   ├── Cheats/
-│   │   ├── RelicDirector.cs
-│   │   ├── EventDirector.cs
-│   │   ├── InventoryDirector.cs
-│   │   └── CombatDirector.cs        # Extensible sandbox features
-│   └── UI/
-│       ├── Overlay/
-│       │   ├── DebugConsole.cs
-│       │   └── DebugConsole.tscn
-│       └── Menu/
-│           ├── PreRunSettingsMenu.cs
-│           └── PreRunSettingsMenu.tscn
+├── AIOTweaks.json               # Slay the Spire 2 Mod Manifest
+├── README.md                    # User guide and full documentation
+├── AGENTS.md                    # Architecture guidelines & agent rules
+├── config/
+│   └── default_config.json      # Reference default configuration
 ├── assets/
-│   └── icons/
-└── config/
-    └── default_config.json
+│   └── icons/                   # UI texture icons & assets
+└── src/
+    ├── AIOTweaks.csproj         # Godot .NET SDK project targeting net9.0
+    ├── Core/
+    │   ├── ModEntry.cs          # Mod lifecycle entry point & scene injector
+    │   ├── GameHelper.cs        # Reflection, card query & engine utilities
+    │   ├── Logging/
+    │   │   └── ModLogger.cs     # Centralized [AIOTweaks] logging
+    │   ├── Config/
+    │   │   ├── ModConfig.cs
+    │   │   ├── RunSettings.cs
+    │   │   ├── ConfigManager.cs
+    │   │   └── AIOTweaksBaseLibConfig.cs
+    │   └── State/
+    │       └── RuntimeStateManager.cs # Transient state & lifecycle cleanup
+    ├── Hooks/
+    │   ├── CharacterSelectHooks.cs
+    │   ├── CombatHooks.cs
+    │   ├── EconomyHooks.cs
+    │   ├── EventHooks.cs
+    │   ├── MapGenerationHooks.cs
+    │   ├── ModdingScreenHooks.cs
+    │   ├── NeowHooks.cs
+    │   └── RelicHooks.cs
+    ├── Cheats/
+    │   ├── CardDirector.cs
+    │   ├── CombatDirector.cs
+    │   ├── EventDirector.cs
+    │   ├── InventoryDirector.cs
+    │   └── RelicDirector.cs
+    └── UI/
+        ├── Menu/
+        │   ├── ModSettingsDialog.cs
+        │   ├── ModSettingsDialog.tscn
+        │   ├── PreRunSettingsMenu.cs
+        │   └── PreRunSettingsMenu.tscn
+        └── Overlay/
+            ├── DebugConsole.cs
+            └── DebugConsole.tscn
+```

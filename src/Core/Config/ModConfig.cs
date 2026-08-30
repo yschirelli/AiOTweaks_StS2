@@ -29,10 +29,10 @@ public sealed class GeneralConfig
     public bool DebugLogging { get; set; } = true;
 
     [JsonPropertyName("consoleHotkey")]
-    public string ConsoleHotkey { get; set; } = "F1";
+    public string ConsoleHotkey { get; set; } = "";
 
     [JsonPropertyName("guiOverlayHotkey")]
-    public string GuiOverlayHotkey { get; set; } = "F3";
+    public string GuiOverlayHotkey { get; set; } = "";
 
     [JsonPropertyName("toggleOverlayKey")]
     public string? ToggleOverlayKey
@@ -40,7 +40,7 @@ public sealed class GeneralConfig
         get => ConsoleHotkey;
         set
         {
-            if (!string.IsNullOrWhiteSpace(value))
+            if (value != null)
             {
                 ConsoleHotkey = value;
             }
@@ -48,10 +48,10 @@ public sealed class GeneralConfig
     }
 
     [JsonPropertyName("quickGodModeKey")]
-    public string QuickGodModeKey { get; set; } = "F2";
+    public string QuickGodModeKey { get; set; } = "";
 
     [JsonPropertyName("quickKillEnemiesKey")]
-    public string QuickKillEnemiesKey { get; set; } = "F4";
+    public string QuickKillEnemiesKey { get; set; } = "";
 }
 
 public sealed class PreRunTweaksConfig
@@ -74,8 +74,35 @@ public sealed class PreRunTweaksConfig
     [JsonPropertyName("forceNeowBonus")]
     public bool ForceNeowBonus { get; set; } = true;
 
+    [JsonPropertyName("mapRoomCount")]
+    public int MapRoomCount { get; set; } = 15;
+
+    [JsonPropertyName("enemyHealthMultiplier")]
+    public float EnemyHealthMultiplier { get; set; } = 1.0f;
+
+    [JsonPropertyName("enemyDamageMultiplier")]
+    public float EnemyDamageMultiplier { get; set; } = 1.0f;
+
+    [JsonPropertyName("enemyDefendMultiplier")]
+    public float EnemyDefendMultiplier { get; set; } = 1.0f;
+
+    [JsonPropertyName("freeMapNavigation")]
+    public bool FreeMapNavigation { get; set; } = false;
+
+    [JsonPropertyName("endlessMode")]
+    public EndlessModeConfig EndlessMode { get; set; } = new();
+
     [JsonPropertyName("mapNodeDistribution")]
     public MapNodeDistributionConfig MapNodeDistribution { get; set; } = new();
+}
+
+public sealed class EndlessModeConfig
+{
+    [JsonPropertyName("enabled")]
+    public bool Enabled { get; set; } = false;
+
+    [JsonPropertyName("enemyScalingMultiplier")]
+    public float EnemyScalingMultiplier { get; set; } = 2.0f;
 }
 
 public sealed class MapNodeDistributionConfig

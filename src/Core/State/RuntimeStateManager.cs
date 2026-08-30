@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AIOTweaks.Core.Config;
 using AIOTweaks.Core.Logging;
 
 namespace AIOTweaks.Core.State;
@@ -17,6 +18,10 @@ public static class RuntimeStateManager
     public static bool OneHitKillEnabled { get; set; } = false;
     public static bool InfinitePotionsEnabled { get; set; } = false;
     public static bool NoCardExhaustEnabled { get; set; } = false;
+    public static bool FreeMapNavigationEnabled { get; set; } = false;
+
+    // Endless mode state
+    public static int CurrentEndlessLoopCount { get; set; } = 0;
 
     // Director transient overrides
     public static string? ForcedNextEventId { get; set; } = null;
@@ -68,6 +73,39 @@ public static class RuntimeStateManager
             ModLogger.Verbose("RuntimeStateManager", $"GetActiveCheatFlags: returning {ActiveCheatFlags.Count} flags.");
             return new List<string>(ActiveCheatFlags);
         }
+    }
+
+    public static float GetEffectiveEnemyHealthMultiplier()
+    {
+        float baseHp = ConfigManager.Current.PreRunTweaks.EnemyHealthMultiplier;
+        var endless = ConfigManager.Current.PreRunTweaks.EndlessMode;
+        if (endless.Enabled && CurrentEndlessLoopCount > 0)
+        {
+            baseHp *= (float)Math.Pow(endless.EnemyScalingMultiplier, CurrentEndlessLoopCount);
+        }
+        return Math.Max(0.01f, baseHp);
+    }
+
+    public static float GetEffectiveEnemyDamageMultiplier()
+    {
+        float baseDmg = ConfigManager.Current.PreRunTweaks.EnemyDamageMultiplier;
+        var endless = ConfigManager.Current.PreRunTweaks.EndlessMode;
+        if (endless.Enabled && CurrentEndlessLoopCount > 0)
+        {
+            baseDmg *= (float)Math.Pow(endless.EnemyScalingMultiplier, CurrentEndlessLoopCount);
+        }
+        return Math.Max(0.0f, baseDmg);
+    }
+
+    public static float GetEffectiveEnemyDefendMultiplier()
+    {
+        float baseDef = ConfigManager.Current.PreRunTweaks.EnemyDefendMultiplier;
+        var endless = ConfigManager.Current.PreRunTweaks.EndlessMode;
+        if (endless.Enabled && CurrentEndlessLoopCount > 0)
+        {
+            baseDef *= (float)Math.Pow(endless.EnemyScalingMultiplier, CurrentEndlessLoopCount);
+        }
+        return Math.Max(0.0f, baseDef);
     }
 
     public static void QueueRewardRelic(string relicId)
@@ -125,6 +163,8 @@ public static class RuntimeStateManager
             OneHitKillEnabled = false;
             InfinitePotionsEnabled = false;
             NoCardExhaustEnabled = false;
+            FreeMapNavigationEnabled = false;
+            CurrentEndlessLoopCount = 0;
 
             ForcedNextEventId = null;
             ForcedGoldDropAmount = null;

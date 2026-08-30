@@ -11,7 +11,7 @@ using MegaCrit.Sts2.Core.Nodes.Combat;
 namespace AIOTweaks.Hooks;
 
 /// <summary>
-/// Intercepts combat lifecycle methods (damage calculation, energy consumption, draw phases).
+/// Intercepts combat lifecycle methods (damage calculation, energy consumption, draw phases, enemy health/damage/defend scaling).
 /// </summary>
 public static class CombatHooks
 {
@@ -86,6 +86,58 @@ public static class CombatHooks
         }
     }
 
+    [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Entities.Creatures.Creature), "SetMaxHpInternal")]
+    public static class CreatureSetMaxHpInternalPatch
+    {
+        [HarmonyPrefix]
+        public static void Prefix(MegaCrit.Sts2.Core.Entities.Creatures.Creature __instance, ref decimal amount)
+        {
+            try
+            {
+                if (!__instance.IsPlayer)
+                {
+                    float hpMult = RuntimeStateManager.GetEffectiveEnemyHealthMultiplier();
+                    if (Math.Abs(hpMult - 1.0f) > 0.001f)
+                    {
+                        decimal original = amount;
+                        amount = Math.Max(1, (decimal)Math.Round((double)amount * hpMult));
+                        ModLogger.Verbose("CombatHooks", $"Monster SetMaxHpInternal ({__instance.GetType().Name}): {original} -> {amount} (x{hpMult:F2})");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Debug($"CreatureSetMaxHpInternalPatch notice: {ex.Message}");
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Entities.Creatures.Creature), "SetCurrentHpInternal")]
+    public static class CreatureSetCurrentHpInternalPatch
+    {
+        [HarmonyPrefix]
+        public static void Prefix(MegaCrit.Sts2.Core.Entities.Creatures.Creature __instance, ref decimal amount)
+        {
+            try
+            {
+                if (!__instance.IsPlayer && __instance.MaxHp > 0)
+                {
+                    float hpMult = RuntimeStateManager.GetEffectiveEnemyHealthMultiplier();
+                    if (Math.Abs(hpMult - 1.0f) > 0.001f)
+                    {
+                        decimal original = amount;
+                        amount = Math.Max(1, (decimal)Math.Round((double)amount * hpMult));
+                        ModLogger.Verbose("CombatHooks", $"Monster SetCurrentHpInternal ({__instance.GetType().Name}): {original} -> {amount} (x{hpMult:F2})");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Debug($"CreatureSetCurrentHpInternalPatch notice: {ex.Message}");
+            }
+        }
+    }
+
     [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Entities.Creatures.Creature), "LoseHpInternal")]
     public static class CreatureLoseHpInternalPatch
     {
@@ -122,6 +174,68 @@ public static class CombatHooks
             {
                 ModLogger.Verbose("CombatHooks", $"GodMode prevented {amount} block damage on player.");
                 amount = 0; // Don't lose block in god mode
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Entities.Creatures.Creature), "GainBlockInternal")]
+    public static class CreatureGainBlockInternalPatch
+    {
+        [HarmonyPrefix]
+        public static void Prefix(MegaCrit.Sts2.Core.Entities.Creatures.Creature __instance, ref decimal amount)
+        {
+            try
+            {
+                if (!__instance.IsPlayer)
+                {
+                    float defMult = RuntimeStateManager.GetEffectiveEnemyDefendMultiplier();
+                    if (Math.Abs(defMult - 1.0f) > 0.001f)
+                    {
+                        decimal original = amount;
+                        amount = Math.Max(0, (decimal)Math.Round((double)amount * defMult));
+                        ModLogger.Verbose("CombatHooks", $"Enemy GainBlockInternal ({__instance.GetType().Name}): {original} -> {amount} (x{defMult:F2})");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Debug($"CreatureGainBlockInternalPatch notice: {ex.Message}");
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Commands.CardPileCmd), nameof(MegaCrit.Sts2.Core.Commands.CardPileCmd.Draw), new Type[] {
+        typeof(MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext),
+        typeof(decimal),
+        typeof(MegaCrit.Sts2.Core.Entities.Players.Player),
+        typeof(bool)
+    })]
+    public static class CardPileCmdDrawPatch
+    {
+        [HarmonyPrefix]
+        public static void Prefix(ref decimal count, bool fromHandDraw)
+        {
+            try
+            {
+                if (fromHandDraw)
+                {
+                    int bonus = ConfigManager.Current.CombatSandbox.BonusDrawPerTurn;
+                    if (RuntimeStateManager.OverrideCardDrawCount.HasValue)
+                    {
+                        count = RuntimeStateManager.OverrideCardDrawCount.Value;
+                        ModLogger.Verbose("CombatHooks", $"CardPileCmd.Draw turn start draw overridden: -> {count}");
+                    }
+                    else if (bonus > 0)
+                    {
+                        decimal original = count;
+                        count += bonus;
+                        ModLogger.Verbose("CombatHooks", $"CardPileCmd.Draw turn start draw boosted: {original} + {bonus} -> {count}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Debug($"CardPileCmdDrawPatch notice: {ex.Message}");
             }
         }
     }
@@ -176,6 +290,7 @@ public static class CombatHooks
 
     /// <summary>
     /// Processes incoming damage to the player. If GodMode is active, prevents damage.
+    /// Also applies Enemy Damage Multipliers.
     /// </summary>
     public static int ProcessPlayerIncomingDamage(int incomingDamage)
     {
@@ -183,6 +298,14 @@ public static class CombatHooks
         {
             ModLogger.Info($"CombatHook: GodMode absorbed {incomingDamage} incoming damage.");
             return 0;
+        }
+
+        float dmgMult = RuntimeStateManager.GetEffectiveEnemyDamageMultiplier();
+        if (Math.Abs(dmgMult - 1.0f) > 0.001f)
+        {
+            int modified = (int)Math.Round(incomingDamage * dmgMult);
+            ModLogger.Verbose("CombatHooks", $"ProcessPlayerIncomingDamage: {incomingDamage} -> {modified} (x{dmgMult:F2})");
+            return modified;
         }
 
         return incomingDamage;

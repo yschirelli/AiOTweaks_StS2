@@ -2,10 +2,10 @@
   "general": {
     "enabled": true,
     "debugLogging": false,
-    "consoleHotkey": "F1",
-    "guiOverlayHotkey": "F3",
-    "quickGodModeKey": "F2",
-    "quickKillEnemiesKey": "F4"
+    "consoleHotkey": "",
+    "guiOverlayHotkey": "",
+    "quickGodModeKey": "",
+    "quickKillEnemiesKey": ""
   },
   "preRunTweaks": {
     "goldRewardMultiplier": 1.0,
@@ -13,6 +13,16 @@
     "cardRewardCount": 3,
     "startingGoldBonus": 0,
     "startingMaxHpBonus": 0,
+    "forceNeowBonus": true,
+    "mapRoomCount": 15,
+    "enemyHealthMultiplier": 1.0,
+    "enemyDamageMultiplier": 1.0,
+    "enemyDefendMultiplier": 1.0,
+    "freeMapNavigation": false,
+    "endlessMode": {
+      "enabled": false,
+      "enemyScalingMultiplier": 2.0
+    },
     "mapNodeDistribution": {
       "eliteWeightMultiplier": 1.0,
       "shopWeightMultiplier": 1.0,

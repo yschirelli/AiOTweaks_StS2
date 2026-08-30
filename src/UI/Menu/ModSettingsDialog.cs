@@ -26,19 +26,31 @@ public partial class ModSettingsDialog : CanvasLayer
     // Hotkey fields
     private LineEdit? _consoleHotkeyInput;
     private LineEdit? _guiHotkeyInput;
+    private LineEdit? _quickGodModeInput;
+    private LineEdit? _quickKillEnemiesInput;
 
-    // Tweak sliders
+    // Tweak sliders & spinners
     private HSlider? _goldSlider;
     private HSlider? _shopDiscountSlider;
     private HSlider? _eliteSlider;
     private HSlider? _shopSlider;
     private HSlider? _eventSlider;
+    private HSlider? _restSlider;
+    private HSlider? _combatSlider;
     private SpinBox? _cardRewardSpin;
     private SpinBox? _bonusGoldSpin;
-    private SpinBox? _goldRewardSpin;
-    private SpinBox? _shopDiscountSpin;
-    private CheckBox? _forceNeowCheck;
     private SpinBox? _bonusHpSpin;
+    private SpinBox? _mapRoomCountSpin;
+    private CheckBox? _forceNeowCheck;
+    private Label? _tweaksRunLockNoticeLabel;
+
+    // Enemy Multipliers & Endless Mode
+    private HSlider? _enemyHpSlider;
+    private HSlider? _enemyDmgSlider;
+    private HSlider? _enemyDefSlider;
+    private CheckBox? _endlessModeCheck;
+    private SpinBox? _endlessMultiplierSpin;
+    private CheckBox? _freeMapNavCheck;
 
     // Sandbox Checkboxes
     private CheckBox? _godModeCheck;
@@ -184,13 +196,10 @@ public partial class ModSettingsDialog : CanvasLayer
             ModLogger.Verbose("ModSettingsDialog", $"Player inRun status: {inRun}");
             if (_tabs != null)
             {
-                int tweaksIdx = 4; // Tweaks is the 5th tab added
-                _tabs.SetTabDisabled(tweaksIdx, inRun);
-                if (inRun && _tabs.CurrentTab == tweaksIdx)
-                {
-                    _tabs.CurrentTab = 0; // fallback to Relics
-                }
+                int tweaksIdx = 4; // Tweaks is the 5th tab
+                _tabs.SetTabDisabled(tweaksIdx, false);
             }
+            UpdateTweaksRunLockState(inRun);
 
             _dialogPanel.Visible = true;
             UpdateBlockingState(true);
@@ -360,15 +369,31 @@ public partial class ModSettingsDialog : CanvasLayer
         defaultBtn.Pressed += () =>
         {
             // Reset to defaults
+            ConfigManager.Current.General.ConsoleHotkey = "";
+            ConfigManager.Current.General.GuiOverlayHotkey = "";
+            ConfigManager.Current.General.QuickGodModeKey = "";
+            ConfigManager.Current.General.QuickKillEnemiesKey = "";
+
+            ConfigManager.Current.PreRunTweaks.MapRoomCount = 15;
             ConfigManager.Current.PreRunTweaks.GoldRewardMultiplier = 1.0f;
             ConfigManager.Current.PreRunTweaks.ShopDiscountMultiplier = 1.0f;
             ConfigManager.Current.PreRunTweaks.CardRewardCount = 3;
             ConfigManager.Current.PreRunTweaks.StartingGoldBonus = 0;
             ConfigManager.Current.PreRunTweaks.StartingMaxHpBonus = 0;
+            ConfigManager.Current.PreRunTweaks.ForceNeowBonus = true;
 
             ConfigManager.Current.PreRunTweaks.MapNodeDistribution.EliteWeightMultiplier = 1.0f;
             ConfigManager.Current.PreRunTweaks.MapNodeDistribution.ShopWeightMultiplier = 1.0f;
             ConfigManager.Current.PreRunTweaks.MapNodeDistribution.EventWeightMultiplier = 1.0f;
+            ConfigManager.Current.PreRunTweaks.MapNodeDistribution.RestSiteWeightMultiplier = 1.0f;
+            ConfigManager.Current.PreRunTweaks.MapNodeDistribution.CombatWeightMultiplier = 1.0f;
+
+            ConfigManager.Current.PreRunTweaks.EnemyHealthMultiplier = 1.0f;
+            ConfigManager.Current.PreRunTweaks.EnemyDamageMultiplier = 1.0f;
+            ConfigManager.Current.PreRunTweaks.EnemyDefendMultiplier = 1.0f;
+            ConfigManager.Current.PreRunTweaks.FreeMapNavigation = false;
+            ConfigManager.Current.PreRunTweaks.EndlessMode.Enabled = false;
+            ConfigManager.Current.PreRunTweaks.EndlessMode.EnemyScalingMultiplier = 2.0f;
 
             ConfigManager.Current.CombatSandbox.GodMode = false;
             ConfigManager.Current.CombatSandbox.InfiniteEnergy = false;
@@ -402,22 +427,50 @@ public partial class ModSettingsDialog : CanvasLayer
         var vbox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         scroll.AddChild(vbox);
 
+        // Run lock notification banner
+        _tweaksRunLockNoticeLabel = new Label
+        {
+            Text = "🔒 Pre-run map generation & starting bonus settings are locked during an active run.\n   (All options can be freely customized in the Main Menu)",
+            Modulate = new Color(1f, 0.45f, 0.3f),
+            Visible = false
+        };
+        vbox.AddChild(_tweaksRunLockNoticeLabel);
+
         vbox.AddChild(new Label { Text = "--- Keybindings & Hotkeys ---", Modulate = new Color(0.35f, 0.85f, 1f) });
+        vbox.AddChild(new Label { Text = "Note: Leave empty or 'None' to disable a hotkey.", Modulate = new Color(0.7f, 0.7f, 0.7f) });
 
         var consoleKeyRow = new HBoxContainer();
         consoleKeyRow.AddChild(new Label { Text = "Console Hotkey: ", CustomMinimumSize = new Vector2(240, 0) });
-        _consoleHotkeyInput = new LineEdit { PlaceholderText = "e.g. F1, Quoteleft", CustomMinimumSize = new Vector2(150, 0) };
+        _consoleHotkeyInput = new LineEdit { PlaceholderText = "e.g. F1, Quoteleft (Empty = Disabled)", CustomMinimumSize = new Vector2(200, 0) };
         consoleKeyRow.AddChild(_consoleHotkeyInput);
         vbox.AddChild(consoleKeyRow);
 
         var guiKeyRow = new HBoxContainer();
         guiKeyRow.AddChild(new Label { Text = "GUI Menu Overlay Hotkey: ", CustomMinimumSize = new Vector2(240, 0) });
-        _guiHotkeyInput = new LineEdit { PlaceholderText = "e.g. F3, F8", CustomMinimumSize = new Vector2(150, 0) };
+        _guiHotkeyInput = new LineEdit { PlaceholderText = "e.g. F3, F8 (Empty = Disabled)", CustomMinimumSize = new Vector2(200, 0) };
         guiKeyRow.AddChild(_guiHotkeyInput);
         vbox.AddChild(guiKeyRow);
 
+        var godKeyRow = new HBoxContainer();
+        godKeyRow.AddChild(new Label { Text = "Quick God Mode Hotkey: ", CustomMinimumSize = new Vector2(240, 0) });
+        _quickGodModeInput = new LineEdit { PlaceholderText = "e.g. F2 (Empty = Disabled)", CustomMinimumSize = new Vector2(200, 0) };
+        godKeyRow.AddChild(_quickGodModeInput);
+        vbox.AddChild(godKeyRow);
+
+        var killKeyRow = new HBoxContainer();
+        killKeyRow.AddChild(new Label { Text = "Quick Kill All Enemies Hotkey: ", CustomMinimumSize = new Vector2(240, 0) });
+        _quickKillEnemiesInput = new LineEdit { PlaceholderText = "e.g. F4 (Empty = Disabled)", CustomMinimumSize = new Vector2(200, 0) };
+        killKeyRow.AddChild(_quickKillEnemiesInput);
+        vbox.AddChild(killKeyRow);
+
         vbox.AddChild(new HSeparator());
-        vbox.AddChild(new Label { Text = "--- Economy & Rewards ---", Modulate = new Color(1f, 0.85f, 0.3f) });
+        vbox.AddChild(new Label { Text = "--- Pre-Run Tweaks & Map Generation (Pre-Run Only) ---", Modulate = new Color(1f, 0.85f, 0.3f) });
+
+        var mapRoomRow = new HBoxContainer();
+        mapRoomRow.AddChild(new Label { Text = "Map Size (Floors / Room Count): ", CustomMinimumSize = new Vector2(240, 0) });
+        _mapRoomCountSpin = new SpinBox { MinValue = 5, MaxValue = 30, Value = 15, Step = 1 };
+        mapRoomRow.AddChild(_mapRoomCountSpin);
+        vbox.AddChild(mapRoomRow);
 
         _goldSlider = AddSliderControl(vbox, "Gold Drop Multiplier:", 0.1f, 5.0f, 0.1f, 1.0f);
         _shopDiscountSlider = AddSliderControl(vbox, "Shop Discount Multiplier:", 0.1f, 2.0f, 0.05f, 1.0f);
@@ -440,6 +493,9 @@ public partial class ModSettingsDialog : CanvasLayer
         startHpRow.AddChild(_bonusHpSpin);
         vbox.AddChild(startHpRow);
 
+        _forceNeowCheck = new CheckBox { Text = " Spawn Neow at start? (Guarantees Neow blessing even in Custom/Seeded runs)" };
+        vbox.AddChild(_forceNeowCheck);
+
         vbox.AddChild(new HSeparator());
         vbox.AddChild(new Label { Text = "--- Map Node Generation Weights ---", Modulate = new Color(0.4f, 1f, 0.6f) });
         var fairNote = new Label
@@ -452,8 +508,64 @@ public partial class ModSettingsDialog : CanvasLayer
         _eliteSlider = AddSliderControl(vbox, "Elite Encounter Weight:", 0.0f, 5.0f, 0.1f, 1.0f);
         _shopSlider = AddSliderControl(vbox, "Shop Node Weight:", 0.0f, 5.0f, 0.1f, 1.0f);
         _eventSlider = AddSliderControl(vbox, "Event / Unknown Weight:", 0.0f, 5.0f, 0.1f, 1.0f);
+        _restSlider = AddSliderControl(vbox, "Rest Site Weight:", 0.0f, 5.0f, 0.1f, 1.0f);
+        _combatSlider = AddSliderControl(vbox, "Normal Combat Weight:", 0.0f, 5.0f, 0.1f, 1.0f);
+
+        vbox.AddChild(new HSeparator());
+        vbox.AddChild(new Label { Text = "--- Enemy Multipliers & Scaling ---", Modulate = new Color(1f, 0.4f, 0.4f) });
+
+        _enemyHpSlider = AddSliderControl(vbox, "Enemy Health Multiplier:", 0.1f, 10.0f, 0.1f, 1.0f);
+        _enemyDmgSlider = AddSliderControl(vbox, "Enemy Damage Multiplier:", 0.0f, 10.0f, 0.1f, 1.0f);
+        _enemyDefSlider = AddSliderControl(vbox, "Enemy Defend/Block Multiplier:", 0.0f, 10.0f, 0.1f, 1.0f);
+
+        vbox.AddChild(new HSeparator());
+        vbox.AddChild(new Label { Text = "--- Endless Mode & Free Map Navigation ---", Modulate = new Color(0.8f, 0.5f, 1f) });
+
+        _endlessModeCheck = new CheckBox { Text = " Enable Endless Mode (Scale enemies progressively each loop reset)" };
+        vbox.AddChild(_endlessModeCheck);
+
+        var endlessMultRow = new HBoxContainer();
+        endlessMultRow.AddChild(new Label { Text = "Endless Loop Scaling Multiplier: ", CustomMinimumSize = new Vector2(240, 0) });
+        _endlessMultiplierSpin = new SpinBox { MinValue = 1.0, MaxValue = 10.0, Step = 0.1, Value = 2.0 };
+        endlessMultRow.AddChild(_endlessMultiplierSpin);
+        vbox.AddChild(endlessMultRow);
+
+        _freeMapNavCheck = new CheckBox { Text = " Free Map Navigation (Flying Boots mode: click & travel to ANY room freely on map)" };
+        _freeMapNavCheck.Toggled += val =>
+        {
+            RuntimeStateManager.FreeMapNavigationEnabled = val;
+            ConfigManager.Current.PreRunTweaks.FreeMapNavigation = val;
+            if (val)
+            {
+                GameHelper.EnsureCustomRunMode();
+            }
+        };
+        vbox.AddChild(_freeMapNavCheck);
 
         return scroll;
+    }
+
+    private void UpdateTweaksRunLockState(bool inRun)
+    {
+        if (_tweaksRunLockNoticeLabel != null)
+        {
+            _tweaksRunLockNoticeLabel.Visible = inRun;
+        }
+
+        bool allowPreRunEdits = !inRun;
+
+        if (_mapRoomCountSpin != null) _mapRoomCountSpin.Editable = allowPreRunEdits;
+        if (_goldSlider != null) _goldSlider.Editable = allowPreRunEdits;
+        if (_shopDiscountSlider != null) _shopDiscountSlider.Editable = allowPreRunEdits;
+        if (_cardRewardSpin != null) _cardRewardSpin.Editable = allowPreRunEdits;
+        if (_bonusGoldSpin != null) _bonusGoldSpin.Editable = allowPreRunEdits;
+        if (_bonusHpSpin != null) _bonusHpSpin.Editable = allowPreRunEdits;
+        if (_forceNeowCheck != null) _forceNeowCheck.Disabled = !allowPreRunEdits;
+        if (_eliteSlider != null) _eliteSlider.Editable = allowPreRunEdits;
+        if (_shopSlider != null) _shopSlider.Editable = allowPreRunEdits;
+        if (_eventSlider != null) _eventSlider.Editable = allowPreRunEdits;
+        if (_restSlider != null) _restSlider.Editable = allowPreRunEdits;
+        if (_combatSlider != null) _combatSlider.Editable = allowPreRunEdits;
     }
 
     private Control BuildCombatSandboxTab()
@@ -1486,12 +1598,6 @@ public partial class ModSettingsDialog : CanvasLayer
         var vbox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         scroll.AddChild(vbox);
 
-        // -- Misc Tweaks --
-        vbox.AddChild(new Label { Text = "Miscellaneous", Modulate = new Color(0.9f, 0.9f, 0.9f) });
-
-        _forceNeowCheck = new CheckBox { Text = " Force Neow Start (Even in Custom runs)" };
-        vbox.AddChild(_forceNeowCheck);
-
         vbox.AddChild(new Label { Text = "--- Gold & Health Manipulation ---", Modulate = new Color(0.3f, 1f, 0.5f) });
         var goldRow = new HBoxContainer();
         _goldAmountSpin = new SpinBox { MinValue = -9999, MaxValue = 9999, Step = 50, Value = 500 };
@@ -1663,7 +1769,10 @@ public partial class ModSettingsDialog : CanvasLayer
 
         if (_consoleHotkeyInput != null) _consoleHotkeyInput.Text = general.ConsoleHotkey;
         if (_guiHotkeyInput != null) _guiHotkeyInput.Text = general.GuiOverlayHotkey;
+        if (_quickGodModeInput != null) _quickGodModeInput.Text = general.QuickGodModeKey;
+        if (_quickKillEnemiesInput != null) _quickKillEnemiesInput.Text = general.QuickKillEnemiesKey;
 
+        if (_mapRoomCountSpin != null) _mapRoomCountSpin.Value = tweaks.MapRoomCount;
         if (_goldSlider != null) _goldSlider.Value = tweaks.GoldRewardMultiplier;
         if (_shopDiscountSlider != null) _shopDiscountSlider.Value = tweaks.ShopDiscountMultiplier;
         if (_cardRewardSpin != null) _cardRewardSpin.Value = tweaks.CardRewardCount;
@@ -1674,6 +1783,16 @@ public partial class ModSettingsDialog : CanvasLayer
         if (_eliteSlider != null) _eliteSlider.Value = tweaks.MapNodeDistribution.EliteWeightMultiplier;
         if (_shopSlider != null) _shopSlider.Value = tweaks.MapNodeDistribution.ShopWeightMultiplier;
         if (_eventSlider != null) _eventSlider.Value = tweaks.MapNodeDistribution.EventWeightMultiplier;
+        if (_restSlider != null) _restSlider.Value = tweaks.MapNodeDistribution.RestSiteWeightMultiplier;
+        if (_combatSlider != null) _combatSlider.Value = tweaks.MapNodeDistribution.CombatWeightMultiplier;
+
+        if (_enemyHpSlider != null) _enemyHpSlider.Value = tweaks.EnemyHealthMultiplier;
+        if (_enemyDmgSlider != null) _enemyDmgSlider.Value = tweaks.EnemyDamageMultiplier;
+        if (_enemyDefSlider != null) _enemyDefSlider.Value = tweaks.EnemyDefendMultiplier;
+
+        if (_endlessModeCheck != null) _endlessModeCheck.ButtonPressed = tweaks.EndlessMode.Enabled;
+        if (_endlessMultiplierSpin != null) _endlessMultiplierSpin.Value = tweaks.EndlessMode.EnemyScalingMultiplier;
+        if (_freeMapNavCheck != null) _freeMapNavCheck.ButtonPressed = tweaks.FreeMapNavigation || RuntimeStateManager.FreeMapNavigationEnabled;
 
         if (_godModeCheck != null) _godModeCheck.ButtonPressed = RuntimeStateManager.GodModeEnabled || sandbox.GodMode;
         if (_infEnergyCheck != null) _infEnergyCheck.ButtonPressed = RuntimeStateManager.InfiniteEnergyEnabled || sandbox.InfiniteEnergy;
@@ -1695,11 +1814,12 @@ public partial class ModSettingsDialog : CanvasLayer
         var sandbox = ConfigManager.Current.CombatSandbox;
         var general = ConfigManager.Current.General;
 
-        if (_consoleHotkeyInput != null && !string.IsNullOrWhiteSpace(_consoleHotkeyInput.Text))
-            general.ConsoleHotkey = _consoleHotkeyInput.Text.Trim();
-        if (_guiHotkeyInput != null && !string.IsNullOrWhiteSpace(_guiHotkeyInput.Text))
-            general.GuiOverlayHotkey = _guiHotkeyInput.Text.Trim();
+        if (_consoleHotkeyInput != null) general.ConsoleHotkey = _consoleHotkeyInput.Text.Trim();
+        if (_guiHotkeyInput != null) general.GuiOverlayHotkey = _guiHotkeyInput.Text.Trim();
+        if (_quickGodModeInput != null) general.QuickGodModeKey = _quickGodModeInput.Text.Trim();
+        if (_quickKillEnemiesInput != null) general.QuickKillEnemiesKey = _quickKillEnemiesInput.Text.Trim();
 
+        if (_mapRoomCountSpin != null) tweaks.MapRoomCount = (int)_mapRoomCountSpin.Value;
         if (_goldSlider != null) tweaks.GoldRewardMultiplier = (float)_goldSlider.Value;
         if (_shopDiscountSlider != null) tweaks.ShopDiscountMultiplier = (float)_shopDiscountSlider.Value;
         if (_cardRewardSpin != null) tweaks.CardRewardCount = (int)_cardRewardSpin.Value;
@@ -1710,6 +1830,20 @@ public partial class ModSettingsDialog : CanvasLayer
         if (_eliteSlider != null) tweaks.MapNodeDistribution.EliteWeightMultiplier = (float)_eliteSlider.Value;
         if (_shopSlider != null) tweaks.MapNodeDistribution.ShopWeightMultiplier = (float)_shopSlider.Value;
         if (_eventSlider != null) tweaks.MapNodeDistribution.EventWeightMultiplier = (float)_eventSlider.Value;
+        if (_restSlider != null) tweaks.MapNodeDistribution.RestSiteWeightMultiplier = (float)_restSlider.Value;
+        if (_combatSlider != null) tweaks.MapNodeDistribution.CombatWeightMultiplier = (float)_combatSlider.Value;
+
+        if (_enemyHpSlider != null) tweaks.EnemyHealthMultiplier = (float)_enemyHpSlider.Value;
+        if (_enemyDmgSlider != null) tweaks.EnemyDamageMultiplier = (float)_enemyDmgSlider.Value;
+        if (_enemyDefSlider != null) tweaks.EnemyDefendMultiplier = (float)_enemyDefSlider.Value;
+
+        if (_endlessModeCheck != null) tweaks.EndlessMode.Enabled = _endlessModeCheck.ButtonPressed;
+        if (_endlessMultiplierSpin != null) tweaks.EndlessMode.EnemyScalingMultiplier = (float)_endlessMultiplierSpin.Value;
+        if (_freeMapNavCheck != null)
+        {
+            tweaks.FreeMapNavigation = _freeMapNavCheck.ButtonPressed;
+            RuntimeStateManager.FreeMapNavigationEnabled = _freeMapNavCheck.ButtonPressed;
+        }
 
         if (_godModeCheck != null) sandbox.GodMode = _godModeCheck.ButtonPressed;
         if (_infEnergyCheck != null) sandbox.InfiniteEnergy = _infEnergyCheck.ButtonPressed;

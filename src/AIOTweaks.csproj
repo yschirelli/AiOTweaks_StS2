@@ -10,11 +10,13 @@
     <Authors>AIOTweaks Team</Authors>
     <Description>All-in-one customizable settings, tweak suite, and debug toolkit for Slay the Spire 2.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <GenerateRuntimeConfigurationFiles>false</GenerateRuntimeConfigurationFiles>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Lib.Harmony" Version="2.3.3" />
-    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+    <PackageReference Include="Lib.Harmony" Version="2.3.3" ExcludeAssets="runtime" />
     <Reference Include="sts2">
       <HintPath>/mnt/data/SteamLibrary/steamapps/common/Slay the Spire 2/data_sts2_linuxbsd_x86_64/sts2.dll</HintPath>
       <Private>false</Private>
@@ -29,11 +31,6 @@
     <None Include="../AIOTweaks.json" Link="AIOTweaks.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="../config/**" Link="config/%(RecursiveDir)%(Filename)%(Extension)">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Include="../assets/**" Link="assets/%(RecursiveDir)%(Filename)%(Extension)">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
   </ItemGroup>
 </Project>
+

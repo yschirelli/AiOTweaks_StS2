@@ -131,6 +131,27 @@ public static class GameHelper
         return null;
     }
 
+    public static IReadOnlyList<Creature>? GetActiveCombatEnemies()
+    {
+        try
+        {
+            if (CombatManager.Instance?.StateTracker != null && CombatTrackerStateField != null)
+            {
+                if (CombatTrackerStateField.GetValue(CombatManager.Instance.StateTracker) is CombatState combatState)
+                {
+                    var enemies = combatState.Enemies;
+                    ModLogger.Verbose("GameHelper", $"GetActiveCombatEnemies: Resolved {enemies?.Count ?? 0} enemies from CombatState.");
+                    return enemies;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Debug($"GetActiveCombatEnemies notice: {ex.Message}");
+        }
+        return null;
+    }
+
     public static void SetGoldRewardAmount(GoldReward reward, int amount)
     {
         ModLogger.Verbose("GameHelper", $"SetGoldRewardAmount: setting amount to {amount}");
@@ -142,6 +163,25 @@ public static class GameHelper
         catch (Exception ex)
         {
             ModLogger.Debug($"SetGoldRewardAmount notice: {ex.Message}");
+        }
+    }
+
+    private static readonly FieldInfo? RunStateGameModeField = typeof(RunState).GetField("<GameMode>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance);
+
+    public static void EnsureCustomRunMode()
+    {
+        try
+        {
+            var player = GetActivePlayer();
+            if (player?.RunState is RunState runState && runState.GameMode == GameMode.Standard)
+            {
+                RunStateGameModeField?.SetValue(runState, GameMode.Custom);
+                ModLogger.Info("GameHelper: Switched active RunState to GameMode.Custom.");
+            }
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Debug($"EnsureCustomRunMode error: {ex.Message}");
         }
     }
 

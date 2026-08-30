@@ -1,7 +1,9 @@
 using System;
 using System.Reflection;
+using AIOTweaks.Core;
 using AIOTweaks.Core.Config;
 using AIOTweaks.Core.Logging;
+using AIOTweaks.Core.State;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Map;
 using MegaCrit.Sts2.Core.Runs;
@@ -9,8 +11,9 @@ using MegaCrit.Sts2.Core.Runs;
 namespace AIOTweaks.Hooks;
 
 /// <summary>
-/// Intercepts map node generation weights (Elites, Shops, Unknowns, Rest Sites, Combats)
-/// and enforces fair play by switching runs to Seeded/Custom mode when map generation is modified.
+/// Intercepts map node generation weights (Elites, Shops, Unknowns, Rest Sites, Combats),
+/// map floor/room length, and free map navigation (Flying Boots mode).
+/// Enforces fair play by switching runs to Seeded/Custom mode when map generation or cheats are active.
 /// </summary>
 public static class MapGenerationHooks
 {
@@ -18,14 +21,15 @@ public static class MapGenerationHooks
     private static readonly FieldInfo? ShopsField = typeof(MapPointTypeCounts).GetField("<NumOfShops>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance);
     private static readonly FieldInfo? UnknownsField = typeof(MapPointTypeCounts).GetField("<NumOfUnknowns>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance);
     private static readonly FieldInfo? RestsField = typeof(MapPointTypeCounts).GetField("<NumOfRests>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance);
-
+    private static readonly FieldInfo? MapLengthField = typeof(StandardActMap).GetField("_mapLength", BindingFlags.NonPublic | BindingFlags.Instance);
 
     /// <summary>
-    /// Evaluates if any map generation weights or multipliers have been modified from game default (1.0x).
+    /// Evaluates if any map generation weights, multipliers, or pre-run tweaks have been modified from game default.
     /// </summary>
     public static bool AreMapTweaksModified()
     {
-        var dist = ConfigManager.Current.PreRunTweaks.MapNodeDistribution;
+        var preRun = ConfigManager.Current.PreRunTweaks;
+        var dist = preRun.MapNodeDistribution;
         var runSettings = ConfigManager.ActiveRunSettings;
 
         bool modified = Math.Abs(dist.EliteWeightMultiplier - 1.0f) > 0.001f ||
@@ -35,17 +39,23 @@ public static class MapGenerationHooks
                         Math.Abs(dist.CombatWeightMultiplier - 1.0f) > 0.001f ||
                         Math.Abs(runSettings.EliteSpawnMultiplier - 1.0f) > 0.001f ||
                         Math.Abs(runSettings.ShopSpawnMultiplier - 1.0f) > 0.001f ||
-                        Math.Abs(runSettings.EventSpawnMultiplier - 1.0f) > 0.001f;
+                        Math.Abs(runSettings.EventSpawnMultiplier - 1.0f) > 0.001f ||
+                        preRun.MapRoomCount != 15 ||
+                        preRun.FreeMapNavigation ||
+                        RuntimeStateManager.FreeMapNavigationEnabled ||
+                        Math.Abs(preRun.EnemyHealthMultiplier - 1.0f) > 0.001f ||
+                        Math.Abs(preRun.EnemyDamageMultiplier - 1.0f) > 0.001f ||
+                        Math.Abs(preRun.EnemyDefendMultiplier - 1.0f) > 0.001f ||
+                        preRun.EndlessMode.Enabled;
 
-        ModLogger.Verbose("MapGenerationHooks", $"AreMapTweaksModified check: {modified} (Elite={dist.EliteWeightMultiplier}x, Shop={dist.ShopWeightMultiplier}x, Event={dist.EventWeightMultiplier}x, Rest={dist.RestSiteWeightMultiplier}x)");
+        ModLogger.Verbose("MapGenerationHooks", $"AreMapTweaksModified check: {modified} (RoomCount={preRun.MapRoomCount}, FreeNav={preRun.FreeMapNavigation}, Endless={preRun.EndlessMode.Enabled})");
         return modified;
     }
 
     /// <summary>
     /// Enforces fair play on singleplayer/new run embarkation:
-    /// If map generation tweaks are customized, switch GameMode to Custom (Seeded/Fair mode)
+    /// If tweaks are customized, switch GameMode to Custom (Seeded/Fair mode)
     /// to disable achievements and epoch unlocks.
-    /// If tweaks are set to game default (1.0x), proceeds the run as normal.
     /// </summary>
     [HarmonyPatch(typeof(RunState), nameof(RunState.CreateForNewRun))]
     public static class RunStateCreateForNewRunPatch
@@ -61,12 +71,12 @@ public static class MapGenerationHooks
                     if (gameMode == GameMode.Standard)
                     {
                         gameMode = GameMode.Custom;
-                        ModLogger.Info("Map generation tweaks are modified: Automatically set GameMode to Custom (Seeded/Fair Mode). Unlocks and achievements are locked for this run.");
+                        ModLogger.Info("Pre-run tweaks or map modifiers are active: Automatically set GameMode to Custom (Seeded/Fair Mode).");
                     }
                 }
                 else
                 {
-                    ModLogger.Info("Map generation tweaks are at game default (1.0x): Proceeding with standard run.");
+                    ModLogger.Info("Map generation tweaks are at game default: Proceeding with standard run.");
                 }
             }
             catch (Exception ex)
@@ -93,13 +103,46 @@ public static class MapGenerationHooks
                     if (gameMode == GameMode.Standard)
                     {
                         gameMode = GameMode.Custom;
-                        ModLogger.Info("Map generation tweaks are modified: Automatically set shared GameMode to Custom (Seeded/Fair Mode).");
+                        ModLogger.Info("Pre-run tweaks are modified: Automatically set shared GameMode to Custom (Seeded/Fair Mode).");
                     }
                 }
             }
             catch (Exception ex)
             {
                 ModLogger.Error("Error evaluating fair play GameMode in RunState.CreateShared", ex);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Adjusts generated map length (room/floor count) during StandardActMap construction.
+    /// </summary>
+    [HarmonyPatch(typeof(StandardActMap), MethodType.Constructor, new Type[] {
+        typeof(MegaCrit.Sts2.Core.Random.Rng),
+        typeof(MegaCrit.Sts2.Core.Models.ActModel),
+        typeof(bool),
+        typeof(bool),
+        typeof(bool),
+        typeof(MapPointTypeCounts),
+        typeof(bool)
+    })]
+    public static class StandardActMapConstructorPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(StandardActMap __instance)
+        {
+            try
+            {
+                int desiredLength = ConfigManager.Current.PreRunTweaks.MapRoomCount;
+                if (desiredLength > 0 && desiredLength != 15 && MapLengthField != null)
+                {
+                    MapLengthField.SetValue(__instance, desiredLength);
+                    ModLogger.Info($"StandardActMap: Custom MapRoomCount applied -> _mapLength set to {desiredLength}.");
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error("Error in StandardActMapConstructorPatch setting map length", ex);
             }
         }
     }
@@ -161,6 +204,38 @@ public static class MapGenerationHooks
     }
 
     /// <summary>
+    /// Free Map Navigation (Flying Boots style): makes all map points clickable regardless of standard pathing connections.
+    /// </summary>
+    [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapPoint), "get_IsTravelable")]
+    public static class NMapPointIsTravelablePatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(ref bool __result)
+        {
+            if (RuntimeStateManager.FreeMapNavigationEnabled || ConfigManager.Current.PreRunTweaks.FreeMapNavigation)
+            {
+                __result = true;
+            }
+        }
+    }
+
+    /// <summary>
+    /// When traveling on map with Free Map Navigation active, marks active run as Custom mode.
+    /// </summary>
+    [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen), nameof(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen.TravelToMapCoord))]
+    public static class NMapScreenTravelToMapCoordPatch
+    {
+        [HarmonyPrefix]
+        public static void Prefix()
+        {
+            if (RuntimeStateManager.FreeMapNavigationEnabled || ConfigManager.Current.PreRunTweaks.FreeMapNavigation)
+            {
+                GameHelper.EnsureCustomRunMode();
+            }
+        }
+    }
+
+    /// <summary>
     /// Computes adjusted room node weight based on active config multipliers.
     /// </summary>
     public static float AdjustNodeWeight(string nodeType, float baseWeight)
@@ -203,4 +278,3 @@ public static class MapGenerationHooks
         return baseWeight;
     }
 }
-
