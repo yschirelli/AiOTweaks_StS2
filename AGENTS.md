@@ -55,6 +55,7 @@ The goal is to maintain and extend a sandbox, cheat director, and quality-of-lif
 AiOTweaks_StS2/
 ├── aiotweaks.sln
 ├── AIOTweaks.json               # Slay the Spire 2 Mod Manifest
+├── build.sh                     # Automated Linux build script
 ├── README.md                    # User guide and full documentation
 ├── AGENTS.md                    # Architecture guidelines & agent rules
 ├── config/

@@ -108,6 +108,7 @@ Open the console with your configured keybind and execute any of the following c
 AiOTweaks_StS2/
 ├── aiotweaks.sln                # .NET Solution file
 ├── AIOTweaks.json               # Slay the Spire 2 Mod Manifest
+├── build.sh                     # Automated Linux build & assembly discovery script
 ├── README.md                    # Documentation & user guide
 ├── AGENTS.md                    # Architecture guidelines & agent rules
 ├── config/
@@ -170,6 +171,13 @@ AiOTweaks_StS2/
 
 ## Building from Source
 
+### Quick Build (Linux / Steam Deck)
+Run the root build script, which automatically detects your .NET SDK, locates Steam game assemblies across standard directories, compiles the Release binary, and displays the output location:
+```bash
+./build.sh
+```
+
+### Manual Build
 1. Clone or open the repository:
    ```bash
    git clone https://github.com/yschirelli/AiOTweaks_StS2.git
