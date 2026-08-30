@@ -398,8 +398,9 @@ public static class GameHelper
                 existingLayer.QueueFree();
             }
 
-            // Instantiate merchant_room.tscn without adding to tree, and extract %Inventory (NMerchantInventory)
-            var packed = GD.Load<PackedScene>("res://scenes/rooms/merchant_room.tscn");
+            // Load merchant room scene
+            var packed = GD.Load<PackedScene>("res://scenes/rooms/merchant_room.tscn")
+                ?? PreloadManager.Cache?.GetScene("res://scenes/rooms/merchant_room.tscn");
             if (packed == null)
             {
                 ModLogger.Error("OpenShopMenu: Could not load res://scenes/rooms/merchant_room.tscn");
@@ -413,10 +414,27 @@ public static class GameHelper
                 return false;
             }
 
-            var inventoryNode = tempRoom.Inventory ?? tempRoom.GetNodeOrNull<NMerchantInventory>("%Inventory");
+            // Find NMerchantInventory child node
+            NMerchantInventory? inventoryNode = null;
+            foreach (var child in tempRoom.GetChildren())
+            {
+                if (child is NMerchantInventory inv)
+                {
+                    inventoryNode = inv;
+                    break;
+                }
+            }
+
             if (inventoryNode == null)
             {
-                ModLogger.Error("OpenShopMenu: %Inventory (NMerchantInventory) not found in merchant_room.tscn");
+                inventoryNode = tempRoom.GetNodeOrNull<NMerchantInventory>("Inventory")
+                             ?? tempRoom.GetNodeOrNull<NMerchantInventory>("%Inventory")
+                             ?? tempRoom.FindChild("Inventory", true, false) as NMerchantInventory;
+            }
+
+            if (inventoryNode == null)
+            {
+                ModLogger.Error("OpenShopMenu: NMerchantInventory not found in merchant_room.tscn");
                 tempRoom.QueueFree();
                 return false;
             }
@@ -432,14 +450,15 @@ public static class GameHelper
                 Layer = 100
             };
 
-            // Generate fresh randomized inventory
+            // MUST add inventoryNode to scene tree FIRST so Godot calls _Ready() and wires up internal node references!
+            canvasLayer.AddChild(inventoryNode);
+            tree.Root.AddChild(canvasLayer);
+
+            // Generate fresh randomized inventory and initialize inventoryNode now that internal nodes are resolved
             var freshInventory = MerchantInventory.CreateForNormalMerchant(player);
             var dialogue = new MerchantDialogueSet();
 
             inventoryNode.Initialize(freshInventory, dialogue);
-
-            canvasLayer.AddChild(inventoryNode);
-            tree.Root.AddChild(canvasLayer);
 
             // Connect close event to clean up canvasLayer
             inventoryNode.InventoryClosed += () =>

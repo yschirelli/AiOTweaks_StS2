@@ -31,8 +31,6 @@ public static class RuntimeStateManager
 
     // Custom runtime modifiers and active cheats log
     private static readonly HashSet<string> ActiveCheatFlags = new();
-    private static readonly List<string> PendingRewardRelics = new();
-    private static readonly List<string> PendingRewardCards = new();
 
     public static event Action? OnStateReset;
     public static event Action<string, bool>? OnCheatToggled;
@@ -114,48 +112,6 @@ public static class RuntimeStateManager
         return Math.Max(0.0f, baseDef);
     }
 
-    public static void QueueRewardRelic(string relicId)
-    {
-        lock (LockObject)
-        {
-            PendingRewardRelics.Add(relicId);
-            ModLogger.Verbose("RuntimeStateManager", $"QueueRewardRelic: added '{relicId}' (Total pending: {PendingRewardRelics.Count})");
-            ModLogger.Info($"Queued reward relic: {relicId}");
-        }
-    }
-
-    public static List<string> ConsumePendingRewardRelics()
-    {
-        lock (LockObject)
-        {
-            var list = new List<string>(PendingRewardRelics);
-            PendingRewardRelics.Clear();
-            ModLogger.Verbose("RuntimeStateManager", $"ConsumePendingRewardRelics: consumed {list.Count} relics.");
-            return list;
-        }
-    }
-
-    public static void QueueRewardCard(string cardId)
-    {
-        lock (LockObject)
-        {
-            PendingRewardCards.Add(cardId);
-            ModLogger.Verbose("RuntimeStateManager", $"QueueRewardCard: added '{cardId}' (Total pending: {PendingRewardCards.Count})");
-            ModLogger.Info($"Queued reward card: {cardId}");
-        }
-    }
-
-    public static List<string> ConsumePendingRewardCards()
-    {
-        lock (LockObject)
-        {
-            var list = new List<string>(PendingRewardCards);
-            PendingRewardCards.Clear();
-            ModLogger.Verbose("RuntimeStateManager", $"ConsumePendingRewardCards: consumed {list.Count} cards.");
-            return list;
-        }
-    }
-
     /// <summary>
     /// Resets all transient in-run cheats and director overrides back to clean defaults when returning to menu or starting run.
     /// </summary>
@@ -178,8 +134,6 @@ public static class RuntimeStateManager
             OverrideCardDrawCount = null;
 
             ActiveCheatFlags.Clear();
-            PendingRewardRelics.Clear();
-            PendingRewardCards.Clear();
         }
 
         ModLogger.Info("RuntimeStateManager: Clean session reset executed. All cheats and overrides cleared.");

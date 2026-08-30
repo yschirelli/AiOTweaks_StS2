@@ -129,8 +129,8 @@ public static class MapGenerationHooks
                 int desiredRooms = Math.Max(15, ConfigManager.Current.PreRunTweaks.MapRoomCount);
                 if (desiredRooms > 15)
                 {
-                    __result = isMultiplayer ? desiredRooms + 1 : desiredRooms;
-                    ModLogger.Info($"ActModel.GetNumberOfRooms: Custom MapRoomCount applied -> {__result} rooms for act.");
+                    __result = isMultiplayer ? Math.Max(1, desiredRooms - 1) : desiredRooms;
+                    ModLogger.Verbose("MapGenerationHooks", $"ActModel.GetNumberOfRooms: Custom MapRoomCount applied -> {__result} rooms for act.");
                 }
             }
             catch (Exception ex)
@@ -141,40 +141,7 @@ public static class MapGenerationHooks
     }
 
     /// <summary>
-    /// Adjusts generated map length (room/floor count) during StandardActMap construction.
-    /// </summary>
-    [HarmonyPatch(typeof(StandardActMap), MethodType.Constructor, new Type[] {
-        typeof(MegaCrit.Sts2.Core.Random.Rng),
-        typeof(MegaCrit.Sts2.Core.Models.ActModel),
-        typeof(bool),
-        typeof(bool),
-        typeof(bool),
-        typeof(MapPointTypeCounts),
-        typeof(bool)
-    })]
-    public static class StandardActMapConstructorPatch
-    {
-        [HarmonyPostfix]
-        public static void Postfix(StandardActMap __instance)
-        {
-            try
-            {
-                int desiredLength = Math.Max(15, ConfigManager.Current.PreRunTweaks.MapRoomCount);
-                if (desiredLength > 15 && MapLengthField != null)
-                {
-                    MapLengthField.SetValue(__instance, desiredLength);
-                    ModLogger.Info($"StandardActMap: Custom MapRoomCount applied -> _mapLength set to {desiredLength}.");
-                }
-            }
-            catch (Exception ex)
-            {
-                ModLogger.Error("Error in StandardActMapConstructorPatch setting map length", ex);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Adjusts generated map node counts according to configured multipliers during map construction.
+    /// Adjusts generated map node counts according to configured multipliers and room count scaling during map construction.
     /// </summary>
     [HarmonyPatch(typeof(MapPointTypeCounts), MethodType.Constructor, new Type[] { typeof(int), typeof(int) })]
     public static class MapPointTypeCountsConstructorPatch
@@ -188,13 +155,15 @@ public static class MapGenerationHooks
 
                 var dist = ConfigManager.Current.PreRunTweaks.MapNodeDistribution;
                 var runSettings = ConfigManager.ActiveRunSettings;
+                int desiredRooms = Math.Max(15, ConfigManager.Current.PreRunTweaks.MapRoomCount);
+                float roomScale = desiredRooms > 15 ? (float)desiredRooms / 15.0f : 1.0f;
 
-                float eliteMult = dist.EliteWeightMultiplier * runSettings.EliteSpawnMultiplier;
-                float shopMult = dist.ShopWeightMultiplier * runSettings.ShopSpawnMultiplier;
-                float eventMult = dist.EventWeightMultiplier * runSettings.EventSpawnMultiplier;
-                float restMult = dist.RestSiteWeightMultiplier;
+                float eliteMult = dist.EliteWeightMultiplier * runSettings.EliteSpawnMultiplier * roomScale;
+                float shopMult = dist.ShopWeightMultiplier * runSettings.ShopSpawnMultiplier * roomScale;
+                float eventMult = dist.EventWeightMultiplier * runSettings.EventSpawnMultiplier * roomScale;
+                float restMult = dist.RestSiteWeightMultiplier * roomScale;
 
-                ModLogger.Verbose("MapGenerationHooks", $"MapPointTypeCounts constructor postfix: raw Elites={__instance.NumOfElites}, Shops={__instance.NumOfShops}, Unknowns={__instance.NumOfUnknowns}, Rests={__instance.NumOfRests}");
+                ModLogger.Verbose("MapGenerationHooks", $"MapPointTypeCounts constructor postfix: raw Elites={__instance.NumOfElites}, Shops={__instance.NumOfShops}, Unknowns={__instance.NumOfUnknowns}, Rests={__instance.NumOfRests}, roomScale={roomScale:F2}");
 
                 if (Math.Abs(eliteMult - 1.0f) > 0.001f && ElitesField != null)
                 {
@@ -220,12 +189,165 @@ public static class MapGenerationHooks
                     RestsField.SetValue(__instance, adjustedRests);
                 }
 
-                ModLogger.Info($"MapPointTypeCounts adjusted: Elites={__instance.NumOfElites}, Shops={__instance.NumOfShops}, Unknowns={__instance.NumOfUnknowns}, Rests={__instance.NumOfRests}");
+                ModLogger.Verbose("MapGenerationHooks", $"MapPointTypeCounts adjusted: Elites={__instance.NumOfElites}, Shops={__instance.NumOfShops}, Unknowns={__instance.NumOfUnknowns}, Rests={__instance.NumOfRests}");
             }
             catch (Exception ex)
             {
                 ModLogger.Error("Error adjusting MapPointTypeCounts for modified map generation tweaks", ex);
             }
+        }
+    }
+
+    /// <summary>
+    /// Prevents 'Cannot find next node' exception in StandardActMap.GenerateNextCoord when generating large maps.
+    /// If all 3 direction choices produce a crossover conflict, relaxes crossover check to guarantee path completion.
+    /// </summary>
+    [HarmonyPatch(typeof(StandardActMap), "GenerateNextCoord")]
+    public static class StandardActMapGenerateNextCoordPatch
+    {
+        private static readonly MethodInfo? HasInvalidCrossoverMethod = typeof(StandardActMap).GetMethod("HasInvalidCrossover", BindingFlags.NonPublic | BindingFlags.Instance);
+        private static readonly FieldInfo? RngField = typeof(StandardActMap).GetField("_rng", BindingFlags.NonPublic | BindingFlags.Instance);
+
+        [HarmonyPrefix]
+        public static bool Prefix(StandardActMap __instance, MapPoint current, ref MapCoord __result)
+        {
+            try
+            {
+                int col = current.coord.col;
+                int leftCol = Math.Max(0, col - 1);
+                int rightCol = Math.Min(col + 1, 6);
+                int row = current.coord.row + 1;
+
+                var rng = (RngField?.GetValue(__instance) as MegaCrit.Sts2.Core.Random.Rng) ?? new MegaCrit.Sts2.Core.Random.Rng();
+                var directions = new System.Collections.Generic.List<int> { -1, 0, 1 };
+
+                // Shuffle candidate offsets
+                for (int i = directions.Count - 1; i > 0; i--)
+                {
+                    int j = rng.NextInt(0, i + 1);
+                    (directions[i], directions[j]) = (directions[j], directions[i]);
+                }
+
+                // 1. Try standard candidates without crossover
+                foreach (int dir in directions)
+                {
+                    int targetCol = dir switch
+                    {
+                        -1 => leftCol,
+                        0 => col,
+                        1 => rightCol,
+                        _ => col
+                    };
+
+                    bool hasCrossover = false;
+                    if (HasInvalidCrossoverMethod != null)
+                    {
+                        hasCrossover = (bool)(HasInvalidCrossoverMethod.Invoke(__instance, new object[] { current, targetCol }) ?? false);
+                    }
+
+                    if (!hasCrossover)
+                    {
+                        __result = new MapCoord { col = targetCol, row = row };
+                        return false; // Skip original method
+                    }
+                }
+
+                // 2. Safe Fallback for long maps: if boxed in by crossovers, choose straight or nearest valid column without crashing
+                int fallbackCol = col;
+                if (leftCol != col && rightCol != col)
+                {
+                    fallbackCol = rng.NextBool() ? leftCol : rightCol;
+                }
+                else if (leftCol != col)
+                {
+                    fallbackCol = leftCol;
+                }
+                else if (rightCol != col)
+                {
+                    fallbackCol = rightCol;
+                }
+
+                ModLogger.Verbose("MapGenerationHooks", $"GenerateNextCoord fallback step used at row {row} (col {col} -> {fallbackCol}) to avoid generation deadlock.");
+                __result = new MapCoord { col = fallbackCol, row = row };
+                return false;
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error("Error in StandardActMapGenerateNextCoordPatch safe generation", ex);
+                __result = new MapCoord { col = current.coord.col, row = current.coord.row + 1 };
+                return false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Prevents map pruning from throwing 'Unable to prune matching segments in 50 iterations' on large maps.
+    /// Pruning duplicate cosmetic segments is non-essential and should fail gracefully rather than crash into a black screen.
+    /// </summary>
+    [HarmonyPatch(typeof(MapPathPruning), nameof(MapPathPruning.PruneDuplicateSegments))]
+    public static class MapPathPruningPruneDuplicateSegmentsPatch
+    {
+        [HarmonyFinalizer]
+        public static Exception? Finalizer(Exception? __exception)
+        {
+            if (__exception != null)
+            {
+                ModLogger.Verbose("MapGenerationHooks", $"MapPathPruning duplicate segment pruning completed with safe stop: {__exception.Message}");
+                return null; // Suppress exception so map generation succeeds cleanly
+            }
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Protects PruneAndRepair against any uncaught generation edge cases.
+    /// </summary>
+    [HarmonyPatch(typeof(MapPathPruning), nameof(MapPathPruning.PruneAndRepair))]
+    public static class MapPathPruningPruneAndRepairPatch
+    {
+        [HarmonyFinalizer]
+        public static Exception? Finalizer(Exception? __exception)
+        {
+            if (__exception != null)
+            {
+                ModLogger.Verbose("MapGenerationHooks", $"MapPathPruning.PruneAndRepair finished with safe recovery: {__exception.Message}");
+                return null;
+            }
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Protects StandardActMap.CreateFor against any uncaught exceptions by returning a verified fallback map.
+    /// </summary>
+    [HarmonyPatch(typeof(StandardActMap), nameof(StandardActMap.CreateFor))]
+    public static class StandardActMapCreateForPatch
+    {
+        [HarmonyFinalizer]
+        public static Exception? Finalizer(RunState runState, bool replaceTreasureWithElites, Exception? __exception, ref StandardActMap __result)
+        {
+            if (__exception != null)
+            {
+                ModLogger.Error("StandardActMap.CreateFor encountered an error during custom generation; recovering with fallback standard map.", __exception);
+                try
+                {
+                    __result = new StandardActMap(
+                        new MegaCrit.Sts2.Core.Random.Rng(runState.Rng.Seed, $"act_{runState.CurrentActIndex + 1}_map_fallback"),
+                        runState.Act,
+                        runState.Players.Count > 1,
+                        replaceTreasureWithElites,
+                        runState.Act.HasSecondBoss,
+                        null,
+                        false // Disable pruning on fallback to guarantee 100% reliability
+                    );
+                    return null; // Suppress exception
+                }
+                catch (Exception fallbackEx)
+                {
+                    ModLogger.Error("Critical error creating fallback StandardActMap", fallbackEx);
+                }
+            }
+            return null;
         }
     }
 

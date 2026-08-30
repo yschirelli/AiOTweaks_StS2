@@ -86,13 +86,9 @@ public static class RelicDirector
                 }
             }
 
-            // Fallback: If player not yet in an active run, queue for next run startup/reward injection
-            ModLogger.Verbose("RelicDirector", $"Active player not ready; queueing reward relic '{relicId}' in RuntimeStateManager.");
-            RuntimeStateManager.QueueRewardRelic(relicId);
-            ModLogger.Warn($"No active player run detected; relic '{relicId}' queued for next run/combat.");
-            OnRelicAdded?.Invoke(relicId);
-            OnRelicsChanged?.Invoke();
-            return true;
+            // Fallback: If player not yet in an active run, we cannot add the relic
+            ModLogger.Warn($"No active player run detected; cannot add relic '{relicId}'.");
+            return false;
         }
         catch (Exception ex)
         {

@@ -403,12 +403,13 @@ public partial class ModSettingsDialog : CanvasLayer
         var defaultBtn = new Button { Text = " Reset to Game Defaults " };
         defaultBtn.Pressed += () =>
         {
-            // Reset to defaults
+            // Reset hotkeys under Tweaks tab to defaults
             ConfigManager.Current.General.ConsoleHotkey = GeneralConfig.DefaultConsoleHotkey;
             ConfigManager.Current.General.GuiOverlayHotkey = GeneralConfig.DefaultGuiOverlayHotkey;
             ConfigManager.Current.General.QuickGodModeKey = "";
             ConfigManager.Current.General.QuickKillEnemiesKey = "";
 
+            // Reset all pre-run tweaks & map generation settings
             ConfigManager.Current.PreRunTweaks.MapRoomCount = 15;
             ConfigManager.Current.PreRunTweaks.GoldRewardMultiplier = 1.0f;
             ConfigManager.Current.PreRunTweaks.ShopDiscountMultiplier = 1.0f;
@@ -417,21 +418,28 @@ public partial class ModSettingsDialog : CanvasLayer
             ConfigManager.Current.PreRunTweaks.StartingMaxHpBonus = 0;
             ConfigManager.Current.PreRunTweaks.ForceNeowBonus = true;
 
+            // Reset map node distribution weights
             ConfigManager.Current.PreRunTweaks.MapNodeDistribution.EliteWeightMultiplier = 1.0f;
             ConfigManager.Current.PreRunTweaks.MapNodeDistribution.ShopWeightMultiplier = 1.0f;
             ConfigManager.Current.PreRunTweaks.MapNodeDistribution.EventWeightMultiplier = 1.0f;
             ConfigManager.Current.PreRunTweaks.MapNodeDistribution.RestSiteWeightMultiplier = 1.0f;
             ConfigManager.Current.PreRunTweaks.MapNodeDistribution.CombatWeightMultiplier = 1.0f;
 
-            ConfigManager.Current.PreRunTweaks.PlayerDamageMultiplier = 1.0f;
-            ConfigManager.Current.PreRunTweaks.MaxEnergy = GameHelper.GetPlayerMaxEnergy();
+            // Reset enemy multipliers & scaling
             ConfigManager.Current.PreRunTweaks.EnemyHealthMultiplier = 1.0f;
             ConfigManager.Current.PreRunTweaks.EnemyDamageMultiplier = 1.0f;
             ConfigManager.Current.PreRunTweaks.EnemyDefendMultiplier = 1.0f;
-            ConfigManager.Current.PreRunTweaks.FreeMapNavigation = false;
+
+            // Reset endless mode & navigation
             ConfigManager.Current.PreRunTweaks.EndlessMode.Enabled = false;
             ConfigManager.Current.PreRunTweaks.EndlessMode.EnemyScalingMultiplier = 2.0f;
+            ConfigManager.Current.PreRunTweaks.FreeMapNavigation = false;
 
+            // Reset player & combat scaling
+            ConfigManager.Current.PreRunTweaks.PlayerDamageMultiplier = 1.0f;
+            ConfigManager.Current.PreRunTweaks.MaxEnergy = 3;
+
+            // Reset combat sandbox
             ConfigManager.Current.CombatSandbox.GodMode = false;
             ConfigManager.Current.CombatSandbox.InfiniteEnergy = false;
             ConfigManager.Current.CombatSandbox.OneHitKill = false;
@@ -439,12 +447,26 @@ public partial class ModSettingsDialog : CanvasLayer
             ConfigManager.Current.CombatSandbox.NoCardExhaust = false;
             ConfigManager.Current.CombatSandbox.BonusDrawPerTurn = 0;
 
+            // Reset runtime session state & active player energy
             RuntimeStateManager.ResetSessionState();
+            RuntimeStateManager.FreeMapNavigationEnabled = false;
+            GameHelper.SetPlayerMaxEnergy(3);
+            GameHelper.RefreshCombatIntents();
+            GameHelper.RefreshAllVisibleCards();
+            try
+            {
+                MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen.Instance?.RefreshAllPointVisuals();
+            }
+            catch { }
+
             LoadSettingsValues();
             ConfigManager.SaveConfig();
-            ModLogger.Info("Reset all settings to game defaults.");
-
-            MarkTweaksModified();
+            _tweaksModified = false;
+            if (_applyConfigBtn != null)
+            {
+                _applyConfigBtn.Disabled = true;
+            }
+            ModLogger.Info("Reset all tweaks and settings to game defaults.");
         };
 
         var doneBtn = new Button { Text = " Return to Game " };
@@ -2622,11 +2644,11 @@ public partial class ModSettingsDialog : CanvasLayer
         if (_enemyDefSlider != null) _enemyDefSlider.Value = tweaks.EnemyDefendMultiplier;
 
         if (_playerDmgSlider != null) _playerDmgSlider.Value = tweaks.PlayerDamageMultiplier;
-        if (_maxEnergySpin != null) _maxEnergySpin.Value = GameHelper.GetPlayerMaxEnergy();
+        if (_maxEnergySpin != null) _maxEnergySpin.Value = tweaks.MaxEnergy;
 
         if (_endlessModeCheck != null) _endlessModeCheck.ButtonPressed = tweaks.EndlessMode.Enabled;
         if (_endlessMultiplierSpin != null) _endlessMultiplierSpin.Value = tweaks.EndlessMode.EnemyScalingMultiplier;
-        if (_freeMapNavCheck != null) _freeMapNavCheck.ButtonPressed = tweaks.FreeMapNavigation || RuntimeStateManager.FreeMapNavigationEnabled;
+        if (_freeMapNavCheck != null) _freeMapNavCheck.ButtonPressed = tweaks.FreeMapNavigation;
 
         if (_godModeCheck != null) _godModeCheck.ButtonPressed = RuntimeStateManager.GodModeEnabled || sandbox.GodMode;
         if (_infEnergyCheck != null) _infEnergyCheck.ButtonPressed = RuntimeStateManager.InfiniteEnergyEnabled || sandbox.InfiniteEnergy;

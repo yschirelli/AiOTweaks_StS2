@@ -16,19 +16,6 @@ public static class CharacterSelectHooks
 {
     private const string ModConfigButtonName = "AIOTweaksCharSelectConfigButton";
 
-    public static void ApplyPatches(Harmony harmony)
-    {
-        ModLogger.Verbose("CharacterSelectHooks", "Applying CharacterSelectHooks Harmony patches...");
-        try
-        {
-            harmony.CreateClassProcessor(typeof(CharacterSelectHooks)).Patch();
-            ModLogger.Info("CharacterSelectHooks Harmony patches applied successfully.");
-        }
-        catch (Exception ex)
-        {
-            ModLogger.Warn($"CharacterSelectHooks patch note: {ex.Message}");
-        }
-    }
 
     [HarmonyPatch(typeof(NCharacterSelectScreen), nameof(NCharacterSelectScreen._Ready))]
     public static class NCharacterSelectScreenReadyPatch

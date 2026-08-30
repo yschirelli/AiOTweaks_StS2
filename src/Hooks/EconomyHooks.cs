@@ -4,6 +4,7 @@ using AIOTweaks.Core.Config;
 using AIOTweaks.Core.Logging;
 using AIOTweaks.Core.State;
 using HarmonyLib;
+using MegaCrit.Sts2.Core.Entities.Merchant;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
 using MegaCrit.Sts2.Core.Rewards;
@@ -95,6 +96,94 @@ public static class EconomyHooks
             catch (Exception ex)
             {
                 ModLogger.Error("Error adjusting CardReward count", ex);
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(MerchantCardEntry), nameof(MerchantCardEntry.CalcCost))]
+    public static class MerchantCardEntryCalcCostPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(MerchantCardEntry __instance)
+        {
+            try
+            {
+                int baseCost = __instance.Cost;
+                int modified = ProcessShopPrice(baseCost);
+                if (modified != baseCost)
+                {
+                    Traverse.Create(__instance).Field("_cost").SetValue(modified);
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error("Error adjusting MerchantCardEntry cost", ex);
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(MerchantRelicEntry), nameof(MerchantRelicEntry.CalcCost))]
+    public static class MerchantRelicEntryCalcCostPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(MerchantRelicEntry __instance)
+        {
+            try
+            {
+                int baseCost = __instance.Cost;
+                int modified = ProcessShopPrice(baseCost);
+                if (modified != baseCost)
+                {
+                    Traverse.Create(__instance).Field("_cost").SetValue(modified);
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error("Error adjusting MerchantRelicEntry cost", ex);
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(MerchantPotionEntry), nameof(MerchantPotionEntry.CalcCost))]
+    public static class MerchantPotionEntryCalcCostPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(MerchantPotionEntry __instance)
+        {
+            try
+            {
+                int baseCost = __instance.Cost;
+                int modified = ProcessShopPrice(baseCost);
+                if (modified != baseCost)
+                {
+                    Traverse.Create(__instance).Field("_cost").SetValue(modified);
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error("Error adjusting MerchantPotionEntry cost", ex);
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(MerchantCardRemovalEntry), nameof(MerchantCardRemovalEntry.CalcCost))]
+    public static class MerchantCardRemovalEntryCalcCostPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(MerchantCardRemovalEntry __instance)
+        {
+            try
+            {
+                int baseCost = __instance.Cost;
+                int modified = ProcessShopPrice(baseCost);
+                if (modified != baseCost)
+                {
+                    Traverse.Create(__instance).Field("_cost").SetValue(modified);
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error("Error adjusting MerchantCardRemovalEntry cost", ex);
             }
         }
     }

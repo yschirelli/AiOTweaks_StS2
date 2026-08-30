@@ -18,19 +18,7 @@ public static class ModdingScreenHooks
     private const string ModConfigButtonName = "AIOTweaksModdingScreenConfigBtn";
     private const string InfoConfigButtonName = "AIOTweaksModInfoConfigBtn";
 
-    public static void ApplyPatches(Harmony harmony)
-    {
-        ModLogger.Verbose("ModdingScreenHooks", "Applying ModdingScreenHooks Harmony patches...");
-        try
-        {
-            harmony.CreateClassProcessor(typeof(ModdingScreenHooks)).Patch();
-            ModLogger.Info("ModdingScreenHooks Harmony patches applied successfully.");
-        }
-        catch (Exception ex)
-        {
-            ModLogger.Warn($"ModdingScreenHooks patch note: {ex.Message}");
-        }
-    }
+
 
     [HarmonyPatch(typeof(NModdingScreen), nameof(NModdingScreen.OnSubmenuOpened))]
     public static class NModdingScreenOnSubmenuOpenedPatch
@@ -68,7 +56,7 @@ public static class ModdingScreenHooks
                     margin.AddThemeConstantOverride("margin_top", 20);
                     margin.AddChild(configBtn);
 
-                    __instance.CallDeferred("add_child", margin);
+                    __instance.AddChild(margin);
 
                     ModLogger.Info("Injected 'AIOTweaks Mod Settings' button into NModdingScreen.");
                 }

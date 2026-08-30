@@ -12,19 +12,6 @@ namespace AIOTweaks.Hooks;
 /// </summary>
 public static class EventHooks
 {
-    public static void ApplyPatches(Harmony harmony)
-    {
-        ModLogger.Verbose("EventHooks", "Applying EventHooks Harmony patches...");
-        try
-        {
-            harmony.CreateClassProcessor(typeof(EventHooks)).Patch();
-            ModLogger.Info("EventHooks successfully initialized.");
-        }
-        catch (Exception ex)
-        {
-            ModLogger.Warn($"EventHooks patch notice: {ex.Message}");
-        }
-    }
 
     [HarmonyPatch(typeof(ActModel), nameof(ActModel.PullNextEvent))]
     public static class ActModelPullNextEventPatch
