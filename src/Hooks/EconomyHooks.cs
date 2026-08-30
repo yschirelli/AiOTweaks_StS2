@@ -48,8 +48,15 @@ public static class EconomyHooks
         {
             try
             {
+                int maxEnergy = ConfigManager.Current.PreRunTweaks.MaxEnergy;
+                if (maxEnergy > 0)
+                {
+                    __instance.MaxEnergy = maxEnergy;
+                    ModLogger.Info($"Configured starting player MaxEnergy: {maxEnergy}");
+                }
+
                 int goldBonus = ConfigManager.Current.PreRunTweaks.StartingGoldBonus;
-                ModLogger.Verbose("EconomyHooks", $"PopulateStartingInventory Postfix: checking goldBonus={goldBonus}, hpBonus={ConfigManager.Current.PreRunTweaks.StartingMaxHpBonus}...");
+                ModLogger.Verbose("EconomyHooks", $"PopulateStartingInventory Postfix: checking goldBonus={goldBonus}, hpBonus={ConfigManager.Current.PreRunTweaks.StartingMaxHpBonus}, maxEnergy={maxEnergy}...");
                 if (goldBonus > 0)
                 {
                     __instance.Gold += goldBonus;

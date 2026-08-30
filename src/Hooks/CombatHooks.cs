@@ -1,5 +1,6 @@
 using System;
 using System.Reflection;
+using AIOTweaks.Core;
 using AIOTweaks.Core.Config;
 using AIOTweaks.Core.Logging;
 using AIOTweaks.Core.State;
@@ -323,6 +324,28 @@ public static class CombatHooks
             catch (Exception ex)
             {
                 ModLogger.Debug($"CardPileCmdDrawPatch notice: {ex.Message}");
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Entities.Players.PlayerCombatState), "ResetEnergy")]
+    public static class PlayerCombatStateResetEnergyPatch
+    {
+        [HarmonyPrefix]
+        public static void Prefix(MegaCrit.Sts2.Core.Entities.Players.PlayerCombatState __instance)
+        {
+            try
+            {
+                int maxEnergy = ConfigManager.Current.PreRunTweaks.MaxEnergy;
+                var player = GameHelper.GetActivePlayer();
+                if (player != null && maxEnergy > 0 && player.MaxEnergy != maxEnergy)
+                {
+                    player.MaxEnergy = maxEnergy;
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Debug($"PlayerCombatStateResetEnergyPatch notice: {ex.Message}");
             }
         }
     }

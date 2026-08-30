@@ -657,24 +657,6 @@ public partial class ModSettingsDialog : CanvasLayer
         maxEnergyRow.AddChild(_maxEnergySpin);
         vbox.AddChild(maxEnergyRow);
 
-        vbox.AddChild(new HSeparator());
-        vbox.AddChild(new Label { Text = "--- Merchant & Shop Actions ---", Modulate = new Color(1f, 0.85f, 0.3f) });
-
-        var openShopBtn = new Button
-        {
-            Text = " 🏪 Open Shop Menu Anywhere (Randomized) ",
-            CustomMinimumSize = new Vector2(320, 36),
-            TooltipText = "Spawns and displays the merchant shop interface anywhere during a run. Each invocation generates a fresh, randomized shop with new cards, relics, potions, and card removal."
-        };
-        openShopBtn.Pressed += () =>
-        {
-            if (GameHelper.OpenShopMenu())
-            {
-                CloseDialog();
-            }
-        };
-        vbox.AddChild(openShopBtn);
-
         return scroll;
     }
 
@@ -2415,13 +2397,14 @@ public partial class ModSettingsDialog : CanvasLayer
         vbox.AddChild(maxHpRow);
 
         vbox.AddChild(new HSeparator());
-        vbox.AddChild(new Label { Text = "--- Merchant & Shop Actions ---", Modulate = new Color(1f, 0.85f, 0.3f) });
+        vbox.AddChild(new Label { Text = "--- Special Rooms & Event Director ---", Modulate = new Color(1f, 0.9f, 0.4f) });
 
+        var shopRow = new HBoxContainer();
         var openShopBtn = new Button
         {
-            Text = " 🏪 Open Shop Menu Anywhere (Randomized) ",
+            Text = " Open Shop Menu Anywhere (Randomized) ",
             CustomMinimumSize = new Vector2(340, 36),
-            TooltipText = "Spawns and opens the merchant rug anywhere during a run. Each invocation generates a fresh, randomized shop with new cards, relics, potions, and card removal."
+            TooltipText = "Directly transitions and opens a freshly randomized merchant shop room anywhere during a run (cards, relics, potions, card removal)."
         };
         openShopBtn.Pressed += () =>
         {
@@ -2430,10 +2413,8 @@ public partial class ModSettingsDialog : CanvasLayer
                 CloseDialog();
             }
         };
-        vbox.AddChild(openShopBtn);
-
-        vbox.AddChild(new HSeparator());
-        vbox.AddChild(new Label { Text = "--- Event Director ---", Modulate = new Color(1f, 0.9f, 0.4f) });
+        shopRow.AddChild(openShopBtn);
+        vbox.AddChild(shopRow);
         
         var indicatorRow = new HBoxContainer();
         indicatorRow.AddChild(new Label { Text = "Current Override: " });

@@ -228,7 +228,7 @@ public static class GameHelper
     }
 
     /// <summary>
-    /// Updates the player's Max Energy in real-time, syncing both the player entity, in-combat energy, and config.
+    /// Updates the player's Max Energy in real-time, syncing both the player entity, in-combat energy, UI, and config.
     /// </summary>
     public static void SetPlayerMaxEnergy(int maxEnergy)
     {
@@ -240,18 +240,75 @@ public static class GameHelper
             var player = GetActivePlayer();
             if (player != null)
             {
+                int oldMax = player.MaxEnergy;
                 player.MaxEnergy = maxEnergy;
-                ModLogger.Info($"GameHelper: Set active player MaxEnergy to {maxEnergy}.");
+                ModLogger.Info($"GameHelper: Set active player MaxEnergy to {maxEnergy} (was {oldMax}).");
 
                 if (player.PlayerCombatState != null)
                 {
-                    player.PlayerCombatState.Energy = Math.Min(player.PlayerCombatState.Energy, player.PlayerCombatState.MaxEnergy);
+                    int delta = maxEnergy - oldMax;
+                    if (delta > 0)
+                    {
+                        player.PlayerCombatState.Energy = Math.Min(player.PlayerCombatState.Energy + delta, player.PlayerCombatState.MaxEnergy);
+                    }
+                    else
+                    {
+                        player.PlayerCombatState.Energy = Math.Min(player.PlayerCombatState.Energy, player.PlayerCombatState.MaxEnergy);
+                    }
                 }
             }
+
+            RefreshEnergyUi();
+            RefreshAllVisibleCards();
         }
         catch (Exception ex)
         {
             ModLogger.Debug($"SetPlayerMaxEnergy error: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Forces real-time refresh of in-combat energy counters and UI displays on screen.
+    /// </summary>
+    public static void RefreshEnergyUi()
+    {
+        try
+        {
+            var tree = (SceneTree)Engine.GetMainLoop();
+            if (tree?.Root != null)
+            {
+                RefreshEnergyCounterNodes(tree.Root);
+            }
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Debug($"RefreshEnergyUi error: {ex.Message}");
+        }
+    }
+
+    private static readonly MethodInfo? EnergyCounterRefreshLabelMethod = typeof(MegaCrit.Sts2.Core.Nodes.Combat.NEnergyCounter).GetMethod("RefreshLabel", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+
+    private static void RefreshEnergyCounterNodes(Node node)
+    {
+        if (node == null || !GodotObject.IsInstanceValid(node)) return;
+
+        if (node is MegaCrit.Sts2.Core.Nodes.Combat.NEnergyCounter energyCounter && GodotObject.IsInstanceValid(energyCounter) && energyCounter.IsInsideTree())
+        {
+            try
+            {
+                EnergyCounterRefreshLabelMethod?.Invoke(energyCounter, null);
+            }
+            catch { }
+        }
+
+        int childCount = node.GetChildCount();
+        for (int i = 0; i < childCount; i++)
+        {
+            var child = node.GetChild(i);
+            if (child != null && GodotObject.IsInstanceValid(child))
+            {
+                RefreshEnergyCounterNodes(child);
+            }
         }
     }
 
@@ -318,7 +375,7 @@ public static class GameHelper
     }
 
     /// <summary>
-    /// Opens an interactive merchant shop overlay anywhere during a run with a freshly randomized inventory (cards, relics, potions, removals).
+    /// Opens an interactive merchant shop overlay popup anywhere during a run (even during combat) with freshly randomized items.
     /// </summary>
     public static bool OpenShopMenu()
     {
@@ -334,61 +391,71 @@ public static class GameHelper
             var tree = (SceneTree)Engine.GetMainLoop();
             if (tree?.Root == null) return false;
 
-            // Generate a fresh randomized inventory every time
-            var freshInventory = MerchantInventory.CreateForNormalMerchant(player);
-            var dialogue = new MerchantDialogueSet();
-
-            // Check if we already have an active standalone shop overlay
-            var existingRoom = tree.Root.GetNodeOrNull<NMerchantRoom>("AIOTweaks_ShopOverlay");
-            if (existingRoom != null && GodotObject.IsInstanceValid(existingRoom))
+            // Check if shop overlay is already open
+            var existingLayer = tree.Root.GetNodeOrNull<CanvasLayer>("AIOTweaks_ShopCanvasLayer");
+            if (existingLayer != null && GodotObject.IsInstanceValid(existingLayer))
             {
-                if (existingRoom.Inventory != null)
-                {
-                    existingRoom.Inventory.Initialize(freshInventory, dialogue);
-                    existingRoom.Inventory.Open();
-                    existingRoom.Visible = true;
-                    ModLogger.Info("OpenShopMenu: Re-initialized existing shop overlay with fresh randomized inventory.");
-                    return true;
-                }
-                existingRoom.QueueFree();
+                existingLayer.QueueFree();
             }
 
-            var merchantRoom = new MerchantRoom();
-            merchantRoom.Inventories.Clear();
-            merchantRoom.Inventories.Add(freshInventory);
-
-            var merchantRoomNode = NMerchantRoom.Create(merchantRoom, new[] { player });
-            if (merchantRoomNode == null)
+            // Instantiate merchant_room.tscn without adding to tree, and extract %Inventory (NMerchantInventory)
+            var packed = GD.Load<PackedScene>("res://scenes/rooms/merchant_room.tscn");
+            if (packed == null)
             {
-                ModLogger.Error("OpenShopMenu: NMerchantRoom.Create returned null");
+                ModLogger.Error("OpenShopMenu: Could not load res://scenes/rooms/merchant_room.tscn");
                 return false;
             }
 
-            merchantRoomNode.Name = "AIOTweaks_ShopOverlay";
-            merchantRoomNode.ZIndex = 200;
-
-            tree.Root.AddChild(merchantRoomNode);
-
-            if (merchantRoomNode.Inventory != null)
+            var tempRoom = packed.Instantiate<NMerchantRoom>();
+            if (tempRoom == null)
             {
-                merchantRoomNode.Inventory.InventoryClosed += () =>
-                {
-                    Callable.From(() =>
-                    {
-                        if (GodotObject.IsInstanceValid(merchantRoomNode))
-                        {
-                            merchantRoomNode.QueueFree();
-                        }
-                    }).CallDeferred();
-                };
-
-                merchantRoomNode.OpenInventory();
-                ModLogger.Info("OpenShopMenu: Successfully spawned and opened randomized shop menu overlay.");
-                return true;
+                ModLogger.Error("OpenShopMenu: Instantiated scene is not NMerchantRoom");
+                return false;
             }
 
-            ModLogger.Warn("OpenShopMenu: MerchantRoomNode.Inventory was null.");
-            return false;
+            var inventoryNode = tempRoom.Inventory ?? tempRoom.GetNodeOrNull<NMerchantInventory>("%Inventory");
+            if (inventoryNode == null)
+            {
+                ModLogger.Error("OpenShopMenu: %Inventory (NMerchantInventory) not found in merchant_room.tscn");
+                tempRoom.QueueFree();
+                return false;
+            }
+
+            // Detach %Inventory before freeing tempRoom
+            tempRoom.RemoveChild(inventoryNode);
+            tempRoom.QueueFree();
+
+            // Create CanvasLayer overlay with high layer order to display on top of combat/map/events
+            var canvasLayer = new CanvasLayer
+            {
+                Name = "AIOTweaks_ShopCanvasLayer",
+                Layer = 100
+            };
+
+            // Generate fresh randomized inventory
+            var freshInventory = MerchantInventory.CreateForNormalMerchant(player);
+            var dialogue = new MerchantDialogueSet();
+
+            inventoryNode.Initialize(freshInventory, dialogue);
+
+            canvasLayer.AddChild(inventoryNode);
+            tree.Root.AddChild(canvasLayer);
+
+            // Connect close event to clean up canvasLayer
+            inventoryNode.InventoryClosed += () =>
+            {
+                Callable.From(() =>
+                {
+                    if (GodotObject.IsInstanceValid(canvasLayer))
+                    {
+                        canvasLayer.QueueFree();
+                    }
+                }).CallDeferred();
+            };
+
+            inventoryNode.Open();
+            ModLogger.Info("OpenShopMenu: Successfully opened randomized standalone shop overlay.");
+            return true;
         }
         catch (Exception ex)
         {
@@ -1872,6 +1939,22 @@ public static class GameHelper
 
         try
         {
+            if (ModelDb.DebugEnchantments != null)
+            {
+                foreach (var e in ModelDb.DebugEnchantments)
+                {
+                    if (e != null && (e.GetType().Name.Equals(enchantmentId, StringComparison.OrdinalIgnoreCase) ||
+                                     e.GetType().Name.Replace("Enchantment", "").Equals(enchantmentId, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        return e;
+                    }
+                }
+            }
+        }
+        catch { }
+
+        try
+        {
             var assemblies = AppDomain.CurrentDomain.GetAssemblies();
             foreach (var asm in assemblies)
             {
@@ -1904,34 +1987,115 @@ public static class GameHelper
     public static EnchantmentModel? CreateEnchantment(EnchantmentModel canonical, decimal amount = 1)
     {
         if (canonical == null) return null;
+        EnchantmentModel? result = null;
+
         try
         {
-            var mutable = canonical.ToMutable();
-            if (mutable != null)
+            result = canonical.ToMutable();
+        }
+        catch { }
+
+        if (result == null)
+        {
+            try
             {
-                return mutable;
+                var clone = (EnchantmentModel)canonical.ClonePreservingMutability();
+                if (clone != null && !clone.IsCanonical)
+                {
+                    result = clone;
+                }
             }
+            catch { }
         }
-        catch { }
 
-        try
+        if (result == null)
         {
-            var clone = (EnchantmentModel)canonical.ClonePreservingMutability();
-            if (clone != null && !clone.IsCanonical)
+            try
             {
-                return clone;
+                var inst = Activator.CreateInstance(canonical.GetType()) as EnchantmentModel;
+                if (inst != null)
+                {
+                    result = inst.IsCanonical ? inst.ToMutable() : inst;
+                }
             }
+            catch { }
         }
-        catch { }
 
-        try
+        if (result != null)
         {
-            var inst = Activator.CreateInstance(canonical.GetType()) as EnchantmentModel;
-            return inst;
-        }
-        catch { }
+            int intAmount = Math.Max(1, (int)amount);
+            try
+            {
+                result.Amount = intAmount;
+            }
+            catch { }
 
-        return null;
+            // Scale DynamicVars based on amount multiplier
+            try
+            {
+                if (result.DynamicVars != null)
+                {
+                    var valuesProp = result.DynamicVars.GetType().GetProperty("Values", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                    var values = valuesProp?.GetValue(result.DynamicVars) as System.Collections.IEnumerable;
+                    if (values != null)
+                    {
+                        foreach (var v in values)
+                        {
+                            if (v is MegaCrit.Sts2.Core.Localization.DynamicVars.DynamicVar dynVar)
+                            {
+                                if (dynVar.Name.Equals("Times", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    dynVar.BaseValue = amount;
+                                }
+                                else if (dynVar.Name.Equals("Weak", StringComparison.OrdinalIgnoreCase) || dynVar.Name.Equals("WeakPower", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    dynVar.BaseValue = amount;
+                                }
+                                else if (dynVar.Name.Equals("Block", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    dynVar.BaseValue = amount;
+                                }
+                                else if (dynVar.Name.Equals("Damage", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    decimal orig = 3m;
+                                    try
+                                    {
+                                        if (canonical.DynamicVars?.Damage != null && canonical.DynamicVars.Damage.BaseValue > 0)
+                                        {
+                                            orig = canonical.DynamicVars.Damage.BaseValue;
+                                        }
+                                    }
+                                    catch { }
+                                    dynVar.BaseValue = orig * amount;
+                                }
+                                else
+                                {
+                                    decimal orig = 1m;
+                                    try
+                                    {
+                                        if (canonical.DynamicVars != null && canonical.DynamicVars[dynVar.Name] != null)
+                                        {
+                                            orig = canonical.DynamicVars[dynVar.Name].BaseValue;
+                                        }
+                                    }
+                                    catch { }
+                                    dynVar.BaseValue = orig > 0 ? orig * amount : amount;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            try
+            {
+                result.RecalculateValues();
+            }
+            catch { }
+        }
+
+        return result;
     }
 
     public static List<string> GetPlayerDeckCardIds()

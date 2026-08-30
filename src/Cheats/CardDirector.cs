@@ -765,6 +765,7 @@ public static class CardDirector
         if (string.IsNullOrWhiteSpace(enchantmentId)) return false;
 
         string cardName = card.GetType().Name;
+        amount = Math.Max(1, amount);
         ModLogger.Verbose("CardDirector", $"EnchantCard called: card='{cardName}', enchantment='{enchantmentId}', amount={amount}");
 
         try
@@ -774,6 +775,12 @@ public static class CardDirector
             {
                 ModLogger.Warn($"Enchantment '{enchantmentId}' could not be resolved.");
                 return false;
+            }
+
+            // Always clear existing enchantment first so amount and type can be cleanly applied
+            if (card.Enchantment != null)
+            {
+                try { CardCmd.ClearEnchantment(card); } catch { card.ClearEnchantmentInternal(); }
             }
 
             var ench = GameHelper.CreateEnchantment(canonical, amount);
@@ -786,11 +793,24 @@ public static class CardDirector
                 catch
                 {
                     card.EnchantInternal(ench, amount);
+                    ench.ModifyCard();
+                    card.FinalizeUpgradeInternal();
                 }
             }
             else
             {
                 card.EnchantInternal(canonical, amount);
+                canonical.ModifyCard();
+                card.FinalizeUpgradeInternal();
+            }
+
+            // Ensure amount and card calculations are strictly updated
+            if (card.Enchantment != null)
+            {
+                card.Enchantment.Amount = (int)amount;
+                try { card.Enchantment.ModifyCard(); } catch { }
+                try { card.FinalizeUpgradeInternal(); } catch { }
+                try { card.DynamicVars?.RecalculateForUpgradeOrEnchant(); } catch { }
             }
 
             card.Pile?.InvokeContentsChanged();
@@ -803,8 +823,28 @@ public static class CardDirector
                 if (card.DeckVersion != null && player.Deck?.Cards != null && player.Deck.Cards.Contains(card.DeckVersion))
                 {
                     var master = card.DeckVersion;
+                    if (master.Enchantment != null)
+                    {
+                        try { CardCmd.ClearEnchantment(master); } catch { master.ClearEnchantmentInternal(); }
+                    }
                     var masterEnch = GameHelper.CreateEnchantment(canonical, amount) ?? canonical;
-                    try { _ = CardCmd.Enchant(masterEnch, master, amount); } catch { master.EnchantInternal(masterEnch, amount); }
+                    try 
+                    { 
+                        _ = CardCmd.Enchant(masterEnch, master, amount); 
+                    } 
+                    catch 
+                    { 
+                        master.EnchantInternal(masterEnch, amount); 
+                        masterEnch.ModifyCard(); 
+                        master.FinalizeUpgradeInternal(); 
+                    }
+                    if (master.Enchantment != null)
+                    {
+                        master.Enchantment.Amount = (int)amount;
+                        try { master.Enchantment.ModifyCard(); } catch { }
+                        try { master.FinalizeUpgradeInternal(); } catch { }
+                        try { master.DynamicVars?.RecalculateForUpgradeOrEnchant(); } catch { }
+                    }
                     player.Deck.InvokeContentsChanged();
                 }
                 // If this is a master deck card, sync any combat card spawned directly from it
@@ -815,14 +855,35 @@ public static class CardDirector
                     {
                         foreach (var combatCard in combatCards)
                         {
+                            if (combatCard.Enchantment != null)
+                            {
+                                try { CardCmd.ClearEnchantment(combatCard); } catch { combatCard.ClearEnchantmentInternal(); }
+                            }
                             var combatEnch = GameHelper.CreateEnchantment(canonical, amount) ?? canonical;
-                            try { _ = CardCmd.Enchant(combatEnch, combatCard, amount); } catch { combatCard.EnchantInternal(combatEnch, amount); }
+                            try 
+                            { 
+                                _ = CardCmd.Enchant(combatEnch, combatCard, amount); 
+                            } 
+                            catch 
+                            { 
+                                combatCard.EnchantInternal(combatEnch, amount); 
+                                combatEnch.ModifyCard(); 
+                                combatCard.FinalizeUpgradeInternal(); 
+                            }
+                            if (combatCard.Enchantment != null)
+                            {
+                                combatCard.Enchantment.Amount = (int)amount;
+                                try { combatCard.Enchantment.ModifyCard(); } catch { }
+                                try { combatCard.FinalizeUpgradeInternal(); } catch { }
+                                try { combatCard.DynamicVars?.RecalculateForUpgradeOrEnchant(); } catch { }
+                            }
                             combatCard.Pile?.InvokeContentsChanged();
                         }
                     }
                 }
             }
 
+            GameHelper.RefreshAllVisibleCards();
             ModLogger.Info($"Card '{cardName}' successfully enchanted with '{enchantmentId}' (Amount: {amount}).");
             OnDeckChanged?.Invoke();
             return true;
@@ -886,6 +947,7 @@ public static class CardDirector
                 }
             }
 
+            GameHelper.RefreshAllVisibleCards();
             ModLogger.Info($"Enchantment cleared from card '{cardName}'.");
             OnDeckChanged?.Invoke();
             return true;
