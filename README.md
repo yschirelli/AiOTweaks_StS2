@@ -59,16 +59,15 @@ Whether you are testing new card synergies, prototyping custom balance patches, 
 
 ## Keybindings & Controls
 
-Hotkeys default to safe standard bindings (`F1` for Console, `F3` for GUI Menu). If keybindings are ever accidentally cleared or corrupted, the built-in failsafe automatically falls back to these default bindings:
-
-| Action | Config Key | Default / Failsafe |
+| Action | Config Key | Default Hotkey |
 | :--- | :--- | :--- |
 | Toggle AIOTweaks Debug Console | `consoleHotkey` | `F1` |
-| Quick Toggle God Mode (Invulnerability) | `quickGodModeKey` | *Unassigned (configure in GUI / `config.json`)* |
+| Quick Toggle God Mode (Invulnerability) | `quickGodModeKey` | *Unassigned* |
 | Toggle Tabbed Mod Settings & Sandbox GUI | `guiOverlayHotkey` | `F3` |
-| Quick Kill All Active Enemies | `quickKillEnemiesKey` | *Unassigned (configure in GUI / `config.json`)* |
+| Quick Kill All Active Enemies | `quickKillEnemiesKey` | *Unassigned* |
 
-*(Set any hotkey like `F1`, `F2`, `F3`, `F4`, `Quoteleft`, or custom keys in Mod Settings or `config.json`).*
+Hotkeys can be customized at any time in the **Mod Settings Dialog** or in `config.json`.
+
 
 ---
 
@@ -271,7 +270,7 @@ Settings persist per-user in Godot's application user data directory:
 
 ## Troubleshooting
 
-- **Opening Mod Settings or Console:** Hotkeys are unassigned by default. Open the **Mods** menu from the Main Menu or Character Select screen to click the AIOTweaks configuration button and assign your favorite hotkeys (e.g. `F1`, `F3`).
+- **Opening Mod Settings or Console:** Press `F3` for Mod Settings or `F1` for Debug Console. You can also access settings directly from the in-game **Mods** menu or customize keybindings in `config.json`.
 - **Mod not showing up in Mods list:** Verify `AIOTweaks.json` is located directly in `mods/AIOTweaks/AIOTweaks.json` alongside `AIOTweaks.dll`.
 - **Build error with missing Godot assemblies:** Ensure the Godot .NET SDK / targeting packs are installed and the .NET 9 SDK is active (`dotnet --version`).
 
