@@ -1021,7 +1021,7 @@ public static class GameHelper
             {
                 sb.AppendLine();
                 string enchTitle = card.Enchantment.Title?.GetFormattedText() ?? card.Enchantment.GetType().Name;
-                sb.AppendLine($"★ Enchantment: {enchTitle} (x{card.Enchantment.Amount})");
+                sb.AppendLine($"Enchantment: {enchTitle} (x{card.Enchantment.Amount})");
                 string enchDesc = card.Enchantment.DynamicDescription?.GetFormattedText() ?? card.Enchantment.DynamicExtraCardText?.GetFormattedText() ?? "";
                 if (!string.IsNullOrWhiteSpace(enchDesc))
                 {
@@ -1035,6 +1035,67 @@ public static class GameHelper
         {
             ModLogger.Debug($"GetCardFullTooltip error: {ex.Message}");
             return card.GetType().Name;
+        }
+    }
+
+    public static string GetRelicDescription(RelicModel? relic)
+    {
+        if (relic == null) return "";
+        try
+        {
+            foreach (var prop in relic.GetType().GetProperties())
+            {
+                if (prop.Name.Contains("Desc", StringComparison.OrdinalIgnoreCase) || 
+                    prop.Name.Contains("Text", StringComparison.OrdinalIgnoreCase) ||
+                    prop.Name.Contains("Detail", StringComparison.OrdinalIgnoreCase) ||
+                    prop.Name.Contains("Flavor", StringComparison.OrdinalIgnoreCase))
+                {
+                    var val = prop.GetValue(relic);
+                    if (val != null)
+                    {
+                        var method = val.GetType().GetMethod("GetFormattedText");
+                        if (method != null)
+                        {
+                            string? text = method.Invoke(val, null) as string;
+                            if (!string.IsNullOrWhiteSpace(text)) return text.Trim();
+                        }
+                        string s = val.ToString() ?? "";
+                        if (!string.IsNullOrWhiteSpace(s)) return s.Trim();
+                    }
+                }
+            }
+            return "";
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Debug($"GetRelicDescription error: {ex.Message}");
+            return "";
+        }
+    }
+
+    public static string GetRelicFullTooltip(RelicModel? relic)
+    {
+        if (relic == null) return "";
+        try
+        {
+            string title = !string.IsNullOrWhiteSpace(relic.Title.GetFormattedText()) ? relic.Title.GetFormattedText() : relic.GetType().Name;
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine(title);
+            sb.AppendLine($"Rarity: {relic.Rarity}");
+
+            string desc = GetRelicDescription(relic);
+            if (!string.IsNullOrWhiteSpace(desc))
+            {
+                sb.AppendLine();
+                sb.AppendLine(desc);
+            }
+
+            return sb.ToString().TrimEnd();
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Debug($"GetRelicFullTooltip error: {ex.Message}");
+            return relic.GetType().Name;
         }
     }
 

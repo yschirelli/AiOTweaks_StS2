@@ -131,8 +131,11 @@ public partial class ModSettingsDialog : CanvasLayer
 
         if (@event is InputEventKey keyEvent && keyEvent.Pressed && !keyEvent.Echo)
         {
-            // Toggle via configured GUI overlay key
-            if (GameHelper.IsKeyMatch(keyEvent, ConfigManager.Current.General.GuiOverlayHotkey))
+            // Toggle via configured GUI overlay key (with failsafe fallback)
+            string guiKey = !string.IsNullOrWhiteSpace(ConfigManager.Current.General.GuiOverlayHotkey) && !ConfigManager.Current.General.GuiOverlayHotkey.Equals("None", StringComparison.OrdinalIgnoreCase)
+                ? ConfigManager.Current.General.GuiOverlayHotkey
+                : GeneralConfig.DefaultGuiOverlayHotkey;
+            if (GameHelper.IsKeyMatch(keyEvent, guiKey))
             {
                 ToggleDialog();
                 GetViewport().SetInputAsHandled();
@@ -319,7 +322,7 @@ public partial class ModSettingsDialog : CanvasLayer
             Text = "  AIOTweaks - In-Game Mod Settings & Sandbox Suite  ",
             Modulate = new Color(0.35f, 0.85f, 1f)
         };
-        var closeBtn = new Button { Text = " ✕ " };
+        var closeBtn = new Button { Text = " X " };
         closeBtn.Pressed += CloseDialog;
 
         header.AddChild(title);
@@ -369,8 +372,8 @@ public partial class ModSettingsDialog : CanvasLayer
         defaultBtn.Pressed += () =>
         {
             // Reset to defaults
-            ConfigManager.Current.General.ConsoleHotkey = "";
-            ConfigManager.Current.General.GuiOverlayHotkey = "";
+            ConfigManager.Current.General.ConsoleHotkey = GeneralConfig.DefaultConsoleHotkey;
+            ConfigManager.Current.General.GuiOverlayHotkey = GeneralConfig.DefaultGuiOverlayHotkey;
             ConfigManager.Current.General.QuickGodModeKey = "";
             ConfigManager.Current.General.QuickKillEnemiesKey = "";
 
@@ -430,24 +433,24 @@ public partial class ModSettingsDialog : CanvasLayer
         // Run lock notification banner
         _tweaksRunLockNoticeLabel = new Label
         {
-            Text = "🔒 Pre-run map generation & starting bonus settings are locked during an active run.\n   (All options can be freely customized in the Main Menu)",
+            Text = "[Locked] Pre-run map generation & starting bonus settings are locked during an active run.\n   (All options can be freely customized in the Main Menu)",
             Modulate = new Color(1f, 0.45f, 0.3f),
             Visible = false
         };
         vbox.AddChild(_tweaksRunLockNoticeLabel);
 
         vbox.AddChild(new Label { Text = "--- Keybindings & Hotkeys ---", Modulate = new Color(0.35f, 0.85f, 1f) });
-        vbox.AddChild(new Label { Text = "Note: Leave empty or 'None' to disable a hotkey.", Modulate = new Color(0.7f, 0.7f, 0.7f) });
+        vbox.AddChild(new Label { Text = "Note: If left empty, default hotkeys (F1 for Console, F3 for GUI) will be automatically restored.", Modulate = new Color(0.7f, 0.7f, 0.7f) });
 
         var consoleKeyRow = new HBoxContainer();
         consoleKeyRow.AddChild(new Label { Text = "Console Hotkey: ", CustomMinimumSize = new Vector2(240, 0) });
-        _consoleHotkeyInput = new LineEdit { PlaceholderText = "e.g. F1, Quoteleft (Empty = Disabled)", CustomMinimumSize = new Vector2(200, 0) };
+        _consoleHotkeyInput = new LineEdit { PlaceholderText = "e.g. F1, Quoteleft (Default: F1)", CustomMinimumSize = new Vector2(200, 0) };
         consoleKeyRow.AddChild(_consoleHotkeyInput);
         vbox.AddChild(consoleKeyRow);
 
         var guiKeyRow = new HBoxContainer();
         guiKeyRow.AddChild(new Label { Text = "GUI Menu Overlay Hotkey: ", CustomMinimumSize = new Vector2(240, 0) });
-        _guiHotkeyInput = new LineEdit { PlaceholderText = "e.g. F3, F8 (Empty = Disabled)", CustomMinimumSize = new Vector2(200, 0) };
+        _guiHotkeyInput = new LineEdit { PlaceholderText = "e.g. F3, F8 (Default: F3)", CustomMinimumSize = new Vector2(200, 0) };
         guiKeyRow.AddChild(_guiHotkeyInput);
         vbox.AddChild(guiKeyRow);
 
@@ -500,7 +503,7 @@ public partial class ModSettingsDialog : CanvasLayer
         vbox.AddChild(new Label { Text = "--- Map Node Generation Weights ---", Modulate = new Color(0.4f, 1f, 0.6f) });
         var fairNote = new Label
         {
-            Text = "★ Fair Play: Non-default map multipliers mark runs as Seeded/Custom (locks achievements/unlocks).\n   Keep all at 1.0x for standard runs.",
+            Text = "Note: Fair Play: Non-default map multipliers mark runs as Seeded/Custom (locks achievements/unlocks).\n   Keep all at 1.0x for standard runs.",
             Modulate = new Color(1f, 0.8f, 0.4f)
         };
         vbox.AddChild(fairNote);
@@ -682,9 +685,15 @@ public partial class ModSettingsDialog : CanvasLayer
         {
             var btnBox = new HBoxContainer();
             var lbl = new Label { Text = r, CustomMinimumSize = new Vector2(150, 0), ClipText = true };
-            var addBtn = new Button { Text = "+" };
+            
+            var canonical = GameHelper.FindCanonicalRelicModel(r);
+            string tooltip = canonical != null ? GameHelper.GetRelicFullTooltip(canonical) : r;
+            lbl.TooltipText = tooltip;
+            btnBox.TooltipText = tooltip;
+
+            var addBtn = new Button { Text = "+", TooltipText = "Add to player inventory" };
             addBtn.Pressed += () => { RelicDirector.AddRelic(r); RefreshRealTimeRelicTabs(); };
-            var rmBtn = new Button { Text = "-" };
+            var rmBtn = new Button { Text = "-", TooltipText = "Remove from player inventory" };
             rmBtn.Pressed += () => { RelicDirector.RemoveRelic(r); RefreshRealTimeRelicTabs(); };
             
             btnBox.AddChild(lbl);
@@ -699,7 +708,10 @@ public partial class ModSettingsDialog : CanvasLayer
             string q = query.Trim();
             foreach (var entry in _availableRelicEntries)
             {
-                entry.Container.Visible = string.IsNullOrEmpty(q) || entry.Id.Contains(q, StringComparison.OrdinalIgnoreCase);
+                bool matches = string.IsNullOrEmpty(q) || 
+                               entry.Id.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                               (entry.Label != null && entry.Label.TooltipText.Contains(q, StringComparison.OrdinalIgnoreCase));
+                entry.Container.Visible = matches;
             }
         };
 
@@ -806,16 +818,21 @@ public partial class ModSettingsDialog : CanvasLayer
                     margin.AddChild(row);
 
                     string relicName = !string.IsNullOrWhiteSpace(relic.Title.GetFormattedText()) ? relic.Title.GetFormattedText() : relic.GetType().Name;
+                    string fullTooltip = GameHelper.GetRelicFullTooltip(relic);
                     var nameLabel = new Label
                     {
                         Text = relicName,
                         CustomMinimumSize = new Vector2(160, 0),
                         ClipText = true,
-                        SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+                        SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+                        TooltipText = fullTooltip
                     };
                     row.AddChild(nameLabel);
 
-                    var rmBtn = new Button { Text = " Remove " };
+                    panel.TooltipText = fullTooltip;
+                    row.TooltipText = fullTooltip;
+
+                    var rmBtn = new Button { Text = " Remove ", TooltipText = $"Remove {relicName} from equipped inventory" };
                     string relTypeName = relic.GetType().Name;
                     rmBtn.Pressed += () => 
                     {
@@ -1352,8 +1369,8 @@ public partial class ModSettingsDialog : CanvasLayer
                     ? c.Enchantment.Title.GetFormattedText() 
                     : c.Enchantment.GetType().Name;
                 string enchText = c.Enchantment.Amount > 1 
-                    ? $"★ {enchName} (x{c.Enchantment.Amount})" 
-                    : $"★ {enchName}";
+                    ? $"{enchName} (x{c.Enchantment.Amount})" 
+                    : $"{enchName}";
 
                 var enchBadge = new Label
                 {
@@ -1685,7 +1702,7 @@ public partial class ModSettingsDialog : CanvasLayer
         foreach (var info in allEvents)
         {
             var btnBox = new HBoxContainer();
-            string labelText = info.IsAncient ? $"★ {info.DisplayName}" : info.DisplayName;
+            string labelText = info.IsAncient ? $"[Ancient] {info.DisplayName}" : info.DisplayName;
             var lbl = new Label 
             { 
                 Text = labelText, 
@@ -1814,8 +1831,27 @@ public partial class ModSettingsDialog : CanvasLayer
         var sandbox = ConfigManager.Current.CombatSandbox;
         var general = ConfigManager.Current.General;
 
-        if (_consoleHotkeyInput != null) general.ConsoleHotkey = _consoleHotkeyInput.Text.Trim();
-        if (_guiHotkeyInput != null) general.GuiOverlayHotkey = _guiHotkeyInput.Text.Trim();
+        if (_consoleHotkeyInput != null)
+        {
+            string consoleVal = _consoleHotkeyInput.Text.Trim();
+            if (string.IsNullOrWhiteSpace(consoleVal) || consoleVal.Equals("None", StringComparison.OrdinalIgnoreCase))
+            {
+                consoleVal = GeneralConfig.DefaultConsoleHotkey;
+                _consoleHotkeyInput.Text = consoleVal;
+            }
+            general.ConsoleHotkey = consoleVal;
+        }
+
+        if (_guiHotkeyInput != null)
+        {
+            string guiVal = _guiHotkeyInput.Text.Trim();
+            if (string.IsNullOrWhiteSpace(guiVal) || guiVal.Equals("None", StringComparison.OrdinalIgnoreCase))
+            {
+                guiVal = GeneralConfig.DefaultGuiOverlayHotkey;
+                _guiHotkeyInput.Text = guiVal;
+            }
+            general.GuiOverlayHotkey = guiVal;
+        }
         if (_quickGodModeInput != null) general.QuickGodModeKey = _quickGodModeInput.Text.Trim();
         if (_quickKillEnemiesInput != null) general.QuickKillEnemiesKey = _quickKillEnemiesInput.Text.Trim();
 

@@ -85,7 +85,7 @@ public partial class PreRunSettingsMenu : Control
         vbox.AddChild(new Label { Text = "--- Map Node Generation Multipliers ---", Modulate = new Color(0.4f, 1f, 0.6f) });
         var fairPlayNote = new Label
         {
-            Text = "★ Fair Play: Customizing map multipliers automatically marks the run as Seeded/Custom\n   (locks unlocks & achievements). Leave all at 1.0x to proceed as normal standard run.",
+            Text = "Note: Fair Play: Customizing map multipliers automatically marks the run as Seeded/Custom\n   (locks unlocks & achievements). Leave all at 1.0x to proceed as normal standard run.",
             Modulate = new Color(1f, 0.8f, 0.4f)
         };
         vbox.AddChild(fairPlayNote);

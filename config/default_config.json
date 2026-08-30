@@ -2,8 +2,8 @@
   "general": {
     "enabled": true,
     "debugLogging": false,
-    "consoleHotkey": "",
-    "guiOverlayHotkey": "",
+    "consoleHotkey": "F1",
+    "guiOverlayHotkey": "F3",
     "quickGodModeKey": "",
     "quickKillEnemiesKey": ""
   },

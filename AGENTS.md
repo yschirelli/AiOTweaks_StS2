@@ -29,7 +29,7 @@ The goal is to maintain and extend a sandbox, cheat director, and quality-of-lif
 - **Deterministic RNG Protection:** Do not mutate shared PRNG streams directly. Isolate tweak overrides from base seed generation.
 - **Lifecycle Reset:** Clear all active runtime cheats and transient director overrides (`RuntimeStateManager.ResetSessionState()`) whenever returning to the main menu or starting a fresh run.
 - **Async Execution Safety:** When performing card pile operations, hand draws, or combat state mutations, execute safely on the game context (e.g. using `TaskHelper.RunSafely`) to prevent task deadlocks or UI desynchronization.
-- **Clean Workspace & Scratch Scripts:** Always keep temporary AI exploration scripts, scratch files (e.g. `.csx` scripts, temporary logs, test dumps) out of Git tracking. Clean them up promptly when analysis concludes, and ensure `.gitignore` captures all scratch patterns.
+- **Clean Workspace & Scratch Scripts:** Keep temporary exploration scripts and scratch files (e.g. `.csx` scripts, temporary logs, test dumps) out of Git tracking. Ensure `.gitignore` captures all scratch patterns and clean up temporary files once development tasks conclude.
 
 ### 3. File & Component Responsibilities
 - `src/Core/Config/`: Strongly typed JSON config (`ModConfig.cs`, `RunSettings.cs`), profile management (`ConfigManager.cs`), and BaseLib config provider (`AIOTweaksBaseLibConfig.cs`).
@@ -45,7 +45,7 @@ The goal is to maintain and extend a sandbox, cheat director, and quality-of-lif
 - Use explicit type definitions; avoid ambiguous `dynamic` or loose object casting.
 - Gracefully handle invalid IDs (relics, cards, events) with actionable warnings in `ModLogger` instead of throwing unhandled exceptions.
 - Provide fallback default values for all configuration keys. Hotkeys should default to unassigned (`""`) to prevent keybinding collisions.
-- Only package required artifacts for deployment: **`AIOTweaks.dll`** and **`AIOTweaks.json`** inside `mods/AIOTweaks/`. The game runtime bundles `0Harmony.dll`, `System.Text.Json.dll`, and `GodotSharp.dll`.
+- Deploy only the required artifacts: `AIOTweaks.dll` and `AIOTweaks.json` into `mods/AIOTweaks/`.
 
 ---
 

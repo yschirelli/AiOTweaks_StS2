@@ -54,7 +54,9 @@ public partial class DebugConsole : CanvasLayer
         if (@event is InputEventKey keyEvent && keyEvent.Pressed && !keyEvent.Echo)
         {
             // Toggle AIOTweaks Console
-            string consoleHotkey = ConfigManager.Current.General.ConsoleHotkey;
+            string consoleHotkey = !string.IsNullOrWhiteSpace(ConfigManager.Current.General.ConsoleHotkey) && !ConfigManager.Current.General.ConsoleHotkey.Equals("None", StringComparison.OrdinalIgnoreCase)
+                ? ConfigManager.Current.General.ConsoleHotkey
+                : GeneralConfig.DefaultConsoleHotkey;
             if (GameHelper.IsKeyMatch(keyEvent, consoleHotkey))
             {
                 ModLogger.Verbose("DebugConsole", $"Console hotkey matched ({keyEvent.Keycode}). Toggling visibility...");
@@ -76,7 +78,9 @@ public partial class DebugConsole : CanvasLayer
             if (!_isConsoleVisible)
             {
                 // Toggle GUI Menu Overlay (Default: F3)
-                string guiHotkey = ConfigManager.Current.General.GuiOverlayHotkey;
+                string guiHotkey = !string.IsNullOrWhiteSpace(ConfigManager.Current.General.GuiOverlayHotkey) && !ConfigManager.Current.General.GuiOverlayHotkey.Equals("None", StringComparison.OrdinalIgnoreCase)
+                    ? ConfigManager.Current.General.GuiOverlayHotkey
+                    : GeneralConfig.DefaultGuiOverlayHotkey;
                 if (GameHelper.IsKeyMatch(keyEvent, guiHotkey))
                 {
                     ModLogger.Verbose("DebugConsole", $"GUI overlay hotkey matched ({guiHotkey}). Toggling ModSettingsDialog...");

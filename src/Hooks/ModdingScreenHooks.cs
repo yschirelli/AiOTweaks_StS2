@@ -48,7 +48,7 @@ public static class ModdingScreenHooks
                     var configBtn = new Button
                     {
                         Name = ModConfigButtonName,
-                        Text = "⚙ AIOTweaks Mod Settings",
+                        Text = "AIOTweaks Mod Settings",
                         Modulate = new Color(0.35f, 0.85f, 1f),
                         CustomMinimumSize = new Vector2(230, 44),
                         SizeFlagsHorizontal = Control.SizeFlags.ShrinkEnd
@@ -104,7 +104,7 @@ public static class ModdingScreenHooks
                         var configBtn = new Button
                         {
                             Name = InfoConfigButtonName,
-                            Text = "⚙ Open AIOTweaks Configuration",
+                            Text = "Open AIOTweaks Configuration",
                             Modulate = new Color(0.3f, 0.9f, 1f),
                             CustomMinimumSize = new Vector2(260, 48),
                             ZIndex = 50

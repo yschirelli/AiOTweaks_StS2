@@ -22,6 +22,9 @@ public sealed class ModConfig
 
 public sealed class GeneralConfig
 {
+    public const string DefaultConsoleHotkey = "F1";
+    public const string DefaultGuiOverlayHotkey = "F3";
+
     [JsonPropertyName("enabled")]
     public bool Enabled { get; set; } = true;
 
@@ -29,10 +32,10 @@ public sealed class GeneralConfig
     public bool DebugLogging { get; set; } = true;
 
     [JsonPropertyName("consoleHotkey")]
-    public string ConsoleHotkey { get; set; } = "";
+    public string ConsoleHotkey { get; set; } = DefaultConsoleHotkey;
 
     [JsonPropertyName("guiOverlayHotkey")]
-    public string GuiOverlayHotkey { get; set; } = "";
+    public string GuiOverlayHotkey { get; set; } = DefaultGuiOverlayHotkey;
 
     [JsonPropertyName("toggleOverlayKey")]
     public string? ToggleOverlayKey

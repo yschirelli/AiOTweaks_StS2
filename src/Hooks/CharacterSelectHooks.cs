@@ -100,7 +100,7 @@ public static class CharacterSelectHooks
             var configBtn = new Button
             {
                 Name = "AIOTweaksBtn",
-                Text = "⚙ AIOTweaks",
+                Text = "AIOTweaks",
                 TooltipText = "Open AIOTweaks Mod Settings & Pre-Run Tweaks",
                 Modulate = new Color(0.35f, 0.85f, 1f),
                 CustomMinimumSize = new Vector2(180, 46)

@@ -67,6 +67,24 @@ public static class ConfigManager
         LoadConfig();
     }
 
+    public static void EnsureHotkeyFailsafes()
+    {
+        if (Current.General == null)
+        {
+            Current.General = new GeneralConfig();
+        }
+        if (string.IsNullOrWhiteSpace(Current.General.ConsoleHotkey) || Current.General.ConsoleHotkey.Equals("None", StringComparison.OrdinalIgnoreCase))
+        {
+            ModLogger.Verbose("ConfigManager", $"Console hotkey empty/None; defaulting to failsafe '{GeneralConfig.DefaultConsoleHotkey}'.");
+            Current.General.ConsoleHotkey = GeneralConfig.DefaultConsoleHotkey;
+        }
+        if (string.IsNullOrWhiteSpace(Current.General.GuiOverlayHotkey) || Current.General.GuiOverlayHotkey.Equals("None", StringComparison.OrdinalIgnoreCase))
+        {
+            ModLogger.Verbose("ConfigManager", $"GUI overlay hotkey empty/None; defaulting to failsafe '{GeneralConfig.DefaultGuiOverlayHotkey}'.");
+            Current.General.GuiOverlayHotkey = GeneralConfig.DefaultGuiOverlayHotkey;
+        }
+    }
+
     public static void LoadConfig()
     {
         string path = GetConfigFilePath();
@@ -81,6 +99,7 @@ public static class ConfigManager
                 if (loaded != null)
                 {
                     Current = loaded;
+                    EnsureHotkeyFailsafes();
                     ModLogger.MinimumLevel = Current.General.DebugLogging ? LogLevel.Debug : LogLevel.Info;
                     ModLogger.Info($"Loaded configuration successfully from: {path} (DebugLogging={Current.General.DebugLogging}, MinimumLevel={ModLogger.MinimumLevel})");
                     OnConfigChanged?.Invoke(Current);
@@ -90,18 +109,21 @@ public static class ConfigManager
 
             ModLogger.Warn($"Configuration file not found or empty at {path}. Generating default configuration.");
             Current = new ModConfig();
+            EnsureHotkeyFailsafes();
             SaveConfig();
         }
         catch (Exception ex)
         {
             ModLogger.Error($"Failed to parse configuration file at {path}. Reverting to safe defaults.", ex);
             Current = new ModConfig();
+            EnsureHotkeyFailsafes();
             OnConfigChanged?.Invoke(Current);
         }
     }
 
     public static void SaveConfig()
     {
+        EnsureHotkeyFailsafes();
         string path = GetConfigFilePath();
         ModLogger.Verbose("ConfigManager", $"Saving configuration to: '{path}'");
         try
