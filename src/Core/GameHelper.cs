@@ -16,6 +16,12 @@ using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Context;
+using MegaCrit.Sts2.Core.Rooms;
+using MegaCrit.Sts2.Core.Entities.Merchant;
+using MegaCrit.Sts2.Core.Nodes.Screens.Shops;
+using MegaCrit.Sts2.Core.Nodes.Rooms;
+using MegaCrit.Sts2.Core.Assets;
+using AIOTweaks.Core.Config;
 
 namespace AIOTweaks.Core;
 
@@ -196,6 +202,198 @@ public static class GameHelper
         catch (Exception ex)
         {
             ModLogger.Debug($"EnsureCustomRunMode error: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Reads the current player's baseline Max Energy from the active game/player instance.
+    /// Falls back to PreRunTweaksConfig or default 3 if not in an active run.
+    /// </summary>
+    public static int GetPlayerMaxEnergy()
+    {
+        try
+        {
+            var player = GetActivePlayer();
+            if (player != null)
+            {
+                return player.MaxEnergy;
+            }
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Debug($"GetPlayerMaxEnergy error: {ex.Message}");
+        }
+
+        return ConfigManager.Current.PreRunTweaks.MaxEnergy;
+    }
+
+    /// <summary>
+    /// Updates the player's Max Energy in real-time, syncing both the player entity, in-combat energy, and config.
+    /// </summary>
+    public static void SetPlayerMaxEnergy(int maxEnergy)
+    {
+        maxEnergy = Math.Max(1, maxEnergy);
+        ConfigManager.Current.PreRunTweaks.MaxEnergy = maxEnergy;
+
+        try
+        {
+            var player = GetActivePlayer();
+            if (player != null)
+            {
+                player.MaxEnergy = maxEnergy;
+                ModLogger.Info($"GameHelper: Set active player MaxEnergy to {maxEnergy}.");
+
+                if (player.PlayerCombatState != null)
+                {
+                    player.PlayerCombatState.Energy = Math.Min(player.PlayerCombatState.Energy, player.PlayerCombatState.MaxEnergy);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Debug($"SetPlayerMaxEnergy error: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Refreshes the visuals, description, and dynamic variable previews (including damage) on all active cards on screen in real time.
+    /// </summary>
+    public static void RefreshAllVisibleCards()
+    {
+        try
+        {
+            // 1. Refresh cards held in combat hand
+            if (MegaCrit.Sts2.Core.Nodes.Combat.NPlayerHand.Instance != null)
+            {
+                var hand = MegaCrit.Sts2.Core.Nodes.Combat.NPlayerHand.Instance;
+                var activeHolders = hand.ActiveHolders;
+                if (activeHolders != null)
+                {
+                    foreach (var holder in activeHolders)
+                    {
+                        var card = holder?.CardNode;
+                        if (card != null && GodotObject.IsInstanceValid(card) && card.IsInsideTree())
+                        {
+                            card.UpdateVisuals(card.DisplayingPile, MegaCrit.Sts2.Core.Entities.Cards.CardPreviewMode.Normal);
+                        }
+                    }
+                }
+            }
+
+            // 2. Scan entire active scene tree for any other active NCard nodes
+            var root = ((SceneTree)Engine.GetMainLoop())?.Root;
+            if (root != null)
+            {
+                RefreshCardsInNode(root);
+            }
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Debug($"RefreshAllVisibleCards error: {ex.Message}");
+        }
+    }
+
+    private static void RefreshCardsInNode(Node node)
+    {
+        if (node == null || !GodotObject.IsInstanceValid(node)) return;
+
+        if (node is MegaCrit.Sts2.Core.Nodes.Cards.NCard ncard && GodotObject.IsInstanceValid(ncard) && ncard.IsInsideTree())
+        {
+            try
+            {
+                ncard.UpdateVisuals(ncard.DisplayingPile, MegaCrit.Sts2.Core.Entities.Cards.CardPreviewMode.Normal);
+            }
+            catch { }
+        }
+
+        int childCount = node.GetChildCount();
+        for (int i = 0; i < childCount; i++)
+        {
+            var child = node.GetChild(i);
+            if (child != null && GodotObject.IsInstanceValid(child))
+            {
+                RefreshCardsInNode(child);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Opens an interactive merchant shop overlay anywhere during a run with a freshly randomized inventory (cards, relics, potions, removals).
+    /// </summary>
+    public static bool OpenShopMenu()
+    {
+        var player = GetActivePlayer();
+        if (player == null)
+        {
+            ModLogger.Warn("OpenShopMenu: No active player found. Must be inside a run to open the shop.");
+            return false;
+        }
+
+        try
+        {
+            var tree = (SceneTree)Engine.GetMainLoop();
+            if (tree?.Root == null) return false;
+
+            // Generate a fresh randomized inventory every time
+            var freshInventory = MerchantInventory.CreateForNormalMerchant(player);
+            var dialogue = new MerchantDialogueSet();
+
+            // Check if we already have an active standalone shop overlay
+            var existingRoom = tree.Root.GetNodeOrNull<NMerchantRoom>("AIOTweaks_ShopOverlay");
+            if (existingRoom != null && GodotObject.IsInstanceValid(existingRoom))
+            {
+                if (existingRoom.Inventory != null)
+                {
+                    existingRoom.Inventory.Initialize(freshInventory, dialogue);
+                    existingRoom.Inventory.Open();
+                    existingRoom.Visible = true;
+                    ModLogger.Info("OpenShopMenu: Re-initialized existing shop overlay with fresh randomized inventory.");
+                    return true;
+                }
+                existingRoom.QueueFree();
+            }
+
+            var merchantRoom = new MerchantRoom();
+            merchantRoom.Inventories.Clear();
+            merchantRoom.Inventories.Add(freshInventory);
+
+            var merchantRoomNode = NMerchantRoom.Create(merchantRoom, new[] { player });
+            if (merchantRoomNode == null)
+            {
+                ModLogger.Error("OpenShopMenu: NMerchantRoom.Create returned null");
+                return false;
+            }
+
+            merchantRoomNode.Name = "AIOTweaks_ShopOverlay";
+            merchantRoomNode.ZIndex = 200;
+
+            tree.Root.AddChild(merchantRoomNode);
+
+            if (merchantRoomNode.Inventory != null)
+            {
+                merchantRoomNode.Inventory.InventoryClosed += () =>
+                {
+                    Callable.From(() =>
+                    {
+                        if (GodotObject.IsInstanceValid(merchantRoomNode))
+                        {
+                            merchantRoomNode.QueueFree();
+                        }
+                    }).CallDeferred();
+                };
+
+                merchantRoomNode.OpenInventory();
+                ModLogger.Info("OpenShopMenu: Successfully spawned and opened randomized shop menu overlay.");
+                return true;
+            }
+
+            ModLogger.Warn("OpenShopMenu: MerchantRoomNode.Inventory was null.");
+            return false;
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Error($"OpenShopMenu failed with exception: {ex.Message}", ex);
+            return false;
         }
     }
 

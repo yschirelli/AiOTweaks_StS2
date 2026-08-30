@@ -191,6 +191,14 @@ public static class InventoryDirector
             ModLogger.Error($"Failed to set Max HP to {amount}", ex);
         }
     }
+
+    /// <summary>
+    /// Opens the interactive randomized shop overlay anywhere.
+    /// </summary>
+    public static bool OpenShopMenu()
+    {
+        return GameHelper.OpenShopMenu();
+    }
 }
 
 

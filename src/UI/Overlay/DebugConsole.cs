@@ -584,6 +584,48 @@ public partial class DebugConsole : CanvasLayer
                     LogToConsole("[color=red]Usage: energy <amount>[/color]");
                 break;
 
+            case "maxenergy":
+                if (parts.Length > 1 && int.TryParse(parts[1], out int newMaxEng))
+                {
+                    GameHelper.SetPlayerMaxEnergy(newMaxEng);
+                    LogToConsole($"[color=green]Max Energy set to {newMaxEng}.[/color]");
+                }
+                else
+                {
+                    LogToConsole($"[color=yellow]Current Max Energy: {GameHelper.GetPlayerMaxEnergy()}[/color]");
+                    LogToConsole("[color=red]Usage: maxenergy <amount>[/color]");
+                }
+                break;
+
+            case "playerdmg":
+            case "dmgmult":
+                if (parts.Length > 1 && float.TryParse(parts[1], System.Globalization.CultureInfo.InvariantCulture, out float dmgMult))
+                {
+                    ConfigManager.Current.PreRunTweaks.PlayerDamageMultiplier = Math.Max(0f, dmgMult);
+                    GameHelper.RefreshAllVisibleCards();
+                    LogToConsole($"[color=green]Player damage multiplier set to {dmgMult:F2}x. Card damage updated.[/color]");
+                }
+                else
+                {
+                    LogToConsole($"[color=yellow]Current Player Damage Multiplier: {ConfigManager.Current.PreRunTweaks.PlayerDamageMultiplier:F2}x[/color]");
+                    LogToConsole("[color=red]Usage: playerdmg <multiplier>[/color]");
+                }
+                break;
+
+            case "shop":
+            case "openshop":
+            case "merchant":
+                if (GameHelper.OpenShopMenu())
+                {
+                    SetConsoleVisibility(false);
+                    LogToConsole("[color=green]Opened randomized merchant shop overlay.[/color]");
+                }
+                else
+                {
+                    LogToConsole("[color=red]Failed to open shop overlay. Ensure you are in an active run.[/color]");
+                }
+                break;
+
             case "clear":
                 ClearLog();
                 break;

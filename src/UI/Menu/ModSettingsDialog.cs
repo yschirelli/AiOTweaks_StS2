@@ -44,6 +44,10 @@ public partial class ModSettingsDialog : CanvasLayer
     private CheckBox? _forceNeowCheck;
     private Label? _tweaksRunLockNoticeLabel;
 
+    // Player & Combat Scaling
+    private HSlider? _playerDmgSlider;
+    private SpinBox? _maxEnergySpin;
+
     // Enemy Multipliers & Endless Mode
     private HSlider? _enemyHpSlider;
     private HSlider? _enemyDmgSlider;
@@ -419,6 +423,8 @@ public partial class ModSettingsDialog : CanvasLayer
             ConfigManager.Current.PreRunTweaks.MapNodeDistribution.RestSiteWeightMultiplier = 1.0f;
             ConfigManager.Current.PreRunTweaks.MapNodeDistribution.CombatWeightMultiplier = 1.0f;
 
+            ConfigManager.Current.PreRunTweaks.PlayerDamageMultiplier = 1.0f;
+            ConfigManager.Current.PreRunTweaks.MaxEnergy = GameHelper.GetPlayerMaxEnergy();
             ConfigManager.Current.PreRunTweaks.EnemyHealthMultiplier = 1.0f;
             ConfigManager.Current.PreRunTweaks.EnemyDamageMultiplier = 1.0f;
             ConfigManager.Current.PreRunTweaks.EnemyDefendMultiplier = 1.0f;
@@ -627,6 +633,47 @@ public partial class ModSettingsDialog : CanvasLayer
             catch { }
         };
         vbox.AddChild(_freeMapNavCheck);
+
+        vbox.AddChild(new HSeparator());
+        vbox.AddChild(new Label { Text = "--- Player & Combat Scaling ---", Modulate = new Color(0.3f, 0.8f, 1f) });
+
+        _playerDmgSlider = AddSliderControl(vbox, "Player Damage Multiplier:", 0.0f, 10.0f, 0.1f, 1.0f);
+        _playerDmgSlider.ValueChanged += val =>
+        {
+            MarkTweaksModified();
+            ConfigManager.Current.PreRunTweaks.PlayerDamageMultiplier = (float)val;
+            GameHelper.RefreshAllVisibleCards();
+        };
+
+        var maxEnergyRow = new HBoxContainer();
+        maxEnergyRow.AddChild(new Label { Text = "Max Energy Count: ", CustomMinimumSize = new Vector2(240, 0) });
+        _maxEnergySpin = new SpinBox { MinValue = 1, MaxValue = 20, Step = 1, Value = GameHelper.GetPlayerMaxEnergy(), TooltipText = "Sets the baseline Max Energy count. Dynamically reads and syncs with the active game state." };
+        _maxEnergySpin.ValueChanged += val =>
+        {
+            MarkTweaksModified();
+            ConfigManager.Current.PreRunTweaks.MaxEnergy = (int)val;
+            GameHelper.SetPlayerMaxEnergy((int)val);
+        };
+        maxEnergyRow.AddChild(_maxEnergySpin);
+        vbox.AddChild(maxEnergyRow);
+
+        vbox.AddChild(new HSeparator());
+        vbox.AddChild(new Label { Text = "--- Merchant & Shop Actions ---", Modulate = new Color(1f, 0.85f, 0.3f) });
+
+        var openShopBtn = new Button
+        {
+            Text = " 🏪 Open Shop Menu Anywhere (Randomized) ",
+            CustomMinimumSize = new Vector2(320, 36),
+            TooltipText = "Spawns and displays the merchant shop interface anywhere during a run. Each invocation generates a fresh, randomized shop with new cards, relics, potions, and card removal."
+        };
+        openShopBtn.Pressed += () =>
+        {
+            if (GameHelper.OpenShopMenu())
+            {
+                CloseDialog();
+            }
+        };
+        vbox.AddChild(openShopBtn);
 
         return scroll;
     }
@@ -2368,6 +2415,24 @@ public partial class ModSettingsDialog : CanvasLayer
         vbox.AddChild(maxHpRow);
 
         vbox.AddChild(new HSeparator());
+        vbox.AddChild(new Label { Text = "--- Merchant & Shop Actions ---", Modulate = new Color(1f, 0.85f, 0.3f) });
+
+        var openShopBtn = new Button
+        {
+            Text = " 🏪 Open Shop Menu Anywhere (Randomized) ",
+            CustomMinimumSize = new Vector2(340, 36),
+            TooltipText = "Spawns and opens the merchant rug anywhere during a run. Each invocation generates a fresh, randomized shop with new cards, relics, potions, and card removal."
+        };
+        openShopBtn.Pressed += () =>
+        {
+            if (GameHelper.OpenShopMenu())
+            {
+                CloseDialog();
+            }
+        };
+        vbox.AddChild(openShopBtn);
+
+        vbox.AddChild(new HSeparator());
         vbox.AddChild(new Label { Text = "--- Event Director ---", Modulate = new Color(1f, 0.9f, 0.4f) });
         
         var indicatorRow = new HBoxContainer();
@@ -2575,6 +2640,9 @@ public partial class ModSettingsDialog : CanvasLayer
         if (_enemyDmgSlider != null) _enemyDmgSlider.Value = tweaks.EnemyDamageMultiplier;
         if (_enemyDefSlider != null) _enemyDefSlider.Value = tweaks.EnemyDefendMultiplier;
 
+        if (_playerDmgSlider != null) _playerDmgSlider.Value = tweaks.PlayerDamageMultiplier;
+        if (_maxEnergySpin != null) _maxEnergySpin.Value = GameHelper.GetPlayerMaxEnergy();
+
         if (_endlessModeCheck != null) _endlessModeCheck.ButtonPressed = tweaks.EndlessMode.Enabled;
         if (_endlessMultiplierSpin != null) _endlessMultiplierSpin.Value = tweaks.EndlessMode.EnemyScalingMultiplier;
         if (_freeMapNavCheck != null) _freeMapNavCheck.ButtonPressed = tweaks.FreeMapNavigation || RuntimeStateManager.FreeMapNavigationEnabled;
@@ -2664,6 +2732,18 @@ public partial class ModSettingsDialog : CanvasLayer
         if (_enemyDmgSlider != null) tweaks.EnemyDamageMultiplier = (float)_enemyDmgSlider.Value;
         if (_enemyDefSlider != null) tweaks.EnemyDefendMultiplier = (float)_enemyDefSlider.Value;
 
+        if (_playerDmgSlider != null)
+        {
+            tweaks.PlayerDamageMultiplier = (float)_playerDmgSlider.Value;
+            GameHelper.RefreshAllVisibleCards();
+        }
+        if (_maxEnergySpin != null)
+        {
+            int energyVal = (int)_maxEnergySpin.Value;
+            tweaks.MaxEnergy = energyVal;
+            GameHelper.SetPlayerMaxEnergy(energyVal);
+        }
+
         if (_endlessModeCheck != null) tweaks.EndlessMode.Enabled = _endlessModeCheck.ButtonPressed;
         if (_endlessMultiplierSpin != null) tweaks.EndlessMode.EnemyScalingMultiplier = (float)_endlessMultiplierSpin.Value;
         if (_freeMapNavCheck != null)
@@ -2695,6 +2775,14 @@ public partial class ModSettingsDialog : CanvasLayer
 
         switch (cmd)
         {
+            case "shop":
+            case "openshop":
+            case "merchant":
+                if (GameHelper.OpenShopMenu())
+                {
+                    CloseDialog();
+                }
+                break;
             case "god":
                 CombatDirector.ToggleGodMode();
                 LoadSettingsValues();
