@@ -18,11 +18,13 @@
   <ItemGroup>
     <PackageReference Include="Lib.Harmony" Version="2.3.3" ExcludeAssets="runtime" />
     <Reference Include="sts2">
-      <HintPath>/mnt/data/SteamLibrary/steamapps/common/Slay the Spire 2/data_sts2_linuxbsd_x86_64/sts2.dll</HintPath>
+      <HintPath Condition="'$(Sts2Path)' != ''">$(Sts2Path)</HintPath>
+      <HintPath Condition="'$(Sts2Path)' == ''">/mnt/data/SteamLibrary/steamapps/common/Slay the Spire 2/data_sts2_linuxbsd_x86_64/sts2.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="BaseLib">
-      <HintPath>/mnt/data/SteamLibrary/steamapps/workshop/content/2868840/3737335127/BaseLib/BaseLib.dll</HintPath>
+      <HintPath Condition="'$(BaseLibPath)' != ''">$(BaseLibPath)</HintPath>
+      <HintPath Condition="'$(BaseLibPath)' == ''">/mnt/data/SteamLibrary/steamapps/workshop/content/2868840/3737335127/BaseLib/BaseLib.dll</HintPath>
       <Private>false</Private>
     </Reference>
   </ItemGroup>
