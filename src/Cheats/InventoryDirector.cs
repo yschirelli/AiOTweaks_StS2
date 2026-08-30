@@ -47,10 +47,10 @@ public static class InventoryDirector
 
     public static void SetGold(int amount)
     {
-        ModLogger.Verbose("InventoryDirector", $"SetGold called: amount={amount}");
+        int safeAmount = Math.Max(0, amount);
+        ModLogger.Verbose("InventoryDirector", $"SetGold called: amount={amount} (safe={safeAmount})");
         try
         {
-            int safeAmount = Math.Max(0, amount);
             var player = GetActivePlayer();
             if (player != null)
             {

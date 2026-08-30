@@ -128,4 +128,9 @@ public static class CombatDirector
             ModLogger.Error("Failed to end turn.", ex);
         }
     }
+
+    public static void RefreshCombatIntents()
+    {
+        GameHelper.RefreshCombatIntents();
+    }
 }

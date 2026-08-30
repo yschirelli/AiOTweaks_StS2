@@ -76,15 +76,16 @@ public static class CardDirector
                     {
                         player.Deck.AddInternal(newCard, -1, false);
                         player.Deck.InvokeContentsChanged();
+                        player.Deck.InvokeCardAddFinished();
                         ModLogger.Info($"Card '{canonical.GetType().Name}' (Upgraded: {newCard.IsUpgraded}) added directly to Master Deck. (Deck count: {player.Deck.Cards.Count})");
                     }
 
-                    // 2. If currently in combat, also add an active instance to Draw Pile for immediate availability
+                    // 2. If currently in combat, also add a scoped active instance to Draw Pile for immediate availability
                     if (player.PlayerCombatState?.DrawPile != null)
                     {
                         try
                         {
-                            var combatCard = GameHelper.CreateCardForPlayer(canonical, player);
+                            var combatCard = GameHelper.CreateCombatCardForPlayer(canonical, player);
                             if (combatCard != null)
                             {
                                 if (upgraded && !combatCard.IsUpgraded)
@@ -95,12 +96,13 @@ public static class CardDirector
 
                                 try
                                 {
-                                    _ = CardPileCmd.Add(combatCard, PileType.Draw, CardPilePosition.Top, null, true);
+                                    TaskHelper.RunSafely(CardPileCmd.Add(combatCard, PileType.Draw, CardPilePosition.Top, null, true));
                                 }
                                 catch
                                 {
                                     player.PlayerCombatState.DrawPile.AddInternal(combatCard, -1, false);
                                     player.PlayerCombatState.DrawPile.InvokeContentsChanged();
+                                    player.PlayerCombatState.DrawPile.InvokeCardAddFinished();
                                 }
 
                                 ModLogger.Info($"Card '{canonical.GetType().Name}' also added to active Combat Draw Pile. (DrawPile count: {player.PlayerCombatState.DrawPile.Cards.Count})");
@@ -168,7 +170,7 @@ public static class CardDirector
                 var canonical = GameHelper.FindCanonicalCardModel(cardId);
                 if (canonical != null)
                 {
-                    var handCard = GameHelper.CreateCardForPlayer(canonical, player);
+                    var handCard = GameHelper.CreateCombatCardForPlayer(canonical, player);
                     if (handCard != null)
                     {
                         if (costOverride == 0)
@@ -190,6 +192,7 @@ public static class CardDirector
                             ModLogger.Warn($"CardPileCmd.Add notice: {ex.Message}");
                             player.PlayerCombatState.Hand.AddInternal(handCard, -1, false);
                             player.PlayerCombatState.Hand.InvokeContentsChanged();
+                            player.PlayerCombatState.Hand.InvokeCardAddFinished();
                         }
 
                         ModLogger.Info($"Card '{canonical.GetType().Name}' spawned directly into Hand. (Hand count: {player.PlayerCombatState.Hand.Cards.Count})");
@@ -237,6 +240,7 @@ public static class CardDirector
                 ModLogger.Verbose("CardDirector", $"Removing card from host pile ({pile.Type})...");
                 pile.RemoveInternal(card, false);
                 pile.InvokeContentsChanged();
+                pile.InvokeCardRemoveFinished();
                 removed = true;
             }
 
@@ -248,6 +252,7 @@ public static class CardDirector
                     ModLogger.Verbose("CardDirector", "Removing card instance directly from Player.Deck...");
                     player.Deck.RemoveInternal(card, false);
                     player.Deck.InvokeContentsChanged();
+                    player.Deck.InvokeCardRemoveFinished();
                     removed = true;
                 }
                 else if (card.DeckVersion != null && player.Deck.Cards.Contains(card.DeckVersion))
@@ -255,6 +260,7 @@ public static class CardDirector
                     ModLogger.Verbose("CardDirector", $"Removing corresponding master deck card for combat clone: {card.DeckVersion.GetType().Name}");
                     player.Deck.RemoveInternal(card.DeckVersion, false);
                     player.Deck.InvokeContentsChanged();
+                    player.Deck.InvokeCardRemoveFinished();
                     removed = true;
                 }
             }
@@ -279,13 +285,15 @@ public static class CardDirector
                     ModLogger.Verbose("CardDirector", $"Removing matching combat card ({combatCard.GetType().Name}) from pile {combatCard.Pile?.Type}...");
                     try
                     {
-                        _ = CardPileCmd.RemoveFromCombat(combatCard, true);
+                        TaskHelper.RunSafely(CardPileCmd.RemoveFromCombat(combatCard, true));
                         removed = true;
                     }
                     catch
                     {
-                        combatCard.Pile?.RemoveInternal(combatCard, false);
-                        combatCard.Pile?.InvokeContentsChanged();
+                        var cp = combatCard.Pile;
+                        cp?.RemoveInternal(combatCard, false);
+                        cp?.InvokeContentsChanged();
+                        cp?.InvokeCardRemoveFinished();
                         removed = true;
                     }
 
@@ -351,6 +359,7 @@ public static class CardDirector
                     anyRemoved = true;
                 }
                 player.Deck.InvokeContentsChanged();
+                player.Deck.InvokeCardRemoveFinished();
             }
 
             if (player?.PlayerCombatState != null)
@@ -971,6 +980,265 @@ public static class CardDirector
         }
 
         ModLogger.Warn($"Card '{cardId}' not found to clear enchantment.");
+        return false;
+    }
+
+    /// <summary>
+    /// Adds a keyword/attribute (e.g. Ethereal, Exhaust, Eternal, Unplayable, Retain, Innate, Sly) to a card model in real-time,
+    /// synchronizing with matching deck and combat instances.
+    /// </summary>
+    public static bool AddKeyword(MegaCrit.Sts2.Core.Models.CardModel card, MegaCrit.Sts2.Core.Entities.Cards.CardKeyword keyword)
+    {
+        if (card == null || keyword == MegaCrit.Sts2.Core.Entities.Cards.CardKeyword.None) return false;
+        string cardName = card.GetType().Name;
+        ModLogger.Verbose("CardDirector", $"AddKeyword called: card='{cardName}', keyword='{keyword}'");
+
+        try
+        {
+            try
+            {
+                CardCmd.ApplyKeyword(card, keyword);
+            }
+            catch
+            {
+                card.AddKeyword(keyword);
+            }
+
+            card.Pile?.InvokeContentsChanged();
+
+            // Sync with master deck or combat clone
+            var player = GameHelper.GetActivePlayer();
+            if (player != null)
+            {
+                if (card.DeckVersion != null && player.Deck?.Cards != null && player.Deck.Cards.Contains(card.DeckVersion))
+                {
+                    var master = card.DeckVersion;
+                    try { CardCmd.ApplyKeyword(master, keyword); } catch { master.AddKeyword(keyword); }
+                    player.Deck.InvokeContentsChanged();
+                }
+                else if (player.PlayerCombatState != null && player.Deck?.Cards != null && player.Deck.Cards.Contains(card))
+                {
+                    var combatCards = player.PlayerCombatState.AllCards?.Where(c => c != null && (c.DeckVersion == card || c.CloneOf == card)).ToList();
+                    if (combatCards != null)
+                    {
+                        foreach (var combatCard in combatCards)
+                        {
+                            try { CardCmd.ApplyKeyword(combatCard, keyword); } catch { combatCard.AddKeyword(keyword); }
+                            combatCard.Pile?.InvokeContentsChanged();
+                        }
+                    }
+                }
+            }
+
+            ModLogger.Info($"Keyword '{keyword}' added to card '{cardName}'.");
+            OnDeckChanged?.Invoke();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Error($"Failed to add keyword '{keyword}' to card '{cardName}'", ex);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Removes a keyword/attribute from a card model in real-time, synchronizing across deck and combat instances.
+    /// </summary>
+    public static bool RemoveKeyword(MegaCrit.Sts2.Core.Models.CardModel card, MegaCrit.Sts2.Core.Entities.Cards.CardKeyword keyword)
+    {
+        if (card == null || keyword == MegaCrit.Sts2.Core.Entities.Cards.CardKeyword.None) return false;
+        string cardName = card.GetType().Name;
+        ModLogger.Verbose("CardDirector", $"RemoveKeyword called: card='{cardName}', keyword='{keyword}'");
+
+        try
+        {
+            try
+            {
+                CardCmd.RemoveKeyword(card, keyword);
+            }
+            catch
+            {
+                card.RemoveKeyword(keyword);
+            }
+
+            card.Pile?.InvokeContentsChanged();
+
+            var player = GameHelper.GetActivePlayer();
+            if (player != null)
+            {
+                if (card.DeckVersion != null && player.Deck?.Cards != null && player.Deck.Cards.Contains(card.DeckVersion))
+                {
+                    var master = card.DeckVersion;
+                    try { CardCmd.RemoveKeyword(master, keyword); } catch { master.RemoveKeyword(keyword); }
+                    player.Deck.InvokeContentsChanged();
+                }
+                else if (player.PlayerCombatState != null && player.Deck?.Cards != null && player.Deck.Cards.Contains(card))
+                {
+                    var combatCards = player.PlayerCombatState.AllCards?.Where(c => c != null && (c.DeckVersion == card || c.CloneOf == card)).ToList();
+                    if (combatCards != null)
+                    {
+                        foreach (var combatCard in combatCards)
+                        {
+                            try { CardCmd.RemoveKeyword(combatCard, keyword); } catch { combatCard.RemoveKeyword(keyword); }
+                            combatCard.Pile?.InvokeContentsChanged();
+                        }
+                    }
+                }
+            }
+
+            ModLogger.Info($"Keyword '{keyword}' removed from card '{cardName}'.");
+            OnDeckChanged?.Invoke();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Error($"Failed to remove keyword '{keyword}' from card '{cardName}'", ex);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Toggles a keyword/attribute on a card model.
+    /// </summary>
+    public static bool ToggleKeyword(MegaCrit.Sts2.Core.Models.CardModel card, MegaCrit.Sts2.Core.Entities.Cards.CardKeyword keyword)
+    {
+        if (card == null || keyword == MegaCrit.Sts2.Core.Entities.Cards.CardKeyword.None) return false;
+        if (GameHelper.HasCardKeyword(card, keyword))
+        {
+            return RemoveKeyword(card, keyword);
+        }
+        else
+        {
+            return AddKeyword(card, keyword);
+        }
+    }
+
+    /// <summary>
+    /// Adds a keyword to the first matching card found in the player's deck or combat piles.
+    /// </summary>
+    public static bool AddKeywordToDeck(string cardId, MegaCrit.Sts2.Core.Entities.Cards.CardKeyword keyword)
+    {
+        if (string.IsNullOrWhiteSpace(cardId)) return false;
+        var player = GameHelper.GetActivePlayer();
+
+        if (player?.Deck?.Cards != null)
+        {
+            var card = player.Deck.Cards.FirstOrDefault(c => 
+                c != null && (
+                    c.GetType().Name.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
+                    c.Id.Entry.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
+                    (!string.IsNullOrEmpty(c.Title) && c.Title.Equals(cardId, StringComparison.OrdinalIgnoreCase))
+                ));
+            if (card != null)
+            {
+                return AddKeyword(card, keyword);
+            }
+        }
+
+        if (player?.PlayerCombatState != null)
+        {
+            foreach (var pile in player.PlayerCombatState.AllPiles)
+            {
+                var combatCard = pile?.Cards?.FirstOrDefault(c => 
+                    c != null && (
+                        c.GetType().Name.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
+                        c.Id.Entry.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
+                        (!string.IsNullOrEmpty(c.Title) && c.Title.Equals(cardId, StringComparison.OrdinalIgnoreCase))
+                    ));
+                if (combatCard != null)
+                {
+                    return AddKeyword(combatCard, keyword);
+                }
+            }
+        }
+
+        ModLogger.Warn($"Card '{cardId}' not found to add keyword '{keyword}'.");
+        return false;
+    }
+
+    /// <summary>
+    /// Removes a keyword from the first matching card found in the player's deck or combat piles.
+    /// </summary>
+    public static bool RemoveKeywordFromDeck(string cardId, MegaCrit.Sts2.Core.Entities.Cards.CardKeyword keyword)
+    {
+        if (string.IsNullOrWhiteSpace(cardId)) return false;
+        var player = GameHelper.GetActivePlayer();
+
+        if (player?.Deck?.Cards != null)
+        {
+            var card = player.Deck.Cards.FirstOrDefault(c => 
+                c != null && (
+                    c.GetType().Name.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
+                    c.Id.Entry.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
+                    (!string.IsNullOrEmpty(c.Title) && c.Title.Equals(cardId, StringComparison.OrdinalIgnoreCase))
+                ));
+            if (card != null)
+            {
+                return RemoveKeyword(card, keyword);
+            }
+        }
+
+        if (player?.PlayerCombatState != null)
+        {
+            foreach (var pile in player.PlayerCombatState.AllPiles)
+            {
+                var combatCard = pile?.Cards?.FirstOrDefault(c => 
+                    c != null && (
+                        c.GetType().Name.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
+                        c.Id.Entry.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
+                        (!string.IsNullOrEmpty(c.Title) && c.Title.Equals(cardId, StringComparison.OrdinalIgnoreCase))
+                    ));
+                if (combatCard != null)
+                {
+                    return RemoveKeyword(combatCard, keyword);
+                }
+            }
+        }
+
+        ModLogger.Warn($"Card '{cardId}' not found to remove keyword '{keyword}'.");
+        return false;
+    }
+
+    /// <summary>
+    /// Toggles a keyword on the first matching card found in the player's deck or combat piles.
+    /// </summary>
+    public static bool ToggleKeywordInDeck(string cardId, MegaCrit.Sts2.Core.Entities.Cards.CardKeyword keyword)
+    {
+        if (string.IsNullOrWhiteSpace(cardId)) return false;
+        var player = GameHelper.GetActivePlayer();
+
+        if (player?.Deck?.Cards != null)
+        {
+            var card = player.Deck.Cards.FirstOrDefault(c => 
+                c != null && (
+                    c.GetType().Name.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
+                    c.Id.Entry.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
+                    (!string.IsNullOrEmpty(c.Title) && c.Title.Equals(cardId, StringComparison.OrdinalIgnoreCase))
+                ));
+            if (card != null)
+            {
+                return ToggleKeyword(card, keyword);
+            }
+        }
+
+        if (player?.PlayerCombatState != null)
+        {
+            foreach (var pile in player.PlayerCombatState.AllPiles)
+            {
+                var combatCard = pile?.Cards?.FirstOrDefault(c => 
+                    c != null && (
+                        c.GetType().Name.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
+                        c.Id.Entry.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
+                        (!string.IsNullOrEmpty(c.Title) && c.Title.Equals(cardId, StringComparison.OrdinalIgnoreCase))
+                    ));
+                if (combatCard != null)
+                {
+                    return ToggleKeyword(combatCard, keyword);
+                }
+            }
+        }
+
+        ModLogger.Warn($"Card '{cardId}' not found to toggle keyword '{keyword}'.");
         return false;
     }
 }

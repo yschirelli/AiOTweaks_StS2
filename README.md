@@ -45,7 +45,7 @@ Whether you are testing new card synergies, prototyping custom balance patches, 
 - Dynamically scales enemy HP, incoming damage, and block values across infinite loops.
 
 ### Map Generation, Size & Free Navigation
-- Customizable map floor/room length (5 to 30 rooms).
+- Customizable map floor/room length (15 to 30 rooms).
 - Customizable node distribution weights: fine-tune the frequency of Elites, Shops, Unknown/Events, Rest Sites, and Normal Combats.
 - **Free Map Navigation ("Flying Boots" mode)**: Click and travel to ANY room freely on the map, omni-directionally without pathing restrictions.
 - Pre-run map generation and starting bonus settings are locked during active runs and fully editable in the Main Menu.

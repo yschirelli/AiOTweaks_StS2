@@ -185,6 +185,48 @@ public static class CombatHooks
         }
     }
 
+    [HarmonyPatch(typeof(MegaCrit.Sts2.Core.MonsterMoves.Intents.SingleAttackIntent), "GetTotalDamage")]
+    public static class SingleAttackIntentGetTotalDamagePatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(ref int __result)
+        {
+            try
+            {
+                float dmgMult = RuntimeStateManager.GetEffectiveEnemyDamageMultiplier();
+                if (Math.Abs(dmgMult - 1.0f) > 0.001f && __result > 0)
+                {
+                    __result = Math.Max(0, (int)Math.Round(__result * dmgMult));
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Debug($"SingleAttackIntentGetTotalDamagePatch error: {ex.Message}");
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(MegaCrit.Sts2.Core.MonsterMoves.Intents.MultiAttackIntent), "GetTotalDamage")]
+    public static class MultiAttackIntentGetTotalDamagePatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(ref int __result)
+        {
+            try
+            {
+                float dmgMult = RuntimeStateManager.GetEffectiveEnemyDamageMultiplier();
+                if (Math.Abs(dmgMult - 1.0f) > 0.001f && __result > 0)
+                {
+                    __result = Math.Max(0, (int)Math.Round(__result * dmgMult));
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Debug($"MultiAttackIntentGetTotalDamagePatch error: {ex.Message}");
+            }
+        }
+    }
+
     [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Entities.Creatures.Creature), "DamageBlockInternal")]
     public static class CreatureDamageBlockInternalPatch
     {

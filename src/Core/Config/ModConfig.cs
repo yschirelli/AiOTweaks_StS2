@@ -1,3 +1,4 @@
+using System;
 using System.Text.Json.Serialization;
 
 namespace AIOTweaks.Core.Config;
@@ -77,8 +78,14 @@ public sealed class PreRunTweaksConfig
     [JsonPropertyName("forceNeowBonus")]
     public bool ForceNeowBonus { get; set; } = true;
 
+    private int _mapRoomCount = 15;
+
     [JsonPropertyName("mapRoomCount")]
-    public int MapRoomCount { get; set; } = 15;
+    public int MapRoomCount
+    {
+        get => Math.Max(15, _mapRoomCount);
+        set => _mapRoomCount = Math.Max(15, value);
+    }
 
     [JsonPropertyName("enemyHealthMultiplier")]
     public float EnemyHealthMultiplier { get; set; } = 1.0f;

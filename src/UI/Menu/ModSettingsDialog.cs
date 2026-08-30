@@ -80,6 +80,8 @@ public partial class ModSettingsDialog : CanvasLayer
     private SpinBox? _damageAmountSpin;
     private SpinBox? _maxHpAmountSpin;
     private Label? _eventOverrideLabel;
+    private Button? _applyConfigBtn;
+    private bool _tweaksModified = false;
 
     // Log terminal
     private RichTextLabel? _logLabel;
@@ -201,6 +203,10 @@ public partial class ModSettingsDialog : CanvasLayer
             {
                 int tweaksIdx = 4; // Tweaks is the 5th tab
                 _tabs.SetTabDisabled(tweaksIdx, false);
+                if (_applyConfigBtn != null)
+                {
+                    _applyConfigBtn.Visible = (_tabs.CurrentTab == tweaksIdx);
+                }
             }
             UpdateTweaksRunLockState(inRun);
 
@@ -302,10 +308,14 @@ public partial class ModSettingsDialog : CanvasLayer
         _dialogPanel = new PanelContainer
         {
             Name = "DialogPanel",
-            AnchorLeft = 0.15f,
-            AnchorTop = 0.10f,
-            AnchorRight = 0.85f,
-            AnchorBottom = 0.90f,
+            AnchorLeft = 0.015f,
+            AnchorTop = 0.015f,
+            AnchorRight = 0.985f,
+            AnchorBottom = 0.985f,
+            OffsetLeft = 0,
+            OffsetTop = 0,
+            OffsetRight = 0,
+            OffsetBottom = 0,
             Theme = CreateModTheme(),
             Visible = false
         };
@@ -356,17 +366,30 @@ public partial class ModSettingsDialog : CanvasLayer
 
         _tabs.TabChanged += (tabIdx) =>
         {
-            if (tabIdx == 1) // Cards Tab
+            if (tabIdx == 0) // Relics Tab
+            {
+                RefreshRealTimeRelicTabs();
+            }
+            else if (tabIdx == 1) // Cards Tab
             {
                 RefreshRealTimeCardTabs();
+            }
+            
+            if (_applyConfigBtn != null)
+            {
+                _applyConfigBtn.Visible = (tabIdx == 4);
             }
         };
 
         // Bottom Action Bar (Save / Apply / Close)
         var footer = new HBoxContainer();
-        var saveBtn = new Button { Text = " Apply & Save Configuration " };
-        saveBtn.Pressed += SaveSettingsValues;
-
+        _applyConfigBtn = new Button { Text = " Apply Configuration ", Disabled = true, Visible = false };
+        _applyConfigBtn.Pressed += () =>
+        {
+            SaveSettingsValues();
+            _applyConfigBtn.Disabled = true;
+            _tweaksModified = false;
+        };
 
         var defaultBtn = new Button { Text = " Reset to Game Defaults " };
         defaultBtn.Pressed += () =>
@@ -409,12 +432,14 @@ public partial class ModSettingsDialog : CanvasLayer
             LoadSettingsValues();
             ConfigManager.SaveConfig();
             ModLogger.Info("Reset all settings to game defaults.");
+
+            MarkTweaksModified();
         };
 
         var doneBtn = new Button { Text = " Return to Game " };
         doneBtn.Pressed += CloseDialog;
 
-        footer.AddChild(saveBtn);
+        footer.AddChild(_applyConfigBtn);
         footer.AddChild(defaultBtn);
         footer.AddSpacer(false);
         footer.AddChild(doneBtn);
@@ -422,6 +447,15 @@ public partial class ModSettingsDialog : CanvasLayer
         contentVBox.AddChild(footer);
 
         AddChild(_dialogPanel);
+    }
+
+    private void MarkTweaksModified()
+    {
+        _tweaksModified = true;
+        if (_applyConfigBtn != null)
+        {
+            _applyConfigBtn.Disabled = false;
+        }
     }
 
     private Control BuildTweaksTab()
@@ -445,24 +479,28 @@ public partial class ModSettingsDialog : CanvasLayer
         var consoleKeyRow = new HBoxContainer();
         consoleKeyRow.AddChild(new Label { Text = "Console Hotkey: ", CustomMinimumSize = new Vector2(240, 0) });
         _consoleHotkeyInput = new LineEdit { PlaceholderText = "e.g. F1, Quoteleft (Default: F1)", CustomMinimumSize = new Vector2(200, 0) };
+        _consoleHotkeyInput.TextChanged += _ => MarkTweaksModified();
         consoleKeyRow.AddChild(_consoleHotkeyInput);
         vbox.AddChild(consoleKeyRow);
 
         var guiKeyRow = new HBoxContainer();
         guiKeyRow.AddChild(new Label { Text = "GUI Menu Overlay Hotkey: ", CustomMinimumSize = new Vector2(240, 0) });
         _guiHotkeyInput = new LineEdit { PlaceholderText = "e.g. F3, F8 (Default: F3)", CustomMinimumSize = new Vector2(200, 0) };
+        _guiHotkeyInput.TextChanged += _ => MarkTweaksModified();
         guiKeyRow.AddChild(_guiHotkeyInput);
         vbox.AddChild(guiKeyRow);
 
         var godKeyRow = new HBoxContainer();
         godKeyRow.AddChild(new Label { Text = "Quick God Mode Hotkey: ", CustomMinimumSize = new Vector2(240, 0) });
         _quickGodModeInput = new LineEdit { PlaceholderText = "e.g. F2 (Empty = Disabled)", CustomMinimumSize = new Vector2(200, 0) };
+        _quickGodModeInput.TextChanged += _ => MarkTweaksModified();
         godKeyRow.AddChild(_quickGodModeInput);
         vbox.AddChild(godKeyRow);
 
         var killKeyRow = new HBoxContainer();
         killKeyRow.AddChild(new Label { Text = "Quick Kill All Enemies Hotkey: ", CustomMinimumSize = new Vector2(240, 0) });
         _quickKillEnemiesInput = new LineEdit { PlaceholderText = "e.g. F4 (Empty = Disabled)", CustomMinimumSize = new Vector2(200, 0) };
+        _quickKillEnemiesInput.TextChanged += _ => MarkTweaksModified();
         killKeyRow.AddChild(_quickKillEnemiesInput);
         vbox.AddChild(killKeyRow);
 
@@ -471,32 +509,39 @@ public partial class ModSettingsDialog : CanvasLayer
 
         var mapRoomRow = new HBoxContainer();
         mapRoomRow.AddChild(new Label { Text = "Map Size (Floors / Room Count): ", CustomMinimumSize = new Vector2(240, 0) });
-        _mapRoomCountSpin = new SpinBox { MinValue = 5, MaxValue = 30, Value = 15, Step = 1 };
+        _mapRoomCountSpin = new SpinBox { MinValue = 15, MaxValue = 30, Value = 15, Step = 1, TooltipText = "Sets the number of rooms/floors per act (15 to 30). Minimum 15 is required by map generator." };
+        _mapRoomCountSpin.ValueChanged += _ => MarkTweaksModified();
         mapRoomRow.AddChild(_mapRoomCountSpin);
         vbox.AddChild(mapRoomRow);
 
         _goldSlider = AddSliderControl(vbox, "Gold Drop Multiplier:", 0.1f, 5.0f, 0.1f, 1.0f);
+        _goldSlider.ValueChanged += _ => MarkTweaksModified();
         _shopDiscountSlider = AddSliderControl(vbox, "Shop Discount Multiplier:", 0.1f, 2.0f, 0.05f, 1.0f);
+        _shopDiscountSlider.ValueChanged += _ => MarkTweaksModified();
 
         var cardRewardRow = new HBoxContainer();
         cardRewardRow.AddChild(new Label { Text = "Card Choices per Reward: ", CustomMinimumSize = new Vector2(240, 0) });
         _cardRewardSpin = new SpinBox { MinValue = 1, MaxValue = 10, Value = 3 };
+        _cardRewardSpin.ValueChanged += _ => MarkTweaksModified();
         cardRewardRow.AddChild(_cardRewardSpin);
         vbox.AddChild(cardRewardRow);
 
         var startGoldRow = new HBoxContainer();
         startGoldRow.AddChild(new Label { Text = "Starting Gold Bonus: ", CustomMinimumSize = new Vector2(240, 0) });
         _bonusGoldSpin = new SpinBox { MinValue = 0, MaxValue = 9999, Step = 25, Value = 0 };
+        _bonusGoldSpin.ValueChanged += _ => MarkTweaksModified();
         startGoldRow.AddChild(_bonusGoldSpin);
         vbox.AddChild(startGoldRow);
 
         var startHpRow = new HBoxContainer();
         startHpRow.AddChild(new Label { Text = "Starting Max HP Bonus: ", CustomMinimumSize = new Vector2(240, 0) });
         _bonusHpSpin = new SpinBox { MinValue = 0, MaxValue = 500, Step = 5, Value = 0 };
+        _bonusHpSpin.ValueChanged += _ => MarkTweaksModified();
         startHpRow.AddChild(_bonusHpSpin);
         vbox.AddChild(startHpRow);
 
-        _forceNeowCheck = new CheckBox { Text = " Spawn Neow at start? (Guarantees Neow blessing even in Custom/Seeded runs)" };
+        _forceNeowCheck = new CheckBox { Text = " Spawn Neow at start? (Uncheck to skip Neow and start directly on map)", TooltipText = "Guarantees Neow blessing when checked. When unchecked, skips Neow and starts directly on the map." };
+        _forceNeowCheck.Toggled += _ => MarkTweaksModified();
         vbox.AddChild(_forceNeowCheck);
 
         vbox.AddChild(new HSeparator());
@@ -509,33 +554,61 @@ public partial class ModSettingsDialog : CanvasLayer
         vbox.AddChild(fairNote);
 
         _eliteSlider = AddSliderControl(vbox, "Elite Encounter Weight:", 0.0f, 5.0f, 0.1f, 1.0f);
+        _eliteSlider.ValueChanged += _ => MarkTweaksModified();
         _shopSlider = AddSliderControl(vbox, "Shop Node Weight:", 0.0f, 5.0f, 0.1f, 1.0f);
+        _shopSlider.ValueChanged += _ => MarkTweaksModified();
         _eventSlider = AddSliderControl(vbox, "Event / Unknown Weight:", 0.0f, 5.0f, 0.1f, 1.0f);
+        _eventSlider.ValueChanged += _ => MarkTweaksModified();
         _restSlider = AddSliderControl(vbox, "Rest Site Weight:", 0.0f, 5.0f, 0.1f, 1.0f);
+        _restSlider.ValueChanged += _ => MarkTweaksModified();
         _combatSlider = AddSliderControl(vbox, "Normal Combat Weight:", 0.0f, 5.0f, 0.1f, 1.0f);
+        _combatSlider.ValueChanged += _ => MarkTweaksModified();
 
         vbox.AddChild(new HSeparator());
         vbox.AddChild(new Label { Text = "--- Enemy Multipliers & Scaling ---", Modulate = new Color(1f, 0.4f, 0.4f) });
 
         _enemyHpSlider = AddSliderControl(vbox, "Enemy Health Multiplier:", 0.1f, 10.0f, 0.1f, 1.0f);
+        _enemyHpSlider.ValueChanged += val =>
+        {
+            MarkTweaksModified();
+            ConfigManager.Current.PreRunTweaks.EnemyHealthMultiplier = (float)val;
+            GameHelper.RefreshCombatIntents();
+        };
+
         _enemyDmgSlider = AddSliderControl(vbox, "Enemy Damage Multiplier:", 0.0f, 10.0f, 0.1f, 1.0f);
+        _enemyDmgSlider.ValueChanged += val =>
+        {
+            MarkTweaksModified();
+            ConfigManager.Current.PreRunTweaks.EnemyDamageMultiplier = (float)val;
+            GameHelper.RefreshCombatIntents();
+        };
+
         _enemyDefSlider = AddSliderControl(vbox, "Enemy Defend/Block Multiplier:", 0.0f, 10.0f, 0.1f, 1.0f);
+        _enemyDefSlider.ValueChanged += val =>
+        {
+            MarkTweaksModified();
+            ConfigManager.Current.PreRunTweaks.EnemyDefendMultiplier = (float)val;
+            GameHelper.RefreshCombatIntents();
+        };
 
         vbox.AddChild(new HSeparator());
         vbox.AddChild(new Label { Text = "--- Endless Mode & Free Map Navigation ---", Modulate = new Color(0.8f, 0.5f, 1f) });
 
         _endlessModeCheck = new CheckBox { Text = " Enable Endless Mode (Scale enemies progressively each loop reset)" };
+        _endlessModeCheck.Toggled += _ => MarkTweaksModified();
         vbox.AddChild(_endlessModeCheck);
 
         var endlessMultRow = new HBoxContainer();
         endlessMultRow.AddChild(new Label { Text = "Endless Loop Scaling Multiplier: ", CustomMinimumSize = new Vector2(240, 0) });
         _endlessMultiplierSpin = new SpinBox { MinValue = 1.0, MaxValue = 10.0, Step = 0.1, Value = 2.0 };
+        _endlessMultiplierSpin.ValueChanged += _ => MarkTweaksModified();
         endlessMultRow.AddChild(_endlessMultiplierSpin);
         vbox.AddChild(endlessMultRow);
 
         _freeMapNavCheck = new CheckBox { Text = " Free Map Navigation (Flying Boots mode: click & travel to ANY room freely on map)" };
         _freeMapNavCheck.Toggled += val =>
         {
+            MarkTweaksModified();
             RuntimeStateManager.FreeMapNavigationEnabled = val;
             ConfigManager.Current.PreRunTweaks.FreeMapNavigation = val;
             if (val)
@@ -653,14 +726,23 @@ public partial class ModSettingsDialog : CanvasLayer
 
     private Control BuildAvailableRelicsSubTab()
     {
-        var scroll = new ScrollContainer { Name = "Available Relics", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, SizeFlagsVertical = Control.SizeFlags.ExpandFill };
-        var vbox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        var scroll = new ScrollContainer 
+        { 
+            Name = "Available Relics", 
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, 
+            SizeFlagsVertical = Control.SizeFlags.ExpandFill 
+        };
+        var vbox = new VBoxContainer 
+        { 
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, 
+            SizeFlagsVertical = Control.SizeFlags.ExpandFill 
+        };
         scroll.AddChild(vbox);
 
         var titleBox = new HBoxContainer();
-        titleBox.AddChild(new Label { Text = "Available Relics:", Modulate = new Color(0.8f, 0.5f, 1f), SizeFlagsHorizontal = Control.SizeFlags.ExpandFill });
+        titleBox.AddChild(new Label { Text = "Available Relics Compendium:", Modulate = new Color(0.85f, 0.55f, 1f), SizeFlagsHorizontal = Control.SizeFlags.ExpandFill });
         
-        var addAllBtn = new Button { Text = " Add All " };
+        var addAllBtn = new Button { Text = " Add All to Inventory " };
         addAllBtn.Pressed += () => 
         {
             var confirm = new ConfirmationDialog { Title = "Confirm Add All", DialogText = "Are you sure you want to add one of every available relic to your inventory?" };
@@ -674,13 +756,20 @@ public partial class ModSettingsDialog : CanvasLayer
         var searchRow = new HBoxContainer();
         var searchInput = new LineEdit
         {
-            PlaceholderText = "Search relics (e.g. 'Vajra', 'Anchor', 'Akabeko')...",
+            PlaceholderText = "Search relics by name, ID, or description (e.g. 'Vajra', 'Anchor', 'Akabeko')...",
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
         };
         searchRow.AddChild(searchInput);
         vbox.AddChild(searchRow);
 
-        var grid = new GridContainer { Columns = 3, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        var grid = new GridContainer 
+        { 
+            Columns = 4, 
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            SizeFlagsVertical = Control.SizeFlags.ExpandFill 
+        };
+        grid.AddThemeConstantOverride("h_separation", 10);
+        grid.AddThemeConstantOverride("v_separation", 10);
         vbox.AddChild(grid);
 
         var allRelics = AIOTweaks.Core.GameHelper.GetAllRelicIds();
@@ -688,24 +777,89 @@ public partial class ModSettingsDialog : CanvasLayer
 
         foreach (var r in allRelics)
         {
-            var btnBox = new HBoxContainer();
-            var lbl = new Label { Text = r, CustomMinimumSize = new Vector2(150, 0), ClipText = true };
-            
             var canonical = GameHelper.FindCanonicalRelicModel(r);
-            string tooltip = canonical != null ? GameHelper.GetRelicFullTooltip(canonical) : r;
-            lbl.TooltipText = tooltip;
-            btnBox.TooltipText = tooltip;
+            string fullTooltip = canonical != null ? GameHelper.GetRelicFullTooltip(canonical) : r;
+            string relicTitle = !string.IsNullOrWhiteSpace(canonical?.Title.GetFormattedText()) ? canonical.Title.GetFormattedText() : r;
+            Color rarityColor = GameHelper.GetRelicRarityColor(canonical);
 
-            var addBtn = new Button { Text = "+", TooltipText = "Add to player inventory" };
+            var panel = new PanelContainer 
+            { 
+                SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+                TooltipText = fullTooltip
+            };
+            var style = new StyleBoxFlat
+            {
+                BgColor = new Color(0.12f, 0.12f, 0.18f, 0.95f),
+                BorderWidthBottom = 1,
+                BorderWidthLeft = 1,
+                BorderWidthRight = 1,
+                BorderWidthTop = 1,
+                BorderColor = new Color(0.25f, 0.25f, 0.38f, 0.7f),
+                CornerRadiusTopLeft = 6,
+                CornerRadiusTopRight = 6,
+                CornerRadiusBottomLeft = 6,
+                CornerRadiusBottomRight = 6
+            };
+            panel.AddThemeStyleboxOverride("panel", style);
+
+            var margin = new MarginContainer();
+            margin.AddThemeConstantOverride("margin_top", 6);
+            margin.AddThemeConstantOverride("margin_bottom", 6);
+            margin.AddThemeConstantOverride("margin_left", 8);
+            margin.AddThemeConstantOverride("margin_right", 8);
+            panel.AddChild(margin);
+
+            var row = new HBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, Alignment = BoxContainer.AlignmentMode.Center };
+            margin.AddChild(row);
+
+            // Relic Icon
+            var tex = GameHelper.GetRelicIcon(canonical);
+            if (tex != null)
+            {
+                var iconRect = new TextureRect
+                {
+                    Texture = tex,
+                    CustomMinimumSize = new Vector2(44, 44),
+                    ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+                    StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+                    TextureFilter = CanvasItem.TextureFilterEnum.Linear
+                };
+                row.AddChild(iconRect);
+            }
+
+            var textVBox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, Alignment = BoxContainer.AlignmentMode.Center };
+            var lbl = new Label 
+            { 
+                Text = relicTitle, 
+                CustomMinimumSize = new Vector2(110, 0), 
+                ClipText = true, 
+                Modulate = rarityColor,
+                TooltipText = fullTooltip
+            };
+            textVBox.AddChild(lbl);
+
+            var rarityLabel = new Label
+            {
+                Text = canonical != null ? canonical.Rarity.ToString() : "",
+                Modulate = new Color(0.6f, 0.6f, 0.7f, 0.8f)
+            };
+            textVBox.AddChild(rarityLabel);
+            row.AddChild(textVBox);
+
+            var btnVBox = new VBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+            btnVBox.AddThemeConstantOverride("separation", 2);
+
+            var addBtn = new Button { Text = "+", TooltipText = "Add to player inventory", CustomMinimumSize = new Vector2(28, 22) };
             addBtn.Pressed += () => { RelicDirector.AddRelic(r); RefreshRealTimeRelicTabs(); };
-            var rmBtn = new Button { Text = "-", TooltipText = "Remove from player inventory" };
+            var rmBtn = new Button { Text = "-", TooltipText = "Remove from player inventory", CustomMinimumSize = new Vector2(28, 22) };
             rmBtn.Pressed += () => { RelicDirector.RemoveRelic(r); RefreshRealTimeRelicTabs(); };
-            
-            btnBox.AddChild(lbl);
-            btnBox.AddChild(addBtn);
-            btnBox.AddChild(rmBtn);
-            grid.AddChild(btnBox);
-            _availableRelicEntries.Add(new ItemEntry(r, btnBox, lbl));
+
+            btnVBox.AddChild(addBtn);
+            btnVBox.AddChild(rmBtn);
+            row.AddChild(btnVBox);
+
+            grid.AddChild(panel);
+            _availableRelicEntries.Add(new ItemEntry(r, panel, lbl));
         }
 
         searchInput.TextChanged += query =>
@@ -715,6 +869,7 @@ public partial class ModSettingsDialog : CanvasLayer
             {
                 bool matches = string.IsNullOrEmpty(q) || 
                                entry.Id.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                               (entry.Label != null && entry.Label.Text.Contains(q, StringComparison.OrdinalIgnoreCase)) ||
                                (entry.Label != null && entry.Label.TooltipText.Contains(q, StringComparison.OrdinalIgnoreCase));
                 entry.Container.Visible = matches;
             }
@@ -730,7 +885,7 @@ public partial class ModSettingsDialog : CanvasLayer
         scroll.AddChild(vbox);
 
         var titleBox = new HBoxContainer();
-        titleBox.AddChild(new Label { Text = "Equipped Relics:", Modulate = new Color(0.8f, 0.5f, 1f), SizeFlagsHorizontal = Control.SizeFlags.ExpandFill });
+        titleBox.AddChild(new Label { Text = "Equipped Relics:", Modulate = new Color(0.85f, 0.55f, 1f), SizeFlagsHorizontal = Control.SizeFlags.ExpandFill });
         
         var rmAllBtn = new Button { Text = " Remove All Relics " };
         rmAllBtn.Pressed += () => 
@@ -747,7 +902,7 @@ public partial class ModSettingsDialog : CanvasLayer
         titleBox.AddChild(refreshBtn);
         vbox.AddChild(titleBox);
 
-        _activeRelicsGrid = new GridContainer { Columns = 3, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, SizeFlagsVertical = Control.SizeFlags.ExpandFill };
+        _activeRelicsGrid = new GridContainer { Columns = 4, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, SizeFlagsVertical = Control.SizeFlags.ExpandFill };
         vbox.AddChild(_activeRelicsGrid);
         return scroll;
     }
@@ -762,6 +917,7 @@ public partial class ModSettingsDialog : CanvasLayer
         // 1. Update Active Relics Grid
         if (_activeRelicsGrid != null)
         {
+            _activeRelicsGrid.Columns = 4;
             _activeRelicsGrid.AddThemeConstantOverride("h_separation", 10);
             _activeRelicsGrid.AddThemeConstantOverride("v_separation", 10);
 
@@ -801,10 +957,23 @@ public partial class ModSettingsDialog : CanvasLayer
                 {
                     if (relic == null) continue;
 
-                    var panel = new PanelContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+                    string relicName = !string.IsNullOrWhiteSpace(relic.Title.GetFormattedText()) ? relic.Title.GetFormattedText() : relic.GetType().Name;
+                    string fullTooltip = GameHelper.GetRelicFullTooltip(relic);
+                    Color rarityColor = GameHelper.GetRelicRarityColor(relic);
+
+                    var panel = new PanelContainer 
+                    { 
+                        SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+                        TooltipText = fullTooltip
+                    };
                     var style = new StyleBoxFlat
                     {
-                        BgColor = new Color(0.18f, 0.15f, 0.25f, 0.9f),
+                        BgColor = new Color(0.14f, 0.13f, 0.22f, 0.95f),
+                        BorderWidthBottom = 1,
+                        BorderWidthLeft = 1,
+                        BorderWidthRight = 1,
+                        BorderWidthTop = 1,
+                        BorderColor = rarityColor * 0.7f,
                         CornerRadiusTopLeft = 6,
                         CornerRadiusTopRight = 6,
                         CornerRadiusBottomLeft = 6,
@@ -819,23 +988,43 @@ public partial class ModSettingsDialog : CanvasLayer
                     margin.AddThemeConstantOverride("margin_right", 8);
                     panel.AddChild(margin);
 
-                    var row = new HBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+                    var row = new HBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, Alignment = BoxContainer.AlignmentMode.Center };
                     margin.AddChild(row);
 
-                    string relicName = !string.IsNullOrWhiteSpace(relic.Title.GetFormattedText()) ? relic.Title.GetFormattedText() : relic.GetType().Name;
-                    string fullTooltip = GameHelper.GetRelicFullTooltip(relic);
+                    var tex = GameHelper.GetRelicIcon(relic);
+                    if (tex != null)
+                    {
+                        var iconRect = new TextureRect
+                        {
+                            Texture = tex,
+                            CustomMinimumSize = new Vector2(46, 46),
+                            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+                            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+                            TextureFilter = CanvasItem.TextureFilterEnum.Linear
+                        };
+                        row.AddChild(iconRect);
+                    }
+
+                    var textVBox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, Alignment = BoxContainer.AlignmentMode.Center };
                     var nameLabel = new Label
                     {
                         Text = relicName,
-                        CustomMinimumSize = new Vector2(160, 0),
+                        CustomMinimumSize = new Vector2(110, 0),
                         ClipText = true,
                         SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+                        Modulate = rarityColor,
                         TooltipText = fullTooltip
                     };
-                    row.AddChild(nameLabel);
+                    textVBox.AddChild(nameLabel);
 
-                    panel.TooltipText = fullTooltip;
-                    row.TooltipText = fullTooltip;
+                    string statusText = relic.ShowCounter ? $"Counter: {relic.DisplayAmount}" : (relic.StackCount > 1 ? $"x{relic.StackCount}" : relic.Rarity.ToString());
+                    var subLabel = new Label
+                    {
+                        Text = statusText,
+                        Modulate = new Color(0.7f, 0.75f, 0.85f, 0.85f)
+                    };
+                    textVBox.AddChild(subLabel);
+                    row.AddChild(textVBox);
 
                     var rmBtn = new Button { Text = " Remove ", TooltipText = $"Remove {relicName} from equipped inventory" };
                     string relTypeName = relic.GetType().Name;
@@ -870,15 +1059,17 @@ public partial class ModSettingsDialog : CanvasLayer
             {
                 if (entry.Label != null)
                 {
+                    var canonical = GameHelper.FindCanonicalRelicModel(entry.Id);
+                    string baseTitle = !string.IsNullOrWhiteSpace(canonical?.Title.GetFormattedText()) ? canonical.Title.GetFormattedText() : entry.Id;
                     if (relicCountMap.TryGetValue(entry.Id, out int count) && count > 0)
                     {
-                        entry.Label.Text = $"{entry.Id} (x{count})";
+                        entry.Label.Text = $"{baseTitle} (x{count})";
                         entry.Label.Modulate = new Color(0.8f, 1f, 0.6f);
                     }
                     else
                     {
-                        entry.Label.Text = entry.Id;
-                        entry.Label.Modulate = new Color(1f, 1f, 1f);
+                        entry.Label.Text = baseTitle;
+                        entry.Label.Modulate = GameHelper.GetRelicRarityColor(canonical);
                     }
                 }
             }
@@ -1971,8 +2162,17 @@ public partial class ModSettingsDialog : CanvasLayer
 
     private Control BuildPlayerTab()
     {
-        var scroll = new ScrollContainer { Name = "Player & Events" };
-        var vbox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        var scroll = new ScrollContainer 
+        { 
+            Name = "Player & Events", 
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, 
+            SizeFlagsVertical = Control.SizeFlags.ExpandFill 
+        };
+        var vbox = new VBoxContainer 
+        { 
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, 
+            SizeFlagsVertical = Control.SizeFlags.ExpandFill 
+        };
         scroll.AddChild(vbox);
 
         var selectedChar = GameHelper.GetSelectedCharacterModel();
@@ -1984,7 +2184,7 @@ public partial class ModSettingsDialog : CanvasLayer
 
         vbox.AddChild(new Label { Text = "--- Gold & Health Manipulation ---", Modulate = new Color(0.3f, 1f, 0.5f) });
         var goldRow = new HBoxContainer();
-        _goldAmountSpin = new SpinBox { MinValue = -9999, MaxValue = 9999, Step = 50, Value = defaultGold };
+        _goldAmountSpin = new SpinBox { MinValue = 0, MaxValue = 99999, Step = 50, Value = Math.Max(0, defaultGold) };
         var addGoldBtn = new Button { Text = " Add Gold " };
         addGoldBtn.Pressed += () => InventoryDirector.AddGold((int)_goldAmountSpin.Value);
         var setGoldBtn = new Button { Text = " Set Exact Gold " };
@@ -2005,7 +2205,7 @@ public partial class ModSettingsDialog : CanvasLayer
         vbox.AddChild(healRow);
 
         var damageRow = new HBoxContainer();
-        _damageAmountSpin = new SpinBox { MinValue = 1, MaxValue = 999, Step = 10, Value = 25 };
+        _damageAmountSpin = new SpinBox { MinValue = 1, MaxValue = 999, Step = 5, Value = 5 };
         var damageBtn = new Button { Text = " Damage Player " };
         damageBtn.Pressed += () => InventoryDirector.DamagePlayer((int)_damageAmountSpin.Value);
         damageRow.AddChild(new Label { Text = "Damage Amount: ", CustomMinimumSize = new Vector2(120, 0) });
@@ -2060,37 +2260,94 @@ public partial class ModSettingsDialog : CanvasLayer
         searchRow.AddChild(searchInput);
         vbox.AddChild(searchRow);
 
-        var grid = new GridContainer { Columns = 2, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        var grid = new GridContainer 
+        { 
+            Columns = 3, 
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            SizeFlagsVertical = Control.SizeFlags.ExpandFill
+        };
+        grid.AddThemeConstantOverride("h_separation", 10);
+        grid.AddThemeConstantOverride("v_separation", 10);
         vbox.AddChild(grid);
 
         var allEvents = GameHelper.GetAllEventInfos();
-        var eventEntries = new System.Collections.Generic.List<(GameHelper.EventInfo Info, HBoxContainer Container)>();
+        var eventEntries = new System.Collections.Generic.List<(GameHelper.EventInfo Info, Control Container)>();
 
         foreach (var info in allEvents)
         {
-            var btnBox = new HBoxContainer();
-            string labelText = info.IsAncient ? $"[Ancient] {info.DisplayName}" : info.DisplayName;
             string fullTooltip = GameHelper.GetEventFullTooltip(info);
-            var lbl = new Label 
+
+            var panel = new PanelContainer 
             { 
-                Text = labelText, 
-                CustomMinimumSize = new Vector2(240, 0), 
-                ClipText = true,
+                SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
                 TooltipText = fullTooltip
             };
-            if (info.IsAncient)
+            var borderCol = info.IsAncient ? new Color(1f, 0.75f, 0.3f, 0.8f) : new Color(0.3f, 0.55f, 0.85f, 0.6f);
+            var style = new StyleBoxFlat
             {
-                lbl.Modulate = new Color(1f, 0.85f, 0.4f);
-            }
+                BgColor = new Color(0.12f, 0.12f, 0.18f, 0.95f),
+                BorderWidthBottom = 1,
+                BorderWidthLeft = 1,
+                BorderWidthRight = 1,
+                BorderWidthTop = 1,
+                BorderColor = borderCol,
+                CornerRadiusTopLeft = 6,
+                CornerRadiusTopRight = 6,
+                CornerRadiusBottomLeft = 6,
+                CornerRadiusBottomRight = 6
+            };
+            panel.AddThemeStyleboxOverride("panel", style);
 
-            var forceBtn = new Button { Text = " Force ", TooltipText = $"Force immediate travel/trigger for {info.DisplayName}" };
-            forceBtn.Pressed += () => EventDirector.ForceImmediateEvent(info.Id);
+            var margin = new MarginContainer();
+            margin.AddThemeConstantOverride("margin_top", 8);
+            margin.AddThemeConstantOverride("margin_bottom", 8);
+            margin.AddThemeConstantOverride("margin_left", 10);
+            margin.AddThemeConstantOverride("margin_right", 10);
+            panel.AddChild(margin);
+
+            var row = new HBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, Alignment = BoxContainer.AlignmentMode.Center };
+            margin.AddChild(row);
+
+            var infoVBox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
             
-            btnBox.TooltipText = fullTooltip;
-            btnBox.AddChild(lbl);
-            btnBox.AddChild(forceBtn);
-            grid.AddChild(btnBox);
-            eventEntries.Add((info, btnBox));
+            var badgeRow = new HBoxContainer();
+            var badge = new Label
+            {
+                Text = info.IsAncient ? "[Ancient Event]" : "[Standard Event]",
+                Modulate = info.IsAncient ? new Color(1f, 0.8f, 0.35f) : new Color(0.4f, 0.85f, 1f)
+            };
+            badgeRow.AddChild(badge);
+            infoVBox.AddChild(badgeRow);
+
+            var titleLbl = new Label
+            {
+                Text = info.DisplayName,
+                CustomMinimumSize = new Vector2(160, 0),
+                ClipText = true,
+                Modulate = info.IsAncient ? new Color(1f, 0.95f, 0.7f) : new Color(1f, 1f, 1f),
+                TooltipText = fullTooltip
+            };
+            infoVBox.AddChild(titleLbl);
+
+            var idLbl = new Label
+            {
+                Text = $"Type: {info.TypeName}",
+                Modulate = new Color(0.6f, 0.65f, 0.75f, 0.7f)
+            };
+            infoVBox.AddChild(idLbl);
+            row.AddChild(infoVBox);
+
+            var forceBtn = new Button 
+            { 
+                Text = " Force ", 
+                TooltipText = $"Force immediate travel/trigger for {info.DisplayName}",
+                CustomMinimumSize = new Vector2(60, 32)
+            };
+            forceBtn.Pressed += () => EventDirector.ForceImmediateEvent(info.Id);
+            row.AddChild(forceBtn);
+
+            grid.AddChild(panel);
+            eventEntries.Add((info, panel));
         }
 
         searchInput.TextChanged += query =>
@@ -2189,18 +2446,28 @@ public partial class ModSettingsDialog : CanvasLayer
 
         if (player != null)
         {
-            if (_goldAmountSpin != null) _goldAmountSpin.Value = player.Gold;
+            if (_goldAmountSpin != null) _goldAmountSpin.Value = Math.Max(0, player.Gold);
             if (player.Creature != null)
             {
-                if (_maxHpAmountSpin != null) _maxHpAmountSpin.Value = player.Creature.MaxHp;
-                if (_currentHpAmountSpin != null) _currentHpAmountSpin.Value = player.Creature.CurrentHp;
+                if (_maxHpAmountSpin != null) _maxHpAmountSpin.Value = (double)player.Creature.MaxHp;
+                if (_currentHpAmountSpin != null) _currentHpAmountSpin.Value = (double)player.Creature.CurrentHp;
             }
         }
         else if (selectedChar != null)
         {
-            if (_goldAmountSpin != null) _goldAmountSpin.Value = selectedChar.StartingGold;
-            if (_maxHpAmountSpin != null) _maxHpAmountSpin.Value = selectedChar.StartingHp;
-            if (_currentHpAmountSpin != null) _currentHpAmountSpin.Value = selectedChar.StartingHp;
+            if (_goldAmountSpin != null) _goldAmountSpin.Value = Math.Max(0, selectedChar.StartingGold);
+            if (_maxHpAmountSpin != null) _maxHpAmountSpin.Value = (double)selectedChar.StartingHp;
+            if (_currentHpAmountSpin != null) _currentHpAmountSpin.Value = (double)selectedChar.StartingHp;
+        }
+
+        if (_damageAmountSpin != null)
+        {
+            _damageAmountSpin.Value = 5;
+        }
+
+        if (!_tweaksModified && _applyConfigBtn != null)
+        {
+            _applyConfigBtn.Disabled = true;
         }
     }
 

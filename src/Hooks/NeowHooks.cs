@@ -1,5 +1,5 @@
 using System;
-using System.Diagnostics;
+using System.Reflection;
 using HarmonyLib;
 using AIOTweaks.Core.Config;
 using MegaCrit.Sts2.Core.Runs;
@@ -8,35 +8,63 @@ using AIOTweaks.Core.Logging;
 namespace AIOTweaks.Hooks;
 
 /// <summary>
-/// Ensures Neow still spawns when GameMode is set to Custom (due to Tweaks).
+/// Controls whether Neow spawns at the start of a run based on the ForceNeowBonus pre-run tweak.
+/// If true, guarantees Neow spawns (StartedWithNeow = true).
+/// If false, skips Neow and enters the map directly (StartedWithNeow = false).
 /// </summary>
-[HarmonyPatch(typeof(RunState), "get_GameMode")]
 public static class NeowHooks
 {
-    [HarmonyPostfix]
-    public static void Postfix(ref GameMode __result)
+    private static readonly PropertyInfo? RunManagerStateProp = typeof(RunManager).GetProperty("State", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+
+    private static RunState? GetRunState(RunManager? runManager)
     {
-        try
+        if (runManager == null) return null;
+        return (RunManagerStateProp?.GetValue(runManager) as RunState) ?? runManager.DebugOnlyGetState();
+    }
+
+    [HarmonyPatch(typeof(RunManager), "SetStartedWithNeowFlag")]
+    public static class SetStartedWithNeowFlagPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(RunManager __instance)
         {
-            if (ConfigManager.Current.PreRunTweaks.ForceNeowBonus && __result == GameMode.Custom)
+            try
             {
-                // Neow generation logic usually checks for GameMode.Standard
-                var trace = new StackTrace();
-                foreach (var frame in trace.GetFrames())
+                var state = GetRunState(__instance);
+                if (state?.ExtraFields != null)
                 {
-                    var method = frame.GetMethod();
-                    if (method != null && method.Name.Contains("Neow"))
-                    {
-                        ModLogger.Verbose("NeowHooks", $"ForceNeowBonus active: changing GameMode.Custom -> GameMode.Standard for Neow check in {method.Name}");
-                        __result = GameMode.Standard;
-                        break;
-                    }
+                    bool forceNeow = ConfigManager.Current.PreRunTweaks.ForceNeowBonus;
+                    state.ExtraFields.StartedWithNeow = forceNeow;
+                    ModLogger.Info($"NeowHooks: SetStartedWithNeowFlag override applied -> StartedWithNeow = {forceNeow}");
                 }
             }
+            catch (Exception ex)
+            {
+                ModLogger.Error("Error in SetStartedWithNeowFlagPatch", ex);
+            }
         }
-        catch (Exception ex)
+    }
+
+    [HarmonyPatch(typeof(RunManager), "InitializeNewRun")]
+    public static class InitializeNewRunPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(RunManager __instance)
         {
-            ModLogger.Debug($"Error in NeowHooks: {ex.Message}");
+            try
+            {
+                var state = GetRunState(__instance);
+                if (state?.ExtraFields != null)
+                {
+                    bool forceNeow = ConfigManager.Current.PreRunTweaks.ForceNeowBonus;
+                    state.ExtraFields.StartedWithNeow = forceNeow;
+                    ModLogger.Verbose("NeowHooks", $"InitializeNewRun -> StartedWithNeow ensured to {forceNeow}");
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error("Error in InitializeNewRunPatch", ex);
+            }
         }
     }
 }

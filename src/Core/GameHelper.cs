@@ -317,6 +317,66 @@ public static class GameHelper
         }
     }
 
+    /// <summary>
+    /// Forces real-time visual refresh of enemy attack intentions, state displays, and damage numbers across all combat creature nodes.
+    /// </summary>
+    public static void RefreshCombatIntents()
+    {
+        try
+        {
+            if (MegaCrit.Sts2.Core.Nodes.NRun.Instance?.CombatRoom != null)
+            {
+                var combatRoom = MegaCrit.Sts2.Core.Nodes.NRun.Instance.CombatRoom;
+                foreach (var node in combatRoom.CreatureNodes)
+                {
+                    if (node != null && GodotObject.IsInstanceValid(node))
+                    {
+                        // 1. Refresh intents asynchronously
+                        try
+                        {
+                            _ = node.RefreshIntents();
+                        }
+                        catch { }
+
+                        // 2. Refresh creature state display
+                        try
+                        {
+                            var stateDisplayField = typeof(MegaCrit.Sts2.Core.Nodes.Combat.NCreature).GetField("_stateDisplay", BindingFlags.NonPublic | BindingFlags.Instance);
+                            if (stateDisplayField?.GetValue(node) is GodotObject stateDisplay && GodotObject.IsInstanceValid(stateDisplay))
+                            {
+                                stateDisplay.Call("RefreshValues");
+                            }
+                        }
+                        catch { }
+
+                        // 3. Refresh NIntent visual nodes
+                        try
+                        {
+                            var intentContainer = node.IntentContainer;
+                            if (intentContainer != null && GodotObject.IsInstanceValid(intentContainer))
+                            {
+                                foreach (Node child in intentContainer.GetChildren())
+                                {
+                                    if (child != null && GodotObject.IsInstanceValid(child))
+                                    {
+                                        var updateVisualsMethod = child.GetType().GetMethod("UpdateVisuals", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                                        updateVisualsMethod?.Invoke(child, null);
+                                    }
+                                }
+                            }
+                        }
+                        catch { }
+                    }
+                }
+                ModLogger.Verbose("GameHelper", "RefreshCombatIntents: successfully updated monster attack intentions across all active combatants.");
+            }
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Debug($"RefreshCombatIntents notice: {ex.Message}");
+        }
+    }
+
     public static List<string> GetAllRelicIds(bool forceRefresh = false)
     {
         if (!forceRefresh && _cachedRelicIds != null && _cachedRelicIds.Count > 0)
@@ -852,16 +912,112 @@ public static class GameHelper
         return null;
     }
 
+    public static string CleanBbCode(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return "";
+        // Strip custom STS2 & Godot BBCode tags like [jitter], [sine], [b], [i], [orange], [gold], [aqua], [color=...], etc.
+        string cleaned = System.Text.RegularExpressions.Regex.Replace(text, @"\[/?[a-zA-Z0-9_#=]+\]", "");
+        // Clean up excessive whitespace/blank lines while preserving readable paragraphs
+        cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, @"\n{3,}", "\n\n");
+        return cleaned.Trim();
+    }
+
+    public static string ResolveDynamicVariables(string text, EventModel? ev)
+    {
+        if (string.IsNullOrWhiteSpace(text) || ev == null) return text ?? "";
+        try
+        {
+            // 1. Resolve from DynamicVars dictionary
+            var dynamicVarsProp = ev.GetType().GetProperty("DynamicVars", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            if (dynamicVarsProp?.GetValue(ev) is System.Collections.IEnumerable dynamicVars)
+            {
+                foreach (var item in dynamicVars)
+                {
+                    if (item == null) continue;
+                    var keyProp = item.GetType().GetProperty("Key");
+                    var valProp = item.GetType().GetProperty("Value");
+                    string? key = keyProp?.GetValue(item)?.ToString();
+                    object? valObj = valProp?.GetValue(item);
+                    if (!string.IsNullOrEmpty(key) && valObj != null)
+                    {
+                        string valStr = valObj.ToString() ?? "";
+                        var intValProp = valObj.GetType().GetProperty("IntValue") ?? valObj.GetType().GetProperty("BaseValue");
+                        if (intValProp != null)
+                        {
+                            var v = intValProp.GetValue(valObj);
+                            if (v != null) valStr = v.ToString() ?? valStr;
+                        }
+                        text = text.Replace($"{{{key}}}", valStr, StringComparison.OrdinalIgnoreCase);
+                    }
+                }
+            }
+
+            // 2. Resolve from CanonicalVars if any remain
+            var canonicalVarsProp = ev.GetType().GetProperty("CanonicalVars", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            if (canonicalVarsProp?.GetValue(ev) is System.Collections.IEnumerable canonicalVars)
+            {
+                foreach (var item in canonicalVars)
+                {
+                    if (item == null) continue;
+                    var nameProp = item.GetType().GetProperty("Name");
+                    var baseValProp = item.GetType().GetProperty("BaseValue") ?? item.GetType().GetProperty("IntValue");
+                    string? name = nameProp?.GetValue(item)?.ToString();
+                    object? bVal = baseValProp?.GetValue(item);
+                    if (!string.IsNullOrEmpty(name) && bVal != null)
+                    {
+                        text = text.Replace($"{{{name}}}", bVal.ToString() ?? "", StringComparison.OrdinalIgnoreCase);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Debug($"ResolveDynamicVariables notice: {ex.Message}");
+        }
+        return text;
+    }
+
+    public static string FormatEventLocString(MegaCrit.Sts2.Core.Localization.LocString? loc, EventModel? ev)
+    {
+        if (loc == null) return "";
+        try
+        {
+            // Bind dynamic variables if available
+            if (ev?.DynamicVars != null)
+            {
+                try
+                {
+                    ev.DynamicVars.AddTo(loc);
+                }
+                catch { }
+            }
+
+            string formatted = loc.GetFormattedText();
+            if (string.IsNullOrWhiteSpace(formatted) || formatted.StartsWith("LocString table", StringComparison.OrdinalIgnoreCase))
+            {
+                formatted = loc.GetRawText();
+            }
+
+            formatted = ResolveDynamicVariables(formatted, ev);
+            return CleanBbCode(formatted);
+        }
+        catch
+        {
+            string raw = loc.ToString() ?? "";
+            return CleanBbCode(ResolveDynamicVariables(raw, ev));
+        }
+    }
+
     public static string GetEventDescription(EventModel? ev)
     {
         if (ev == null) return "";
         try
         {
-            var initDesc = ev.InitialDescription?.GetFormattedText();
-            if (!string.IsNullOrWhiteSpace(initDesc)) return initDesc.Trim();
+            string initDesc = FormatEventLocString(ev.InitialDescription, ev);
+            if (!string.IsNullOrWhiteSpace(initDesc)) return initDesc;
 
-            var desc = ev.Description?.GetFormattedText();
-            if (!string.IsNullOrWhiteSpace(desc)) return desc.Trim();
+            string desc = FormatEventLocString(ev.Description, ev);
+            if (!string.IsNullOrWhiteSpace(desc)) return desc;
 
             foreach (var prop in ev.GetType().GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
             {
@@ -870,13 +1026,18 @@ public static class GameHelper
                     prop.Name.Contains("Story", StringComparison.OrdinalIgnoreCase))
                 {
                     var val = prop.GetValue(ev);
-                    if (val != null)
+                    if (val is MegaCrit.Sts2.Core.Localization.LocString loc)
+                    {
+                        string t = FormatEventLocString(loc, ev);
+                        if (!string.IsNullOrWhiteSpace(t)) return t;
+                    }
+                    else if (val != null)
                     {
                         var method = val.GetType().GetMethod("GetFormattedText");
                         if (method != null)
                         {
                             string? text = method.Invoke(val, null) as string;
-                            if (!string.IsNullOrWhiteSpace(text)) return text.Trim();
+                            if (!string.IsNullOrWhiteSpace(text)) return CleanBbCode(ResolveDynamicVariables(text, ev));
                         }
                     }
                 }
@@ -906,38 +1067,100 @@ public static class GameHelper
                 }
 
                 // Extract Choices / Options if available
-                var optionsProp = ev.GetType().GetProperty("GameInfoOptions") ?? ev.GetType().GetProperty("CurrentOptions");
-                var options = optionsProp?.GetValue(ev) as System.Collections.IEnumerable;
-                if (options != null)
+                var optionLines = new List<string>();
+
+                // 1. Try GameInfoOptions
+                var gameInfoProp = ev.GetType().GetProperty("GameInfoOptions", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                if (gameInfoProp != null)
                 {
-                    var optionLines = new List<string>();
-                    foreach (var opt in options)
+                    try
                     {
-                        if (opt == null) continue;
-                        var tProp = opt.GetType().GetProperty("Title");
-                        var dProp = opt.GetType().GetProperty("Description");
-                        string oTitle = (tProp?.GetValue(opt) as MegaCrit.Sts2.Core.Localization.LocString)?.GetFormattedText() ?? opt.ToString() ?? "";
-                        string oDesc = (dProp?.GetValue(opt) as MegaCrit.Sts2.Core.Localization.LocString)?.GetFormattedText() ?? "";
-                        if (!string.IsNullOrWhiteSpace(oTitle))
+                        if (gameInfoProp.GetValue(ev) is System.Collections.IEnumerable infoOpts)
                         {
-                            if (!string.IsNullOrWhiteSpace(oDesc))
+                            string? pendingTitle = null;
+                            foreach (var item in infoOpts)
                             {
-                                optionLines.Add($"• {oTitle}: {oDesc}");
+                                if (item is MegaCrit.Sts2.Core.Localization.LocString locItem)
+                                {
+                                    string text = FormatEventLocString(locItem, ev);
+                                    if (string.IsNullOrWhiteSpace(text)) continue;
+
+                                    if (locItem.LocEntryKey.EndsWith(".title", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        pendingTitle = text;
+                                    }
+                                    else if (locItem.LocEntryKey.EndsWith(".description", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        if (!string.IsNullOrEmpty(pendingTitle))
+                                        {
+                                            optionLines.Add($"• {pendingTitle}: {text}");
+                                            pendingTitle = null;
+                                        }
+                                        else
+                                        {
+                                            optionLines.Add($"• {text}");
+                                        }
+                                    }
+                                    else
+                                    {
+                                        optionLines.Add($"• {text}");
+                                    }
+                                }
                             }
-                            else
+                            if (!string.IsNullOrEmpty(pendingTitle))
                             {
-                                optionLines.Add($"• {oTitle}");
+                                optionLines.Add($"• {pendingTitle}");
                             }
                         }
                     }
-                    if (optionLines.Count > 0)
+                    catch { }
+                }
+
+                // 2. Fallback to CurrentOptions / GenerateInitialOptions if GameInfoOptions had no items
+                if (optionLines.Count == 0)
+                {
+                    try
                     {
-                        sb.AppendLine();
-                        sb.AppendLine("Choices / Selections:");
-                        foreach (var line in optionLines)
+                        var optionsProp = ev.GetType().GetProperty("CurrentOptions", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                        var options = optionsProp?.GetValue(ev) as System.Collections.IEnumerable;
+                        if (options == null)
                         {
-                            sb.AppendLine(line);
+                            var genMethod = ev.GetType().GetMethod("GenerateInitialOptions", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                            options = genMethod?.Invoke(ev, null) as System.Collections.IEnumerable;
                         }
+
+                        if (options != null)
+                        {
+                            foreach (var opt in options)
+                            {
+                                if (opt == null) continue;
+                                if (opt is MegaCrit.Sts2.Core.Events.EventOption evOpt)
+                                {
+                                    string t = FormatEventLocString(evOpt.Title, ev);
+                                    string d = FormatEventLocString(evOpt.Description, ev);
+                                    if (!string.IsNullOrWhiteSpace(t))
+                                    {
+                                        optionLines.Add(!string.IsNullOrWhiteSpace(d) ? $"• {t}: {d}" : $"• {t}");
+                                    }
+                                }
+                                else if (opt is MegaCrit.Sts2.Core.Localization.LocString loc)
+                                {
+                                    string t = FormatEventLocString(loc, ev);
+                                    if (!string.IsNullOrWhiteSpace(t)) optionLines.Add($"• {t}");
+                                }
+                            }
+                        }
+                    }
+                    catch { }
+                }
+
+                if (optionLines.Count > 0)
+                {
+                    sb.AppendLine();
+                    sb.AppendLine("Choices / Options:");
+                    foreach (var line in optionLines)
+                    {
+                        sb.AppendLine(line);
                     }
                 }
             }
@@ -1199,27 +1422,59 @@ public static class GameHelper
         if (relic == null) return "";
         try
         {
-            foreach (var prop in relic.GetType().GetProperties())
+            // 1. Try DynamicDescription first (the actual in-game functional text)
+            try
             {
-                if (prop.Name.Contains("Desc", StringComparison.OrdinalIgnoreCase) || 
-                    prop.Name.Contains("Text", StringComparison.OrdinalIgnoreCase) ||
-                    prop.Name.Contains("Detail", StringComparison.OrdinalIgnoreCase) ||
-                    prop.Name.Contains("Flavor", StringComparison.OrdinalIgnoreCase))
+                string dyn = relic.DynamicDescription.GetFormattedText();
+                if (!string.IsNullOrWhiteSpace(dyn))
                 {
-                    var val = prop.GetValue(relic);
-                    if (val != null)
+                    return CleanBbCode(dyn).Trim();
+                }
+            }
+            catch { }
+
+            // 2. Try HoverTip.Description
+            try
+            {
+                var ht = relic.HoverTip;
+                if (!string.IsNullOrWhiteSpace(ht.Description))
+                {
+                    return CleanBbCode(ht.Description).Trim();
+                }
+            }
+            catch { }
+
+            // 3. Try Description property
+            try
+            {
+                var descProp = relic.GetType().GetProperty("Description", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                if (descProp?.GetValue(relic) is MegaCrit.Sts2.Core.Localization.LocString loc)
+                {
+                    string text = loc.GetFormattedText();
+                    if (!string.IsNullOrWhiteSpace(text))
                     {
-                        var method = val.GetType().GetMethod("GetFormattedText");
-                        if (method != null)
-                        {
-                            string? text = method.Invoke(val, null) as string;
-                            if (!string.IsNullOrWhiteSpace(text)) return text.Trim();
-                        }
-                        string s = val.ToString() ?? "";
-                        if (!string.IsNullOrWhiteSpace(s)) return s.Trim();
+                        return CleanBbCode(text).Trim();
                     }
                 }
             }
+            catch { }
+
+            // 4. Try EventDescription
+            try
+            {
+                var eventDescProp = relic.GetType().GetProperty("DynamicEventDescription", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance) ??
+                                    relic.GetType().GetProperty("EventDescription", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                if (eventDescProp?.GetValue(relic) is MegaCrit.Sts2.Core.Localization.LocString loc)
+                {
+                    string text = loc.GetFormattedText();
+                    if (!string.IsNullOrWhiteSpace(text))
+                    {
+                        return CleanBbCode(text).Trim();
+                    }
+                }
+            }
+            catch { }
+
             return "";
         }
         catch (Exception ex)
@@ -1234,17 +1489,75 @@ public static class GameHelper
         if (relic == null) return "";
         try
         {
-            string title = !string.IsNullOrWhiteSpace(relic.Title.GetFormattedText()) ? relic.Title.GetFormattedText() : relic.GetType().Name;
+            string title = !string.IsNullOrWhiteSpace(relic.Title.GetFormattedText()) ? CleanBbCode(relic.Title.GetFormattedText()) : relic.GetType().Name;
             var sb = new System.Text.StringBuilder();
             sb.AppendLine(title);
             sb.AppendLine($"Rarity: {relic.Rarity}");
 
+            // 1. Relic main gameplay description
             string desc = GetRelicDescription(relic);
             if (!string.IsNullOrWhiteSpace(desc))
             {
                 sb.AppendLine();
                 sb.AppendLine(desc);
             }
+
+            // 2. Extra Keyword HoverTips (e.g. Doom, Strength, Block, etc.)
+            try
+            {
+                var hoverTips = relic.HoverTips;
+                if (hoverTips != null)
+                {
+                    foreach (var tip in hoverTips)
+                    {
+                        if (tip is MegaCrit.Sts2.Core.HoverTips.HoverTip ht)
+                        {
+                            string tipTitle = CleanBbCode(ht.Title ?? "").Trim();
+                            string tipDesc = CleanBbCode(ht.Description ?? "").Trim();
+
+                            // Skip if it's the main relic tooltip itself
+                            if (tipTitle.Equals(title, StringComparison.OrdinalIgnoreCase) || 
+                                tipDesc.Equals(desc, StringComparison.OrdinalIgnoreCase))
+                            {
+                                continue;
+                            }
+
+                            if (!string.IsNullOrWhiteSpace(tipTitle) && !string.IsNullOrWhiteSpace(tipDesc))
+                            {
+                                sb.AppendLine();
+                                sb.AppendLine($"[{tipTitle}]");
+                                sb.AppendLine(tipDesc);
+                            }
+                        }
+                        else if (tip is MegaCrit.Sts2.Core.HoverTips.CardHoverTip cardTip && cardTip.Card != null)
+                        {
+                            string cardTitle = CleanBbCode(cardTip.Card.Title ?? cardTip.Card.GetType().Name).Trim();
+                            string cardDesc = CleanBbCode(cardTip.Card.Description?.GetFormattedText() ?? "").Trim();
+                            if (!string.IsNullOrWhiteSpace(cardTitle) && !string.IsNullOrWhiteSpace(cardDesc))
+                            {
+                                sb.AppendLine();
+                                sb.AppendLine($"[{cardTitle}]");
+                                sb.AppendLine(cardDesc);
+                            }
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            // 3. Add Flavor lore if distinct and not a generic placeholder
+            try
+            {
+                string flavor = CleanBbCode(relic.Flavor.GetFormattedText() ?? "").Trim();
+                if (!string.IsNullOrWhiteSpace(flavor) && 
+                    !flavor.Contains("revealed in the future", StringComparison.OrdinalIgnoreCase) &&
+                    !flavor.Equals(desc, StringComparison.OrdinalIgnoreCase))
+                {
+                    sb.AppendLine();
+                    sb.AppendLine($"\"{flavor}\"");
+                }
+            }
+            catch { }
 
             return sb.ToString().TrimEnd();
         }
@@ -1253,6 +1566,49 @@ public static class GameHelper
             ModLogger.Debug($"GetRelicFullTooltip error: {ex.Message}");
             return relic.GetType().Name;
         }
+    }
+
+    public static Texture2D? GetRelicIcon(RelicModel? relic)
+    {
+        if (relic == null) return null;
+        try
+        {
+            if (relic.Icon != null) return relic.Icon;
+            if (relic.BigIcon != null) return relic.BigIcon;
+            if (!string.IsNullOrEmpty(relic.IconPath))
+            {
+                try { var t = GD.Load<Texture2D>(relic.IconPath); if (t != null) return t; } catch {}
+            }
+            if (!string.IsNullOrEmpty(relic.PackedIconPath))
+            {
+                try { var t = GD.Load<Texture2D>(relic.PackedIconPath); if (t != null) return t; } catch {}
+            }
+        }
+        catch { }
+        return null;
+    }
+
+    public static Texture2D? GetRelicIcon(string relicId)
+    {
+        if (string.IsNullOrWhiteSpace(relicId)) return null;
+        var canonical = FindCanonicalRelicModel(relicId);
+        return canonical != null ? GetRelicIcon(canonical) : null;
+    }
+
+    public static Color GetRelicRarityColor(RelicModel? relic)
+    {
+        if (relic == null) return new Color(1f, 1f, 1f);
+        return relic.Rarity switch
+        {
+            MegaCrit.Sts2.Core.Entities.Relics.RelicRarity.Starter => new Color(0.65f, 0.9f, 0.65f),
+            MegaCrit.Sts2.Core.Entities.Relics.RelicRarity.Common => new Color(0.85f, 0.85f, 0.9f),
+            MegaCrit.Sts2.Core.Entities.Relics.RelicRarity.Uncommon => new Color(0.4f, 0.85f, 1f),
+            MegaCrit.Sts2.Core.Entities.Relics.RelicRarity.Rare => new Color(1f, 0.85f, 0.3f),
+            MegaCrit.Sts2.Core.Entities.Relics.RelicRarity.Shop => new Color(0.9f, 0.6f, 1f),
+            MegaCrit.Sts2.Core.Entities.Relics.RelicRarity.Event => new Color(0.45f, 1f, 0.65f),
+            MegaCrit.Sts2.Core.Entities.Relics.RelicRarity.Ancient => new Color(1f, 0.7f, 0.2f),
+            _ => new Color(1f, 1f, 1f)
+        };
     }
 
     private static List<string>? _cachedEnchantmentIds;
@@ -1531,22 +1887,12 @@ public static class GameHelper
                     var scopedCard = cardScope.CreateCard(canonical, player);
                     if (scopedCard != null)
                     {
+                        if (player.RunState != null && !player.RunState.ContainsCard(scopedCard))
+                        {
+                            player.RunState.AddCard(scopedCard, player);
+                        }
                         ModLogger.Verbose("GameHelper", "Created card via player.RunState ICardScope.");
                         return scopedCard;
-                    }
-                }
-                catch { }
-            }
-
-            if (player.Creature?.CombatState is ICardScope combatScope)
-            {
-                try
-                {
-                    var scopedCombatCard = combatScope.CreateCard(canonical, player);
-                    if (scopedCombatCard != null)
-                    {
-                        ModLogger.Verbose("GameHelper", "Created card via player.Creature.CombatState ICardScope.");
-                        return scopedCombatCard;
                     }
                 }
                 catch { }
@@ -1557,6 +1903,10 @@ public static class GameHelper
                 var clone = canonical.CreateCloneForPlayer(player);
                 if (clone != null)
                 {
+                    if (player.RunState != null && !player.RunState.ContainsCard(clone))
+                    {
+                        player.RunState.AddCard(clone, player);
+                    }
                     ModLogger.Verbose("GameHelper", "Created card via canonical.CreateCloneForPlayer.");
                     return clone;
                 }
@@ -1569,6 +1919,10 @@ public static class GameHelper
             var mutable = canonical.ToMutable();
             if (mutable != null)
             {
+                if (player?.RunState != null && !player.RunState.ContainsCard(mutable))
+                {
+                    player.RunState.AddCard(mutable, player);
+                }
                 ModLogger.Verbose("GameHelper", "Created card via canonical.ToMutable.");
                 return mutable;
             }
@@ -1578,12 +1932,148 @@ public static class GameHelper
         try
         {
             var inst = Activator.CreateInstance(canonical.GetType()) as CardModel;
+            if (inst != null && player?.RunState != null && !player.RunState.ContainsCard(inst))
+            {
+                player.RunState.AddCard(inst, player);
+            }
             ModLogger.Verbose("GameHelper", "Created card via Activator.CreateInstance fallback.");
             return inst;
         }
         catch { }
 
         return null;
+    }
+
+    /// <summary>
+    /// Creates a card model instance specifically scoped and registered in the player's active CombatState.
+    /// This prevents turn-loop softlocks when adding cards mid-combat.
+    /// </summary>
+    public static CardModel? CreateCombatCardForPlayer(CardModel canonical, Player? player = null)
+    {
+        if (canonical == null) return null;
+        player ??= GetActivePlayer();
+        ModLogger.Verbose("GameHelper", $"CreateCombatCardForPlayer: canonical={canonical.GetType().Name}, player={player?.GetType().Name ?? "null"}");
+
+        var combatState = player?.PlayerCombatState?.CombatState ?? player?.Creature?.CombatState;
+
+        if (player != null && combatState != null)
+        {
+            if (combatState is ICardScope combatScope)
+            {
+                try
+                {
+                    var scopedCombatCard = combatScope.CreateCard(canonical, player);
+                    if (scopedCombatCard != null)
+                    {
+                        if (!combatState.ContainsCard(scopedCombatCard))
+                        {
+                            combatState.AddCard(scopedCombatCard, player);
+                        }
+                        ModLogger.Verbose("GameHelper", "Created combat card via CombatState ICardScope.");
+                        return scopedCombatCard;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    ModLogger.Debug($"combatScope.CreateCard notice: {ex.Message}");
+                }
+            }
+
+            try
+            {
+                var clone = canonical.CreateCloneForPlayer(player);
+                if (clone != null)
+                {
+                    if (!combatState.ContainsCard(clone))
+                    {
+                        combatState.AddCard(clone, player);
+                    }
+                    ModLogger.Verbose("GameHelper", "Created combat card via canonical.CreateCloneForPlayer and registered in CombatState.");
+                    return clone;
+                }
+            }
+            catch { }
+        }
+
+        // Fallback: regular player creation and explicit CombatState registration if active
+        var fallback = CreateCardForPlayer(canonical, player);
+        if (fallback != null && combatState != null && !combatState.ContainsCard(fallback))
+        {
+            try
+            {
+                combatState.AddCard(fallback, player);
+                ModLogger.Verbose("GameHelper", "Explicitly registered fallback card in CombatState.");
+            }
+            catch { }
+        }
+        return fallback;
+    }
+
+    /// <summary>
+    /// Retrieves all active keywords/attributes assigned to a card model.
+    /// </summary>
+    public static IReadOnlySet<MegaCrit.Sts2.Core.Entities.Cards.CardKeyword> GetCardKeywords(CardModel card)
+    {
+        if (card == null) return new HashSet<MegaCrit.Sts2.Core.Entities.Cards.CardKeyword>();
+        try
+        {
+            return card.Keywords ?? new HashSet<MegaCrit.Sts2.Core.Entities.Cards.CardKeyword>();
+        }
+        catch
+        {
+            return new HashSet<MegaCrit.Sts2.Core.Entities.Cards.CardKeyword>();
+        }
+    }
+
+    /// <summary>
+    /// Returns whether the card currently possesses the specified keyword/attribute.
+    /// </summary>
+    public static bool HasCardKeyword(CardModel card, MegaCrit.Sts2.Core.Entities.Cards.CardKeyword keyword)
+    {
+        if (card == null) return false;
+        try
+        {
+            return card.Keywords != null && card.Keywords.Contains(keyword);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Returns all relevant CardKeyword values available in the game.
+    /// </summary>
+    public static MegaCrit.Sts2.Core.Entities.Cards.CardKeyword[] GetAllCardKeywords()
+    {
+        return new[]
+        {
+            MegaCrit.Sts2.Core.Entities.Cards.CardKeyword.Ethereal,
+            MegaCrit.Sts2.Core.Entities.Cards.CardKeyword.Exhaust,
+            MegaCrit.Sts2.Core.Entities.Cards.CardKeyword.Eternal,
+            MegaCrit.Sts2.Core.Entities.Cards.CardKeyword.Unplayable,
+            MegaCrit.Sts2.Core.Entities.Cards.CardKeyword.Retain,
+            MegaCrit.Sts2.Core.Entities.Cards.CardKeyword.Innate,
+            MegaCrit.Sts2.Core.Entities.Cards.CardKeyword.Sly
+        };
+    }
+
+    /// <summary>
+    /// Returns a distinct theme color for rendering keyword badges.
+    /// </summary>
+    public static Color GetKeywordBadgeColor(MegaCrit.Sts2.Core.Entities.Cards.CardKeyword keyword)
+    {
+        return keyword switch
+        {
+            MegaCrit.Sts2.Core.Entities.Cards.CardKeyword.Ethereal => new Color(0.35f, 0.85f, 1f),      // Cyan / Ghostly
+            MegaCrit.Sts2.Core.Entities.Cards.CardKeyword.Exhaust => new Color(1f, 0.55f, 0.2f),       // Fiery Orange
+            MegaCrit.Sts2.Core.Entities.Cards.CardKeyword.Eternal => new Color(1f, 0.85f, 0.25f),      // Gold / Eternal
+            MegaCrit.Sts2.Core.Entities.Cards.CardKeyword.Unplayable => new Color(1f, 0.35f, 0.35f),   // Crimson / Red
+            MegaCrit.Sts2.Core.Entities.Cards.CardKeyword.Retain => new Color(0.4f, 0.95f, 0.45f),     // Emerald Green
+            MegaCrit.Sts2.Core.Entities.Cards.CardKeyword.Innate => new Color(0.85f, 0.45f, 1f),      // Magenta / Purple
+            MegaCrit.Sts2.Core.Entities.Cards.CardKeyword.Sly => new Color(0.3f, 0.95f, 0.85f),        // Teal / Sly
+            _ => new Color(0.8f, 0.8f, 0.8f)
+        };
     }
 
     public static IReadOnlyList<RelicModel>? GetPlayerRelics()

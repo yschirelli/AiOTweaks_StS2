@@ -126,8 +126,8 @@ public static class MapGenerationHooks
         {
             try
             {
-                int desiredRooms = ConfigManager.Current.PreRunTweaks.MapRoomCount;
-                if (desiredRooms > 0 && desiredRooms != 15)
+                int desiredRooms = Math.Max(15, ConfigManager.Current.PreRunTweaks.MapRoomCount);
+                if (desiredRooms > 15)
                 {
                     __result = isMultiplayer ? desiredRooms + 1 : desiredRooms;
                     ModLogger.Info($"ActModel.GetNumberOfRooms: Custom MapRoomCount applied -> {__result} rooms for act.");
@@ -159,8 +159,8 @@ public static class MapGenerationHooks
         {
             try
             {
-                int desiredLength = ConfigManager.Current.PreRunTweaks.MapRoomCount;
-                if (desiredLength > 0 && desiredLength != 15 && MapLengthField != null)
+                int desiredLength = Math.Max(15, ConfigManager.Current.PreRunTweaks.MapRoomCount);
+                if (desiredLength > 15 && MapLengthField != null)
                 {
                     MapLengthField.SetValue(__instance, desiredLength);
                     ModLogger.Info($"StandardActMap: Custom MapRoomCount applied -> _mapLength set to {desiredLength}.");
