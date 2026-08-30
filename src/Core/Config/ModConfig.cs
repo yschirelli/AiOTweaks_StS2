@@ -87,6 +87,12 @@ public sealed class PreRunTweaksConfig
         set => _mapRoomCount = Math.Max(15, value);
     }
 
+    [JsonPropertyName("playerDamageMultiplier")]
+    public float PlayerDamageMultiplier { get; set; } = 1.0f;
+
+    [JsonPropertyName("maxEnergy")]
+    public int MaxEnergy { get; set; } = 3;
+
     [JsonPropertyName("enemyHealthMultiplier")]
     public float EnemyHealthMultiplier { get; set; } = 1.0f;
 

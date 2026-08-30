@@ -227,6 +227,30 @@ public static class CombatHooks
         }
     }
 
+    [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Hooks.Hook), "ModifyDamage")]
+    public static class HookModifyDamagePatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(Creature dealer, ref decimal __result)
+        {
+            try
+            {
+                if (dealer != null && dealer.IsPlayer)
+                {
+                    float mult = RuntimeStateManager.GetEffectivePlayerDamageMultiplier();
+                    if (Math.Abs(mult - 1.0f) > 0.001f && __result > 0)
+                    {
+                        __result = Math.Max(0, (decimal)Math.Round((double)__result * mult));
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Debug($"HookModifyDamagePatch error: {ex.Message}");
+            }
+        }
+    }
+
     [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Entities.Creatures.Creature), "DamageBlockInternal")]
     public static class CreatureDamageBlockInternalPatch
     {

@@ -131,18 +131,32 @@ public static class GameHelper
         return null;
     }
 
-    public static IReadOnlyList<Creature>? GetActiveCombatEnemies()
+    public static CombatState? GetCombatState()
     {
         try
         {
             if (CombatManager.Instance?.StateTracker != null && CombatTrackerStateField != null)
             {
-                if (CombatTrackerStateField.GetValue(CombatManager.Instance.StateTracker) is CombatState combatState)
-                {
-                    var enemies = combatState.Enemies;
-                    ModLogger.Verbose("GameHelper", $"GetActiveCombatEnemies: Resolved {enemies?.Count ?? 0} enemies from CombatState.");
-                    return enemies;
-                }
+                return CombatTrackerStateField.GetValue(CombatManager.Instance.StateTracker) as CombatState;
+            }
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Debug($"GetCombatState notice: {ex.Message}");
+        }
+        return null;
+    }
+
+    public static IReadOnlyList<Creature>? GetActiveCombatEnemies()
+    {
+        try
+        {
+            var combatState = GetCombatState();
+            if (combatState != null)
+            {
+                var enemies = combatState.Enemies;
+                ModLogger.Verbose("GameHelper", $"GetActiveCombatEnemies: Resolved {enemies?.Count ?? 0} enemies from CombatState.");
+                return enemies;
             }
         }
         catch (Exception ex)
@@ -1954,7 +1968,7 @@ public static class GameHelper
         player ??= GetActivePlayer();
         ModLogger.Verbose("GameHelper", $"CreateCombatCardForPlayer: canonical={canonical.GetType().Name}, player={player?.GetType().Name ?? "null"}");
 
-        var combatState = player?.PlayerCombatState?.CombatState ?? player?.Creature?.CombatState;
+        var combatState = GetCombatState();
 
         if (player != null && combatState != null)
         {
@@ -1997,7 +2011,7 @@ public static class GameHelper
 
         // Fallback: regular player creation and explicit CombatState registration if active
         var fallback = CreateCardForPlayer(canonical, player);
-        if (fallback != null && combatState != null && !combatState.ContainsCard(fallback))
+        if (fallback != null && combatState != null && player != null && !combatState.ContainsCard(fallback))
         {
             try
             {

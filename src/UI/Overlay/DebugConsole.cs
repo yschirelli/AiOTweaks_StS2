@@ -536,6 +536,29 @@ public partial class DebugConsole : CanvasLayer
                     LogToConsole("[color=red]Usage: disenchant <card_id>[/color]");
                 break;
 
+            case "attr":
+            case "attribute":
+            case "keyword":
+                if (parts.Length > 2)
+                {
+                    if (Enum.TryParse<MegaCrit.Sts2.Core.Entities.Cards.CardKeyword>(parts[2], true, out var kw))
+                    {
+                        string op = parts.Length > 3 ? parts[3].ToLowerInvariant() : "toggle";
+                        if (op == "add") CardDirector.AddKeywordToDeck(parts[1], kw);
+                        else if (op == "remove" || op == "rm") CardDirector.RemoveKeywordFromDeck(parts[1], kw);
+                        else CardDirector.ToggleKeywordInDeck(parts[1], kw);
+                    }
+                    else
+                    {
+                        LogToConsole($"[color=red]Unknown keyword '{parts[2]}'. Valid: {string.Join(", ", GameHelper.GetAllCardKeywords())}[/color]");
+                    }
+                }
+                else
+                {
+                    LogToConsole("[color=red]Usage: attr <card_id> <keyword> [add|remove|toggle][/color]");
+                }
+                break;
+
             case "event":
                 if (parts.Length > 1)
                     EventDirector.ForceNextEvent(parts[1]);

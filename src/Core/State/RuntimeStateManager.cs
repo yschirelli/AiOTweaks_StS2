@@ -75,6 +75,12 @@ public static class RuntimeStateManager
         }
     }
 
+    public static float GetEffectivePlayerDamageMultiplier()
+    {
+        float baseDmg = ConfigManager.Current.PreRunTweaks.PlayerDamageMultiplier;
+        return Math.Max(0.0f, baseDmg);
+    }
+
     public static float GetEffectiveEnemyHealthMultiplier()
     {
         float baseHp = ConfigManager.Current.PreRunTweaks.EnemyHealthMultiplier;

@@ -66,6 +66,11 @@ public partial class ModSettingsDialog : CanvasLayer
     private GridContainer? _drawGrid;
     private GridContainer? _discardGrid;
     private GridContainer? _exhaustGrid;
+    private Label? _deckTitleLabel;
+    private Label? _handTitleLabel;
+    private Label? _drawTitleLabel;
+    private Label? _discardTitleLabel;
+    private Label? _exhaustTitleLabel;
     private System.Collections.Generic.List<ItemEntry> _availableCardEntries = new();
 
     // Real-time Relic Grids
@@ -1395,7 +1400,7 @@ public partial class ModSettingsDialog : CanvasLayer
             };
             cardVbox.AddChild(lbl);
 
-            // 3. Card Type / Rarity mini badge
+            // 3. Card Type / Rarity & Keywords mini badges
             if (canonical != null)
             {
                 string costText = canonical.EnergyCost?.CostsX == true ? "X" : (canonical.EnergyCost?.Canonical >= 0 ? canonical.EnergyCost.Canonical.ToString() : "-");
@@ -1409,6 +1414,25 @@ public partial class ModSettingsDialog : CanvasLayer
                     TooltipText = fullTooltip
                 };
                 cardVbox.AddChild(badgeLbl);
+
+                var canonicalKws = GameHelper.GetCardKeywords(canonical);
+                if (canonicalKws != null && canonicalKws.Count > 0)
+                {
+                    var kwHBox = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+                    kwHBox.AddThemeConstantOverride("separation", 2);
+                    foreach (var kw in canonicalKws)
+                    {
+                        if (kw == MegaCrit.Sts2.Core.Entities.Cards.CardKeyword.None) continue;
+                        var kwLbl = new Label
+                        {
+                            Text = $"[{kw}]",
+                            Modulate = GameHelper.GetKeywordBadgeColor(kw),
+                            TooltipText = fullTooltip
+                        };
+                        kwHBox.AddChild(kwLbl);
+                    }
+                    cardVbox.AddChild(kwHBox);
+                }
             }
 
             // 4. Action Buttons Grid
@@ -1574,7 +1598,8 @@ public partial class ModSettingsDialog : CanvasLayer
         scroll.AddChild(vbox);
 
         var titleBox = new HBoxContainer();
-        titleBox.AddChild(new Label { Text = "Current Deck:", Modulate = new Color(0.4f, 1f, 0.4f), SizeFlagsHorizontal = Control.SizeFlags.ExpandFill });
+        _deckTitleLabel = new Label { Text = "Current Deck:", Modulate = new Color(0.4f, 1f, 0.4f), SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        titleBox.AddChild(_deckTitleLabel);
         
         var rmAllBtn = new Button { Text = " Remove All " };
         rmAllBtn.Pressed += () => 
@@ -1603,7 +1628,8 @@ public partial class ModSettingsDialog : CanvasLayer
         scroll.AddChild(vbox);
 
         var titleBox = new HBoxContainer();
-        titleBox.AddChild(new Label { Text = "Combat Hand:", Modulate = new Color(0.4f, 0.9f, 1f), SizeFlagsHorizontal = Control.SizeFlags.ExpandFill });
+        _handTitleLabel = new Label { Text = "Combat Hand:", Modulate = new Color(0.4f, 0.9f, 1f), SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        titleBox.AddChild(_handTitleLabel);
         var refreshBtn = new Button { Text = " Refresh " };
         refreshBtn.Pressed += () => RefreshRealTimeCardTabs();
         titleBox.AddChild(refreshBtn);
@@ -1621,7 +1647,8 @@ public partial class ModSettingsDialog : CanvasLayer
         scroll.AddChild(vbox);
 
         var titleBox = new HBoxContainer();
-        titleBox.AddChild(new Label { Text = "Draw Pile:", Modulate = new Color(1f, 0.9f, 0.4f), SizeFlagsHorizontal = Control.SizeFlags.ExpandFill });
+        _drawTitleLabel = new Label { Text = "Draw Pile:", Modulate = new Color(1f, 0.9f, 0.4f), SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        titleBox.AddChild(_drawTitleLabel);
         var refreshBtn = new Button { Text = " Refresh " };
         refreshBtn.Pressed += () => RefreshRealTimeCardTabs();
         titleBox.AddChild(refreshBtn);
@@ -1639,7 +1666,8 @@ public partial class ModSettingsDialog : CanvasLayer
         scroll.AddChild(vbox);
 
         var titleBox = new HBoxContainer();
-        titleBox.AddChild(new Label { Text = "Discard Pile:", Modulate = new Color(1f, 0.4f, 0.4f), SizeFlagsHorizontal = Control.SizeFlags.ExpandFill });
+        _discardTitleLabel = new Label { Text = "Discard Pile:", Modulate = new Color(1f, 0.4f, 0.4f), SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        titleBox.AddChild(_discardTitleLabel);
         var refreshBtn = new Button { Text = " Refresh " };
         refreshBtn.Pressed += () => RefreshRealTimeCardTabs();
         titleBox.AddChild(refreshBtn);
@@ -1657,7 +1685,8 @@ public partial class ModSettingsDialog : CanvasLayer
         scroll.AddChild(vbox);
 
         var titleBox = new HBoxContainer();
-        titleBox.AddChild(new Label { Text = "Exhaust Pile:", Modulate = new Color(0.85f, 0.5f, 1f), SizeFlagsHorizontal = Control.SizeFlags.ExpandFill });
+        _exhaustTitleLabel = new Label { Text = "Exhaust Pile:", Modulate = new Color(0.85f, 0.5f, 1f), SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        titleBox.AddChild(_exhaustTitleLabel);
         var refreshBtn = new Button { Text = " Refresh " };
         refreshBtn.Pressed += () => RefreshRealTimeCardTabs();
         titleBox.AddChild(refreshBtn);
@@ -1677,14 +1706,20 @@ public partial class ModSettingsDialog : CanvasLayer
         var drawCards = GameHelper.GetPlayerDrawPileCards();
         var discardCards = GameHelper.GetPlayerDiscardPileCards();
         var exhaustCards = GameHelper.GetPlayerExhaustPileCards();
+        bool inCombat = GameHelper.IsInCombat();
+
+        // Update real-time title counts
+        if (_deckTitleLabel != null) _deckTitleLabel.Text = $"Current Deck ({deckCards?.Count ?? 0} cards):";
+        if (_handTitleLabel != null) _handTitleLabel.Text = inCombat ? $"Combat Hand ({handCards?.Count ?? 0} cards):" : "Combat Hand (Not in combat):";
+        if (_drawTitleLabel != null) _drawTitleLabel.Text = inCombat ? $"Draw Pile ({drawCards?.Count ?? 0} cards):" : "Draw Pile (Not in combat):";
+        if (_discardTitleLabel != null) _discardTitleLabel.Text = inCombat ? $"Discard Pile ({discardCards?.Count ?? 0} cards):" : "Discard Pile (Not in combat):";
+        if (_exhaustTitleLabel != null) _exhaustTitleLabel.Text = inCombat ? $"Exhaust Pile ({exhaustCards?.Count ?? 0} cards):" : "Exhaust Pile (Not in combat):";
 
         RefreshGrid(_deckGrid, deckCards, true, "deck");
         RefreshGrid(_handGrid, handCards, false, "hand");
         RefreshGrid(_drawGrid, drawCards, false, "draw");
         RefreshGrid(_discardGrid, discardCards, false, "discard");
         RefreshGrid(_exhaustGrid, exhaustCards, false, "exhaust");
-        
-        bool inCombat = GameHelper.IsInCombat();
 
         foreach (var entry in _availableCardEntries)
         {
@@ -1930,7 +1965,27 @@ public partial class ModSettingsDialog : CanvasLayer
                 vbox.AddChild(enchBadge);
             }
 
-            // 5. Action Buttons Grid (2 columns for compact & clean alignment)
+            // 5. Keyword / Attribute Badges
+            var cardKeywords = GameHelper.GetCardKeywords(c);
+            if (cardKeywords != null && cardKeywords.Count > 0)
+            {
+                var kwHBox = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+                kwHBox.AddThemeConstantOverride("separation", 2);
+                foreach (var kw in cardKeywords)
+                {
+                    if (kw == MegaCrit.Sts2.Core.Entities.Cards.CardKeyword.None) continue;
+                    var kwBadge = new Label
+                    {
+                        Text = $"[{kw}]",
+                        Modulate = GameHelper.GetKeywordBadgeColor(kw),
+                        TooltipText = fullTooltip
+                    };
+                    kwHBox.AddChild(kwBadge);
+                }
+                vbox.AddChild(kwHBox);
+            }
+
+            // 6. Action Buttons Grid (2 columns for compact & clean alignment)
             var actionGrid = new GridContainer 
             { 
                 Columns = 2, 
@@ -1960,8 +2015,11 @@ public partial class ModSettingsDialog : CanvasLayer
                 actionGrid.AddChild(upBtn);
                 actionGrid.AddChild(rmBtn);
 
+                var attrBtn = new Button { Text = "Attrs", TooltipText = "View and toggle attributes (Ethereal, Exhaust, Eternal, Unplayable, etc.)" };
+                attrBtn.Pressed += () => ShowAttributePicker(targetCard);
                 var enchBtn = new Button { Text = "Enchant", TooltipText = "Apply custom enchantment" };
                 enchBtn.Pressed += () => ShowEnchantmentPicker(targetCard);
+                actionGrid.AddChild(attrBtn);
                 actionGrid.AddChild(enchBtn);
 
                 if (targetCard.Enchantment != null)
@@ -1982,9 +2040,13 @@ public partial class ModSettingsDialog : CanvasLayer
 
                 var upBtn = new Button { Text = targetCard.IsUpgraded ? "Downgrade" : "Upgrade", TooltipText = "Toggle Upgrade" };
                 upBtn.Pressed += () => { CardDirector.ToggleUpgradeCard(targetCard); RefreshRealTimeCardTabs(); };
+                var attrBtn = new Button { Text = "Attrs", TooltipText = "View and toggle attributes (Ethereal, Exhaust, Eternal, Unplayable, etc.)" };
+                attrBtn.Pressed += () => ShowAttributePicker(targetCard);
+                actionGrid.AddChild(upBtn);
+                actionGrid.AddChild(attrBtn);
+
                 var enchBtn = new Button { Text = "Enchant", TooltipText = "Apply custom enchantment" };
                 enchBtn.Pressed += () => ShowEnchantmentPicker(targetCard);
-                actionGrid.AddChild(upBtn);
                 actionGrid.AddChild(enchBtn);
 
                 if (targetCard.Enchantment != null)
@@ -2010,8 +2072,11 @@ public partial class ModSettingsDialog : CanvasLayer
                 actionGrid.AddChild(upBtn);
                 actionGrid.AddChild(rmBtn);
 
+                var attrBtn = new Button { Text = "Attrs", TooltipText = "View and toggle attributes (Ethereal, Exhaust, Eternal, Unplayable, etc.)" };
+                attrBtn.Pressed += () => ShowAttributePicker(targetCard);
                 var enchBtn = new Button { Text = "Enchant", TooltipText = "Apply custom enchantment" };
                 enchBtn.Pressed += () => ShowEnchantmentPicker(targetCard);
+                actionGrid.AddChild(attrBtn);
                 actionGrid.AddChild(enchBtn);
 
                 if (targetCard.Enchantment != null)
@@ -2032,9 +2097,13 @@ public partial class ModSettingsDialog : CanvasLayer
 
                 var upBtn = new Button { Text = targetCard.IsUpgraded ? "Downgrade" : "Upgrade", TooltipText = "Toggle Upgrade" };
                 upBtn.Pressed += () => { CardDirector.ToggleUpgradeCard(targetCard); RefreshRealTimeCardTabs(); };
+                var attrBtn = new Button { Text = "Attrs", TooltipText = "View and toggle attributes (Ethereal, Exhaust, Eternal, Unplayable, etc.)" };
+                attrBtn.Pressed += () => ShowAttributePicker(targetCard);
+                actionGrid.AddChild(upBtn);
+                actionGrid.AddChild(attrBtn);
+
                 var enchBtn = new Button { Text = "Enchant", TooltipText = "Apply custom enchantment" };
                 enchBtn.Pressed += () => ShowEnchantmentPicker(targetCard);
-                actionGrid.AddChild(upBtn);
                 actionGrid.AddChild(enchBtn);
 
                 if (targetCard.Enchantment != null)
@@ -2134,6 +2203,82 @@ public partial class ModSettingsDialog : CanvasLayer
                 CardDirector.EnchantCard(card, eId, amt);
                 RefreshRealTimeCardTabs();
             }
+        };
+
+        AddChild(dialog);
+        dialog.PopupCentered();
+    }
+
+    private void ShowAttributePicker(MegaCrit.Sts2.Core.Models.CardModel card)
+    {
+        string cardTitle = !string.IsNullOrWhiteSpace(card.Title) ? card.Title : card.GetType().Name;
+        var dialog = new ConfirmationDialog
+        {
+            Title = $"Attributes: {cardTitle}",
+            Size = new Vector2I(420, 360)
+        };
+
+        var vbox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        dialog.AddChild(vbox);
+
+        vbox.AddChild(new Label 
+        { 
+            Text = "Toggle Card Attributes & Keywords:", 
+            Modulate = new Color(0.4f, 0.9f, 1f) 
+        });
+
+        var grid = new GridContainer { Columns = 2, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        grid.AddThemeConstantOverride("h_separation", 10);
+        grid.AddThemeConstantOverride("v_separation", 8);
+        vbox.AddChild(grid);
+
+        var allKeywords = GameHelper.GetAllCardKeywords();
+        var activeKeywords = GameHelper.GetCardKeywords(card);
+
+        var checkBoxes = new System.Collections.Generic.Dictionary<MegaCrit.Sts2.Core.Entities.Cards.CardKeyword, CheckBox>();
+
+        foreach (var kw in allKeywords)
+        {
+            bool isActive = activeKeywords.Contains(kw);
+            var color = GameHelper.GetKeywordBadgeColor(kw);
+            var cb = new CheckBox
+            {
+                Text = $" {kw}",
+                ButtonPressed = isActive,
+                Modulate = color,
+                TooltipText = $"Toggle {kw} attribute on {cardTitle}"
+            };
+            checkBoxes[kw] = cb;
+            grid.AddChild(cb);
+        }
+
+        var infoLabel = new Label
+        {
+            Text = "Active Attributes affect gameplay immediately across deck and combat piles (e.g. Ethereal exhausts at turn end, Innate draws on Turn 1, Eternal prevents exhaust/removal).",
+            Modulate = new Color(0.8f, 0.8f, 0.8f, 0.75f),
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+            CustomMinimumSize = new Vector2(380, 60)
+        };
+        vbox.AddChild(infoLabel);
+
+        dialog.Confirmed += () =>
+        {
+            foreach (var kvp in checkBoxes)
+            {
+                var kw = kvp.Key;
+                bool shouldBeActive = kvp.Value.ButtonPressed;
+                bool isCurrentlyActive = GameHelper.HasCardKeyword(card, kw);
+
+                if (shouldBeActive && !isCurrentlyActive)
+                {
+                    CardDirector.AddKeyword(card, kw);
+                }
+                else if (!shouldBeActive && isCurrentlyActive)
+                {
+                    CardDirector.RemoveKeyword(card, kw);
+                }
+            }
+            RefreshRealTimeCardTabs();
         };
 
         AddChild(dialog);
