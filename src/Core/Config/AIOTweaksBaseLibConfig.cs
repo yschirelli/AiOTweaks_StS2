@@ -75,6 +75,14 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
         ModSettingsDialog.ShowDialog();
     }
 
+    [ConfigButton("Reset GUI Position & Height")]
+    public void ResetGuiLayoutAction()
+    {
+        ModLogger.Verbose("AIOTweaksBaseLibConfig", "ResetGuiLayoutAction clicked.");
+        ModSettingsDialog.ResetWindowLayout();
+        ModLogger.Info("AIOTweaks: GUI position and height reset to default via BaseLib Mod Config.");
+    }
+
     [ConfigSection("God Mode & Combat Cheats")]
     public bool GodMode
     {

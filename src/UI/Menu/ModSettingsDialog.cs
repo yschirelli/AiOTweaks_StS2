@@ -203,6 +203,20 @@ public partial class ModSettingsDialog : CanvasLayer
         }
     }
 
+    public static void ResetWindowLayout()
+    {
+        ConfigManager.Current.UI.MenuPosX = null;
+        ConfigManager.Current.UI.MenuPosY = null;
+        ConfigManager.Current.UI.MenuWidth = null;
+        ConfigManager.Current.UI.MenuHeight = null;
+        ConfigManager.SaveConfig();
+        if (_instance != null && _instance._dialogPanel != null)
+        {
+            _instance.ApplyOrRestoreWindowLayout();
+        }
+        ModLogger.Info("ModSettingsDialog: GUI window position and size reset to defaults.");
+    }
+
     public void OpenDialog()
     {
         ModLogger.Verbose("ModSettingsDialog", "OpenDialog called. Loading settings values and computing run status...");
@@ -494,12 +508,7 @@ public partial class ModSettingsDialog : CanvasLayer
             ConfigManager.Current.CombatSandbox.InfinitePotions = false;
             ConfigManager.Current.CombatSandbox.NoCardExhaust = false;
             ConfigManager.Current.CombatSandbox.BonusDrawPerTurn = 0;
-
-            ConfigManager.Current.UI.MenuPosX = null;
-            ConfigManager.Current.UI.MenuPosY = null;
-            ConfigManager.Current.UI.MenuWidth = null;
-            ConfigManager.Current.UI.MenuHeight = null;
-            ApplyOrRestoreWindowLayout();
+            ConfigManager.Current.CombatSandbox.MaxHandSizeOverride = 10;
 
             RuntimeStateManager.ResetSessionState();
             RuntimeStateManager.FreeMapNavigationEnabled = false;
