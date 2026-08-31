@@ -68,6 +68,17 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
         }
     }
 
+    [ConfigTextInput(TextInputPreset.Alphanumeric)]
+    public string QuickOpenShopKey
+    {
+        get => ConfigManager.Current.General.QuickOpenShopKey;
+        set
+        {
+            ConfigManager.Current.General.QuickOpenShopKey = value?.Trim() ?? "";
+            ConfigManager.SaveConfig();
+        }
+    }
+
     [ConfigButton("Open GUI Menu Overlay")]
     public void OpenOverlayAction()
     {

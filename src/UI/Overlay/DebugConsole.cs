@@ -74,6 +74,14 @@ public partial class DebugConsole : CanvasLayer
 
             if (!_isConsoleVisible)
             {
+                if (GameHelper.IsShopMenuOpen() && keyEvent.Keycode == Key.Escape)
+                {
+                    ModLogger.Verbose("DebugConsole", "Escape key pressed while shop overlay visible. Closing shop...");
+                    GameHelper.CloseShopMenu();
+                    GetViewport().SetInputAsHandled();
+                    return;
+                }
+
                 string guiHotkey = !string.IsNullOrWhiteSpace(ConfigManager.Current.General.GuiOverlayHotkey) && !ConfigManager.Current.General.GuiOverlayHotkey.Equals("None", StringComparison.OrdinalIgnoreCase)
                     ? ConfigManager.Current.General.GuiOverlayHotkey
                     : GeneralConfig.DefaultGuiOverlayHotkey;
@@ -81,6 +89,14 @@ public partial class DebugConsole : CanvasLayer
                 {
                     ModLogger.Verbose("DebugConsole", $"GUI overlay hotkey matched ({guiHotkey}). Toggling ModSettingsDialog...");
                     ModSettingsDialog.ToggleDialog();
+                    GetViewport().SetInputAsHandled();
+                    return;
+                }
+
+                if (GameHelper.IsKeyMatch(keyEvent, ConfigManager.Current.General.QuickOpenShopKey))
+                {
+                    ModLogger.Verbose("DebugConsole", "Quick Open Shop hotkey matched. Toggling Shop Menu...");
+                    GameHelper.OpenShopMenu();
                     GetViewport().SetInputAsHandled();
                     return;
                 }

@@ -5,7 +5,8 @@
     "consoleHotkey": "F1",
     "guiOverlayHotkey": "F3",
     "quickGodModeKey": "",
-    "quickKillEnemiesKey": ""
+    "quickKillEnemiesKey": "",
+    "quickOpenShopKey": ""
   },
   "preRunTweaks": {
     "goldRewardMultiplier": 1.0,

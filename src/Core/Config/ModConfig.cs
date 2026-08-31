@@ -56,6 +56,9 @@ public sealed class GeneralConfig
 
     [JsonPropertyName("quickKillEnemiesKey")]
     public string QuickKillEnemiesKey { get; set; } = "";
+
+    [JsonPropertyName("quickOpenShopKey")]
+    public string QuickOpenShopKey { get; set; } = "";
 }
 
 public sealed class PreRunTweaksConfig

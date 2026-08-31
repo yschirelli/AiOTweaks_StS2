@@ -35,6 +35,7 @@ public partial class ModSettingsDialog : CanvasLayer
     private LineEdit? _guiHotkeyInput;
     private LineEdit? _quickGodModeInput;
     private LineEdit? _quickKillEnemiesInput;
+    private LineEdit? _quickOpenShopInput;
 
     private HSlider? _goldSlider;
     private HSlider? _shopDiscountSlider;
@@ -755,6 +756,13 @@ public partial class ModSettingsDialog : CanvasLayer
         _quickKillEnemiesInput.TextChanged += _ => MarkTweaksModified();
         killKeyRow.AddChild(_quickKillEnemiesInput);
         hotkeysBox.AddChild(killKeyRow);
+
+        var shopKeyRow = new HBoxContainer();
+        shopKeyRow.AddChild(new Label { Text = "Quick Open Shop Hotkey: ", CustomMinimumSize = new Vector2(200, 0) });
+        _quickOpenShopInput = new LineEdit { PlaceholderText = "e.g. F5, O (Empty = Disabled)", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        _quickOpenShopInput.TextChanged += _ => MarkTweaksModified();
+        shopKeyRow.AddChild(_quickOpenShopInput);
+        hotkeysBox.AddChild(shopKeyRow);
 
         leftCol.AddChild(CreateSectionCard("Keybindings & Hotkeys", hotkeysBox, new Color(0.4f, 0.85f, 1f)));
 
@@ -2909,11 +2917,11 @@ public partial class ModSettingsDialog : CanvasLayer
         var tweaks = ConfigManager.Current.PreRunTweaks;
         var sandbox = ConfigManager.Current.CombatSandbox;
         var general = ConfigManager.Current.General;
-
         if (_consoleHotkeyInput != null) _consoleHotkeyInput.Text = general.ConsoleHotkey;
         if (_guiHotkeyInput != null) _guiHotkeyInput.Text = general.GuiOverlayHotkey;
         if (_quickGodModeInput != null) _quickGodModeInput.Text = general.QuickGodModeKey;
         if (_quickKillEnemiesInput != null) _quickKillEnemiesInput.Text = general.QuickKillEnemiesKey;
+        if (_quickOpenShopInput != null) _quickOpenShopInput.Text = general.QuickOpenShopKey;
 
         if (_mapRoomCountSpin != null)
         {
@@ -2999,6 +3007,7 @@ public partial class ModSettingsDialog : CanvasLayer
         }
         if (_quickGodModeInput != null) general.QuickGodModeKey = _quickGodModeInput.Text.Trim();
         if (_quickKillEnemiesInput != null) general.QuickKillEnemiesKey = _quickKillEnemiesInput.Text.Trim();
+        if (_quickOpenShopInput != null) general.QuickOpenShopKey = _quickOpenShopInput.Text.Trim();
 
         if (_mapRoomCountSpin != null) tweaks.MapRoomCount = (int)_mapRoomCountSpin.Value;
         if (_goldSlider != null) tweaks.GoldRewardMultiplier = (float)_goldSlider.Value;

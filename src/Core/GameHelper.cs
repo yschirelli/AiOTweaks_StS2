@@ -20,6 +20,8 @@ using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Entities.Merchant;
 using MegaCrit.Sts2.Core.Nodes.Screens.Shops;
 using MegaCrit.Sts2.Core.Nodes.Rooms;
+using MegaCrit.Sts2.Core.Nodes.CommonUi;
+using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
 using MegaCrit.Sts2.Core.Assets;
 using AIOTweaks.Core.Config;
 
@@ -375,10 +377,95 @@ public static class GameHelper
     }
 
     /// <summary>
+    /// Checks if the standalone shop overlay menu is currently open.
+    /// </summary>
+    public static bool IsShopMenuOpen()
+    {
+        try
+        {
+            var tree = (SceneTree)Engine.GetMainLoop();
+            var existingLayer = tree?.Root?.GetNodeOrNull<CanvasLayer>("AIOTweaks_ShopCanvasLayer");
+            return existingLayer != null && GodotObject.IsInstanceValid(existingLayer);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Closes the standalone shop overlay menu if currently open.
+    /// </summary>
+    public static bool CloseShopMenu()
+    {
+        try
+        {
+            var tree = (SceneTree)Engine.GetMainLoop();
+            var existingLayer = tree?.Root?.GetNodeOrNull<CanvasLayer>("AIOTweaks_ShopCanvasLayer");
+            if (existingLayer != null && GodotObject.IsInstanceValid(existingLayer))
+            {
+                NMerchantInventory? inv = null;
+                foreach (var child in existingLayer.GetChildren())
+                {
+                    if (child is NMerchantInventory i)
+                    {
+                        inv = i;
+                        break;
+                    }
+                }
+                if (inv == null)
+                {
+                    inv = existingLayer.GetNodeOrNull<NMerchantInventory>("Inventory")
+                       ?? existingLayer.GetNodeOrNull<NMerchantInventory>("%Inventory")
+                       ?? existingLayer.FindChild("Inventory", true, false) as NMerchantInventory;
+                }
+
+                if (inv != null && GodotObject.IsInstanceValid(inv) && inv.IsOpen)
+                {
+                    CloseMerchantInventory(inv);
+                }
+                else
+                {
+                    existingLayer.QueueFree();
+                }
+                return true;
+            }
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Error($"CloseShopMenu failed with exception: {ex.Message}", ex);
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Safely invokes Close on NMerchantInventory via Godot Call / reflection.
+    /// </summary>
+    public static void CloseMerchantInventory(NMerchantInventory? inv)
+    {
+        if (inv == null || !GodotObject.IsInstanceValid(inv)) return;
+        try
+        {
+            inv.Call(NMerchantInventory.MethodName.Close);
+        }
+        catch
+        {
+            typeof(NMerchantInventory).GetMethod("Close", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance)?.Invoke(inv, null);
+        }
+    }
+
+    /// <summary>
     /// Opens an interactive merchant shop overlay popup anywhere during a run (even during combat) with freshly randomized items.
+    /// If the shop is already open, toggles it closed cleanly.
     /// </summary>
     public static bool OpenShopMenu()
     {
+        if (IsShopMenuOpen())
+        {
+            ModLogger.Info("OpenShopMenu: Shop is already open. Toggling closed...");
+            return CloseShopMenu();
+        }
+
         var player = GetActivePlayer();
         if (player == null)
         {
@@ -439,8 +526,18 @@ public static class GameHelper
                 return false;
             }
 
-            // Detach %Inventory before freeing tempRoom
+            // Find NProceedButton child node from merchant_room scene
+            NProceedButton? proceedButton = tempRoom.ProceedButton
+                ?? tempRoom.GetNodeOrNull<NProceedButton>("%ProceedButton")
+                ?? tempRoom.GetNodeOrNull<NProceedButton>("ProceedButton")
+                ?? tempRoom.FindChild("ProceedButton", true, false) as NProceedButton;
+
+            // Detach inventory and proceed button before freeing tempRoom
             tempRoom.RemoveChild(inventoryNode);
+            if (proceedButton != null)
+            {
+                tempRoom.RemoveChild(proceedButton);
+            }
             tempRoom.QueueFree();
 
             // Create CanvasLayer overlay with high layer order to display on top of combat/map/events
@@ -450,8 +547,12 @@ public static class GameHelper
                 Layer = 100
             };
 
-            // MUST add inventoryNode to scene tree FIRST so Godot calls _Ready() and wires up internal node references!
+            // MUST add nodes to scene tree FIRST so Godot calls _Ready() and wires up internal node references!
             canvasLayer.AddChild(inventoryNode);
+            if (proceedButton != null)
+            {
+                canvasLayer.AddChild(proceedButton);
+            }
             tree.Root.AddChild(canvasLayer);
 
             // Generate fresh randomized inventory and initialize inventoryNode now that internal nodes are resolved
@@ -460,9 +561,27 @@ public static class GameHelper
 
             inventoryNode.Initialize(freshInventory, dialogue);
 
+            // Configure proceed button just like the in-game shop event / merchant room
+            if (proceedButton != null)
+            {
+                proceedButton.UpdateText(NProceedButton.ProceedLoc);
+                proceedButton.SetPulseState(false);
+                proceedButton.Enable();
+                proceedButton.Connect(NClickableControl.SignalName.Released, Callable.From<NButton>(_ =>
+                {
+                    ModLogger.Verbose("OpenShopMenu", "Proceed/Close button clicked. Closing shop inventory...");
+                    CloseMerchantInventory(inventoryNode);
+                }));
+            }
+
             // Connect close event to clean up canvasLayer
             inventoryNode.InventoryClosed += () =>
             {
+                if (proceedButton != null && GodotObject.IsInstanceValid(proceedButton))
+                {
+                    proceedButton.Disable();
+                }
+
                 Callable.From(() =>
                 {
                     if (GodotObject.IsInstanceValid(canvasLayer))
@@ -473,7 +592,7 @@ public static class GameHelper
             };
 
             inventoryNode.Open();
-            ModLogger.Info("OpenShopMenu: Successfully opened randomized standalone shop overlay.");
+            ModLogger.Info("OpenShopMenu: Successfully opened randomized standalone shop overlay with close/proceed button.");
             return true;
         }
         catch (Exception ex)
