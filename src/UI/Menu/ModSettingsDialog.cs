@@ -36,6 +36,10 @@ public partial class ModSettingsDialog : CanvasLayer
     private LineEdit? _quickGodModeInput;
     private LineEdit? _quickKillEnemiesInput;
     private LineEdit? _quickOpenShopInput;
+    private LineEdit? _assigningHotkeyInput;
+    private Button? _assigningHotkeyButton;
+    private string? _previousHotkeyValue;
+    private string? _previousHotkeyPlaceholder;
 
     private HSlider? _goldSlider;
     private HSlider? _shopDiscountSlider;
@@ -149,6 +153,33 @@ public partial class ModSettingsDialog : CanvasLayer
 
         if (@event is InputEventKey keyEvent && keyEvent.Pressed && !keyEvent.Echo)
         {
+            if (isDialogOpen && _assigningHotkeyInput != null)
+            {
+                if (keyEvent.Keycode == Key.Escape)
+                {
+                    CancelHotkeyAssignment();
+                    GetViewport().SetInputAsHandled();
+                    return;
+                }
+                if (keyEvent.Keycode is Key.Backspace or Key.Delete)
+                {
+                    CompleteHotkeyAssignment("");
+                    GetViewport().SetInputAsHandled();
+                    return;
+                }
+                if (IsModifierKey(keyEvent.Keycode))
+                {
+                    GetViewport().SetInputAsHandled();
+                    return;
+                }
+
+                Key key = keyEvent.Keycode != Key.None ? keyEvent.Keycode : keyEvent.PhysicalKeycode;
+                string keyName = key.ToString();
+                CompleteHotkeyAssignment(keyName);
+                GetViewport().SetInputAsHandled();
+                return;
+            }
+
             string guiKey = !string.IsNullOrWhiteSpace(ConfigManager.Current.General.GuiOverlayHotkey) && !ConfigManager.Current.General.GuiOverlayHotkey.Equals("None", StringComparison.OrdinalIgnoreCase)
                 ? ConfigManager.Current.General.GuiOverlayHotkey
                 : GeneralConfig.DefaultGuiOverlayHotkey;
@@ -248,6 +279,7 @@ public partial class ModSettingsDialog : CanvasLayer
         ModLogger.Verbose("ModSettingsDialog", "CloseDialog called.");
         _isDragging = false;
         _isResizing = false;
+        CancelHotkeyAssignment();
         SaveSettingsValues();
         if (_dialogPanel != null)
         {
@@ -723,46 +755,17 @@ public partial class ModSettingsDialog : CanvasLayer
         
         var hotkeyNote = new Label 
         { 
-            Text = "If left empty, default hotkeys (F1 for Console, F3 for GUI) will be automatically restored.", 
+            Text = "Click 'Assign Key' and press any key (Esc to cancel, Backspace/Clear to remove). If left empty, default hotkeys (F1 for Console, F3 for GUI) will be automatically restored.", 
             Modulate = new Color(0.65f, 0.7f, 0.78f, 0.8f),
             AutowrapMode = TextServer.AutowrapMode.WordSmart
         };
         hotkeysBox.AddChild(hotkeyNote);
 
-        var consoleKeyRow = new HBoxContainer();
-        consoleKeyRow.AddChild(new Label { Text = "Console Hotkey: ", CustomMinimumSize = new Vector2(200, 0) });
-        _consoleHotkeyInput = new LineEdit { PlaceholderText = "e.g. F1, Quoteleft (Default: F1)", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
-        _consoleHotkeyInput.TextChanged += _ => MarkTweaksModified();
-        consoleKeyRow.AddChild(_consoleHotkeyInput);
-        hotkeysBox.AddChild(consoleKeyRow);
-
-        var guiKeyRow = new HBoxContainer();
-        guiKeyRow.AddChild(new Label { Text = "GUI Menu Overlay Hotkey: ", CustomMinimumSize = new Vector2(200, 0) });
-        _guiHotkeyInput = new LineEdit { PlaceholderText = "e.g. F3, F8 (Default: F3)", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
-        _guiHotkeyInput.TextChanged += _ => MarkTweaksModified();
-        guiKeyRow.AddChild(_guiHotkeyInput);
-        hotkeysBox.AddChild(guiKeyRow);
-
-        var godKeyRow = new HBoxContainer();
-        godKeyRow.AddChild(new Label { Text = "Quick God Mode Hotkey: ", CustomMinimumSize = new Vector2(200, 0) });
-        _quickGodModeInput = new LineEdit { PlaceholderText = "e.g. F2 (Empty = Disabled)", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
-        _quickGodModeInput.TextChanged += _ => MarkTweaksModified();
-        godKeyRow.AddChild(_quickGodModeInput);
-        hotkeysBox.AddChild(godKeyRow);
-
-        var killKeyRow = new HBoxContainer();
-        killKeyRow.AddChild(new Label { Text = "Quick Kill All Enemies Hotkey: ", CustomMinimumSize = new Vector2(200, 0) });
-        _quickKillEnemiesInput = new LineEdit { PlaceholderText = "e.g. F4 (Empty = Disabled)", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
-        _quickKillEnemiesInput.TextChanged += _ => MarkTweaksModified();
-        killKeyRow.AddChild(_quickKillEnemiesInput);
-        hotkeysBox.AddChild(killKeyRow);
-
-        var shopKeyRow = new HBoxContainer();
-        shopKeyRow.AddChild(new Label { Text = "Quick Open Shop Hotkey: ", CustomMinimumSize = new Vector2(200, 0) });
-        _quickOpenShopInput = new LineEdit { PlaceholderText = "e.g. F5, O (Empty = Disabled)", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
-        _quickOpenShopInput.TextChanged += _ => MarkTweaksModified();
-        shopKeyRow.AddChild(_quickOpenShopInput);
-        hotkeysBox.AddChild(shopKeyRow);
+        hotkeysBox.AddChild(CreateHotkeyRow("Console Hotkey: ", out _consoleHotkeyInput, "e.g. F1, Quoteleft (Default: F1)"));
+        hotkeysBox.AddChild(CreateHotkeyRow("GUI Menu Overlay Hotkey: ", out _guiHotkeyInput, "e.g. F3, F8 (Default: F3)"));
+        hotkeysBox.AddChild(CreateHotkeyRow("Quick God Mode Hotkey: ", out _quickGodModeInput, "e.g. F2 (Empty = Disabled)"));
+        hotkeysBox.AddChild(CreateHotkeyRow("Quick Kill All Enemies Hotkey: ", out _quickKillEnemiesInput, "e.g. F4 (Empty = Disabled)"));
+        hotkeysBox.AddChild(CreateHotkeyRow("Quick Open Shop Hotkey: ", out _quickOpenShopInput, "e.g. F5, O (Empty = Disabled)"));
 
         leftCol.AddChild(CreateSectionCard("Keybindings & Hotkeys", hotkeysBox, new Color(0.4f, 0.85f, 1f)));
 
@@ -771,7 +774,7 @@ public partial class ModSettingsDialog : CanvasLayer
 
         var mapRoomRow = new HBoxContainer();
         mapRoomRow.AddChild(new Label { Text = "Map Size (Floors / Room Count): ", CustomMinimumSize = new Vector2(230, 0) });
-        _mapRoomCountSpin = new SpinBox { MinValue = 15, MaxValue = 50, Value = 15, Step = 1, TooltipText = "Sets the number of rooms/floors per act (15 to 50). Minimum 15 is required by map generator." };
+        _mapRoomCountSpin = new SpinBox { MinValue = 15, MaxValue = 50, Value = 15, Step = 1, TooltipText = "Sets the number of rooms/floors per act (15 to 50). Minimum 15 is required by map generator." }.MakeNumericOnly();
         _mapRoomWarningLabel = new Label
         {
             Text = "  [Warning: >30 rooms may cause unexpected crashes and bugs]",
@@ -797,21 +800,21 @@ public partial class ModSettingsDialog : CanvasLayer
 
         var cardRewardRow = new HBoxContainer();
         cardRewardRow.AddChild(new Label { Text = "Card Choices per Reward: ", CustomMinimumSize = new Vector2(230, 0) });
-        _cardRewardSpin = new SpinBox { MinValue = 1, MaxValue = 10, Value = 3 };
+        _cardRewardSpin = new SpinBox { MinValue = 1, MaxValue = 10, Value = 3 }.MakeNumericOnly();
         _cardRewardSpin.ValueChanged += _ => MarkTweaksModified();
         cardRewardRow.AddChild(_cardRewardSpin);
         preRunBox.AddChild(cardRewardRow);
 
         var startGoldRow = new HBoxContainer();
         startGoldRow.AddChild(new Label { Text = "Starting Gold Bonus: ", CustomMinimumSize = new Vector2(230, 0) });
-        _bonusGoldSpin = new SpinBox { MinValue = 0, MaxValue = 9999, Step = 25, Value = 0 };
+        _bonusGoldSpin = new SpinBox { MinValue = 0, MaxValue = 9999, Step = 25, Value = 0 }.MakeNumericOnly();
         _bonusGoldSpin.ValueChanged += _ => MarkTweaksModified();
         startGoldRow.AddChild(_bonusGoldSpin);
         preRunBox.AddChild(startGoldRow);
 
         var startHpRow = new HBoxContainer();
         startHpRow.AddChild(new Label { Text = "Starting Max HP Bonus: ", CustomMinimumSize = new Vector2(230, 0) });
-        _bonusHpSpin = new SpinBox { MinValue = 0, MaxValue = 500, Step = 5, Value = 0 };
+        _bonusHpSpin = new SpinBox { MinValue = 0, MaxValue = 500, Step = 5, Value = 0 }.MakeNumericOnly();
         _bonusHpSpin.ValueChanged += _ => MarkTweaksModified();
         startHpRow.AddChild(_bonusHpSpin);
         preRunBox.AddChild(startHpRow);
@@ -831,7 +834,7 @@ public partial class ModSettingsDialog : CanvasLayer
 
         var endlessMultRow = new HBoxContainer();
         endlessMultRow.AddChild(new Label { Text = "Endless Loop Scaling Multiplier: ", CustomMinimumSize = new Vector2(230, 0) });
-        _endlessMultiplierSpin = new SpinBox { MinValue = 1.0, MaxValue = 10.0, Step = 0.1, Value = 2.0 };
+        _endlessMultiplierSpin = new SpinBox { MinValue = 1.0, MaxValue = 10.0, Step = 0.1, Value = 2.0 }.MakeNumericOnly();
         _endlessMultiplierSpin.ValueChanged += _ => MarkTweaksModified();
         endlessMultRow.AddChild(_endlessMultiplierSpin);
         endlessBox.AddChild(endlessMultRow);
@@ -924,7 +927,7 @@ public partial class ModSettingsDialog : CanvasLayer
 
         var maxEnergyRow = new HBoxContainer();
         maxEnergyRow.AddChild(new Label { Text = "Max Energy Count: ", CustomMinimumSize = new Vector2(230, 0) });
-        _maxEnergySpin = new SpinBox { MinValue = 1, MaxValue = 20, Step = 1, Value = GameHelper.GetPlayerMaxEnergy(), TooltipText = "Sets the baseline Max Energy count. Dynamically reads and syncs with the active game state." };
+        _maxEnergySpin = new SpinBox { MinValue = 1, MaxValue = 20, Step = 1, Value = GameHelper.GetPlayerMaxEnergy(), TooltipText = "Sets the baseline Max Energy count. Dynamically reads and syncs with the active game state." }.MakeNumericOnly();
         _maxEnergySpin.ValueChanged += val =>
         {
             MarkTweaksModified();
@@ -1017,7 +1020,7 @@ public partial class ModSettingsDialog : CanvasLayer
 
         var drawRow = new HBoxContainer();
         drawRow.AddChild(new Label { Text = "Bonus Card Draw per Turn: ", CustomMinimumSize = new Vector2(200, 0) });
-        _bonusDrawSpin = new SpinBox { MinValue = 0, MaxValue = 10, Value = 0 };
+        _bonusDrawSpin = new SpinBox { MinValue = 0, MaxValue = 10, Value = 0 }.MakeNumericOnly();
         _bonusDrawSpin.ValueChanged += val => { ConfigManager.Current.CombatSandbox.BonusDrawPerTurn = (int)val; ConfigManager.SaveConfig(); };
         drawRow.AddChild(_bonusDrawSpin);
         cheatsGrid.AddChild(drawRow);
@@ -2502,7 +2505,7 @@ public partial class ModSettingsDialog : CanvasLayer
             Step = 1,
             Value = card.Enchantment?.Amount > 0 ? card.Enchantment.Amount : 1,
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
-        };
+        }.MakeNumericOnly();
         amountRow.AddChild(amountSpin);
         vbox.AddChild(amountRow);
 
@@ -2671,7 +2674,7 @@ public partial class ModSettingsDialog : CanvasLayer
         var goldRow = new HBoxContainer();
         goldRow.AddThemeConstantOverride("separation", 8);
         goldRow.AddChild(new Label { Text = "Gold Amount: ", CustomMinimumSize = new Vector2(140, 0) });
-        _goldAmountSpin = new SpinBox { MinValue = 0, MaxValue = 99999, Step = 50, Value = Math.Max(0, defaultGold), CustomMinimumSize = new Vector2(120, 0) };
+        _goldAmountSpin = new SpinBox { MinValue = 0, MaxValue = 99999, Step = 50, Value = Math.Max(0, defaultGold), CustomMinimumSize = new Vector2(120, 0) }.MakeNumericOnly();
         var addGoldBtn = new Button { Text = " Add Gold ", CustomMinimumSize = new Vector2(110, 32) };
         addGoldBtn.Pressed += () => InventoryDirector.AddGold((int)_goldAmountSpin.Value);
         var setGoldBtn = new Button { Text = " Set Exact Gold ", CustomMinimumSize = new Vector2(130, 32) };
@@ -2684,7 +2687,7 @@ public partial class ModSettingsDialog : CanvasLayer
         var healRow = new HBoxContainer();
         healRow.AddThemeConstantOverride("separation", 8);
         healRow.AddChild(new Label { Text = "Heal Amount: ", CustomMinimumSize = new Vector2(140, 0) });
-        _currentHpAmountSpin = new SpinBox { MinValue = 1, MaxValue = 999, Step = 10, Value = defaultCurrentHp, CustomMinimumSize = new Vector2(120, 0) };
+        _currentHpAmountSpin = new SpinBox { MinValue = 1, MaxValue = 999, Step = 10, Value = defaultCurrentHp, CustomMinimumSize = new Vector2(120, 0) }.MakeNumericOnly();
         var healBtn = new Button { Text = " Heal Player ", CustomMinimumSize = new Vector2(110, 32) };
         healBtn.Pressed += () => InventoryDirector.Heal((int)_currentHpAmountSpin.Value);
         healRow.AddChild(_currentHpAmountSpin);
@@ -2694,7 +2697,7 @@ public partial class ModSettingsDialog : CanvasLayer
         var damageRow = new HBoxContainer();
         damageRow.AddThemeConstantOverride("separation", 8);
         damageRow.AddChild(new Label { Text = "Damage Amount: ", CustomMinimumSize = new Vector2(140, 0) });
-        _damageAmountSpin = new SpinBox { MinValue = 1, MaxValue = 999, Step = 5, Value = 5, CustomMinimumSize = new Vector2(120, 0) };
+        _damageAmountSpin = new SpinBox { MinValue = 1, MaxValue = 999, Step = 5, Value = 5, CustomMinimumSize = new Vector2(120, 0) }.MakeNumericOnly();
         var damageBtn = new Button { Text = " Damage Player ", CustomMinimumSize = new Vector2(110, 32) };
         damageBtn.Pressed += () => InventoryDirector.DamagePlayer((int)_damageAmountSpin.Value);
         damageRow.AddChild(_damageAmountSpin);
@@ -2704,7 +2707,7 @@ public partial class ModSettingsDialog : CanvasLayer
         var maxHpRow = new HBoxContainer();
         maxHpRow.AddThemeConstantOverride("separation", 8);
         maxHpRow.AddChild(new Label { Text = "Max HP Amount: ", CustomMinimumSize = new Vector2(140, 0) });
-        _maxHpAmountSpin = new SpinBox { MinValue = 1, MaxValue = 999, Step = 10, Value = defaultMaxHp, CustomMinimumSize = new Vector2(120, 0) };
+        _maxHpAmountSpin = new SpinBox { MinValue = 1, MaxValue = 999, Step = 10, Value = defaultMaxHp, CustomMinimumSize = new Vector2(120, 0) }.MakeNumericOnly();
         var maxHpBtn = new Button { Text = " Set Max HP ", CustomMinimumSize = new Vector2(110, 32) };
         maxHpBtn.Pressed += () => InventoryDirector.SetMaxHp((int)_maxHpAmountSpin.Value);
         maxHpRow.AddChild(_maxHpAmountSpin);
@@ -3149,6 +3152,155 @@ public partial class ModSettingsDialog : CanvasLayer
             _ => "white"
         };
         CallDeferred(nameof(DeferredLogAppend), $"[color={color}]{msg}[/color]");
+    }
+
+    private void StartHotkeyAssignment(LineEdit input, Button button, string defaultPlaceholder)
+    {
+        if (_assigningHotkeyInput != null && _assigningHotkeyInput != input)
+        {
+            CancelHotkeyAssignment();
+        }
+
+        _assigningHotkeyInput = input;
+        _assigningHotkeyButton = button;
+        _previousHotkeyValue = input.Text;
+        _previousHotkeyPlaceholder = defaultPlaceholder;
+
+        button.Text = "Press Key... (Esc: Cancel)";
+        button.Modulate = new Color(1f, 0.85f, 0.3f);
+        input.PlaceholderText = "Press any key... (Esc to cancel, Backspace to clear)";
+    }
+
+    private void CancelHotkeyAssignment()
+    {
+        if (_assigningHotkeyInput != null)
+        {
+            _assigningHotkeyInput.Text = _previousHotkeyValue ?? "";
+            if (!string.IsNullOrEmpty(_previousHotkeyPlaceholder))
+            {
+                _assigningHotkeyInput.PlaceholderText = _previousHotkeyPlaceholder;
+            }
+            _assigningHotkeyInput.ReleaseFocus();
+        }
+
+        if (_assigningHotkeyButton != null)
+        {
+            _assigningHotkeyButton.Text = "Assign Key";
+            _assigningHotkeyButton.Modulate = Colors.White;
+        }
+
+        _assigningHotkeyInput = null;
+        _assigningHotkeyButton = null;
+        _previousHotkeyValue = null;
+        _previousHotkeyPlaceholder = null;
+    }
+
+    private void CompleteHotkeyAssignment(string keyName)
+    {
+        if (_assigningHotkeyInput != null)
+        {
+            _assigningHotkeyInput.Text = keyName;
+            if (!string.IsNullOrEmpty(_previousHotkeyPlaceholder))
+            {
+                _assigningHotkeyInput.PlaceholderText = _previousHotkeyPlaceholder;
+            }
+            _assigningHotkeyInput.ReleaseFocus();
+            MarkTweaksModified();
+        }
+
+        if (_assigningHotkeyButton != null)
+        {
+            _assigningHotkeyButton.Text = "Assign Key";
+            _assigningHotkeyButton.Modulate = Colors.White;
+        }
+
+        _assigningHotkeyInput = null;
+        _assigningHotkeyButton = null;
+        _previousHotkeyValue = null;
+        _previousHotkeyPlaceholder = null;
+    }
+
+    private static bool IsModifierKey(Key key)
+    {
+        return key is Key.Shift or Key.Ctrl or Key.Alt or Key.Meta or Key.Capslock;
+    }
+
+    private HBoxContainer CreateHotkeyRow(string labelText, out LineEdit lineEdit, string placeholderText)
+    {
+        var row = new HBoxContainer();
+        row.AddThemeConstantOverride("separation", 6);
+        row.AddChild(new Label { Text = labelText, CustomMinimumSize = new Vector2(200, 0) });
+
+        var input = new LineEdit
+        {
+            PlaceholderText = placeholderText,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+        };
+
+        string savedVal = input.Text;
+        input.FocusEntered += () => savedVal = input.Text;
+        input.TextChanged += _ => MarkTweaksModified();
+
+        var assignBtn = new Button
+        {
+            Text = "Assign Key",
+            CustomMinimumSize = new Vector2(90, 0)
+        };
+
+        var clearBtn = new Button
+        {
+            Text = "Clear",
+            CustomMinimumSize = new Vector2(55, 0)
+        };
+
+        assignBtn.Pressed += () =>
+        {
+            if (_assigningHotkeyInput == input)
+            {
+                CancelHotkeyAssignment();
+            }
+            else
+            {
+                StartHotkeyAssignment(input, assignBtn, placeholderText);
+            }
+        };
+
+        clearBtn.Pressed += () =>
+        {
+            if (_assigningHotkeyInput == input)
+            {
+                CancelHotkeyAssignment();
+            }
+            input.Text = "";
+            MarkTweaksModified();
+        };
+
+        input.GuiInput += @event =>
+        {
+            if (@event is InputEventKey keyEvent && keyEvent.Pressed && !keyEvent.Echo)
+            {
+                if (keyEvent.Keycode == Key.Escape)
+                {
+                    if (_assigningHotkeyInput == input)
+                    {
+                        CancelHotkeyAssignment();
+                    }
+                    else
+                    {
+                        input.Text = savedVal;
+                        input.ReleaseFocus();
+                    }
+                    GetViewport().SetInputAsHandled();
+                }
+            }
+        };
+
+        row.AddChild(input);
+        row.AddChild(assignBtn);
+        row.AddChild(clearBtn);
+
+        lineEdit = input;
+        return row;
     }
 
     private void DeferredLogAppend(string text)

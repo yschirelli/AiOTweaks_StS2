@@ -2726,4 +2726,63 @@ public static class GameHelper
 
         return null;
     }
+
+    /// <summary>
+    /// Configures a SpinBox's internal LineEdit to reject letter typing so only numbers are accepted.
+    /// </summary>
+    public static SpinBox MakeNumericOnly(this SpinBox spinBox)
+    {
+        if (spinBox == null) return spinBox!;
+        var lineEdit = spinBox.GetLineEdit();
+        if (lineEdit == null) return spinBox;
+
+        bool allowDecimals = (spinBox.Step > 0 && Math.Abs(spinBox.Step - Math.Floor(spinBox.Step)) > 0.00001) ||
+                             Math.Abs(spinBox.MinValue - Math.Floor(spinBox.MinValue)) > 0.00001 ||
+                             Math.Abs(spinBox.MaxValue - Math.Floor(spinBox.MaxValue)) > 0.00001;
+        bool allowNegative = spinBox.MinValue < 0;
+
+        lineEdit.VirtualKeyboardType = allowDecimals
+            ? LineEdit.VirtualKeyboardTypeEnum.NumberDecimal
+            : LineEdit.VirtualKeyboardTypeEnum.Number;
+
+        bool isUpdating = false;
+        lineEdit.TextChanged += (newText) =>
+        {
+            if (isUpdating || string.IsNullOrEmpty(newText)) return;
+
+            int oldCaret = lineEdit.CaretColumn;
+            var filtered = new System.Text.StringBuilder(newText.Length);
+            bool hasDecimal = false;
+
+            for (int i = 0; i < newText.Length; i++)
+            {
+                char c = newText[i];
+                if (char.IsDigit(c))
+                {
+                    filtered.Append(c);
+                }
+                else if (allowNegative && c == '-' && filtered.Length == 0)
+                {
+                    filtered.Append(c);
+                }
+                else if (allowDecimals && (c == '.' || c == ',') && !hasDecimal)
+                {
+                    filtered.Append('.');
+                    hasDecimal = true;
+                }
+            }
+
+            string filteredText = filtered.ToString();
+            if (filteredText != newText)
+            {
+                isUpdating = true;
+                int diff = newText.Length - filteredText.Length;
+                lineEdit.Text = filteredText;
+                lineEdit.CaretColumn = Math.Clamp(oldCaret - diff, 0, filteredText.Length);
+                isUpdating = false;
+            }
+        };
+
+        return spinBox;
+    }
 }

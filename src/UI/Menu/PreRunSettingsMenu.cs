@@ -1,5 +1,6 @@
 using System;
 using Godot;
+using AIOTweaks.Core;
 using AIOTweaks.Core.Config;
 using AIOTweaks.Core.Logging;
 
@@ -70,13 +71,13 @@ public partial class PreRunSettingsMenu : Control
 
         var bonusGoldRow = new HBoxContainer();
         bonusGoldRow.AddChild(new Label { Text = "Starting Gold Bonus: " });
-        _bonusGoldSpin = new SpinBox { MinValue = 0, MaxValue = 9999, Step = 25, Value = 0 };
+        _bonusGoldSpin = new SpinBox { MinValue = 0, MaxValue = 9999, Step = 25, Value = 0 }.MakeNumericOnly();
         bonusGoldRow.AddChild(_bonusGoldSpin);
         vbox.AddChild(bonusGoldRow);
 
         var bonusHpRow = new HBoxContainer();
         bonusHpRow.AddChild(new Label { Text = "Starting Max HP Bonus: " });
-        _bonusHpSpin = new SpinBox { MinValue = 0, MaxValue = 500, Step = 5, Value = 0 };
+        _bonusHpSpin = new SpinBox { MinValue = 0, MaxValue = 500, Step = 5, Value = 0 }.MakeNumericOnly();
         bonusHpRow.AddChild(_bonusHpSpin);
         vbox.AddChild(bonusHpRow);
 
@@ -107,7 +108,7 @@ public partial class PreRunSettingsMenu : Control
         vbox.AddChild(new Label { Text = "--- Rewards & Deck Tweaks ---", Modulate = new Color(0.7f, 0.5f, 1f) });
         var cardRewardRow = new HBoxContainer();
         cardRewardRow.AddChild(new Label { Text = "Card Choices per Reward: " });
-        _cardRewardSpin = new SpinBox { MinValue = 1, MaxValue = 10, Step = 1, Value = 3 };
+        _cardRewardSpin = new SpinBox { MinValue = 1, MaxValue = 10, Step = 1, Value = 3 }.MakeNumericOnly();
         cardRewardRow.AddChild(_cardRewardSpin);
         vbox.AddChild(cardRewardRow);
 
@@ -186,6 +187,6 @@ public partial class PreRunSettingsMenu : Control
         ConfigManager.Current.PreRunTweaks = new PreRunTweaksConfig();
         ConfigManager.SaveConfig();
         LoadValuesFromConfig();
-        ModLogger.Info("Pre-run settings reset to default values.");
+        ModLogger.Info("PreRunSettingsMenu reset to default values.");
     }
 }
