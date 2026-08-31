@@ -31,15 +31,22 @@ public partial class ModSettingsDialog : CanvasLayer
     private Vector2 _resizeStartMousePos;
     private Vector2 _resizeStartPanelSize;
 
-    private LineEdit? _consoleHotkeyInput;
-    private LineEdit? _guiHotkeyInput;
-    private LineEdit? _quickGodModeInput;
-    private LineEdit? _quickKillEnemiesInput;
-    private LineEdit? _quickOpenShopInput;
-    private LineEdit? _assigningHotkeyInput;
-    private Button? _assigningHotkeyButton;
-    private string? _previousHotkeyValue;
-    private string? _previousHotkeyPlaceholder;
+    private Button? _consoleHotkeyBtn;
+    private Button? _guiHotkeyBtn;
+    private Button? _quickGodModeBtn;
+    private Button? _quickKillEnemiesBtn;
+    private Button? _quickOpenShopBtn;
+
+    private string _consoleHotkeyVal = GeneralConfig.DefaultConsoleHotkey;
+    private string _guiHotkeyVal = GeneralConfig.DefaultGuiOverlayHotkey;
+    private string _quickGodModeVal = "";
+    private string _quickKillEnemiesVal = "";
+    private string _quickOpenShopVal = "";
+
+    private Button? _activeAssignButton;
+    private Action<string>? _activeAssignCallback;
+    private string? _previousAssignVal;
+    private string _activeFallbackDefault = "";
 
     private HSlider? _goldSlider;
     private HSlider? _shopDiscountSlider;
@@ -153,7 +160,7 @@ public partial class ModSettingsDialog : CanvasLayer
 
         if (@event is InputEventKey keyEvent && keyEvent.Pressed && !keyEvent.Echo)
         {
-            if (isDialogOpen && _assigningHotkeyInput != null)
+            if (isDialogOpen && _activeAssignButton != null)
             {
                 if (keyEvent.Keycode == Key.Escape)
                 {
