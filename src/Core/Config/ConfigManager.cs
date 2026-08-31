@@ -8,9 +8,12 @@ namespace AIOTweaks.Core.Config;
 
 /// <summary>
 /// Manages reading, writing, caching, and fallback validation of AIOTweaks configuration.
+/// Saves and loads settings directly from the mod root directory (config.json) so settings persist across game sessions.
 /// </summary>
 public static class ConfigManager
 {
+    public const string ConfigFileName = "config.json";
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
@@ -24,41 +27,10 @@ public static class ConfigManager
 
     public static event Action<ModConfig>? OnConfigChanged;
 
-    private static string GetConfigFilePath()
+    public static string GetConfigFilePath()
     {
-        ModLogger.Verbose("ConfigManager", "Resolving configuration file path...");
-        try
-        {
-            // Try Godot's OS user data directory first, fallback to current working directory
-            string userDir = OS.GetUserDataDir();
-            if (!string.IsNullOrEmpty(userDir) && Directory.Exists(userDir))
-            {
-                string configDir = Path.Combine(userDir, "AIOTweaks");
-                if (!Directory.Exists(configDir))
-                {
-                    Directory.CreateDirectory(configDir);
-                    ModLogger.Verbose("ConfigManager", $"Created configuration directory at: {configDir}");
-                }
-                string userPath = Path.Combine(configDir, "config.json");
-                ModLogger.Verbose("ConfigManager", $"Resolved primary user configuration path: {userPath}");
-                return userPath;
-            }
-        }
-        catch (Exception ex)
-        {
-            ModLogger.Debug($"ConfigManager native OS lookup notice: {ex.Message}");
-        }
-
-        // Fallback relative path
-        string localDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config");
-        if (!Directory.Exists(localDir))
-        {
-            Directory.CreateDirectory(localDir);
-            ModLogger.Verbose("ConfigManager", $"Created fallback config directory at: {localDir}");
-        }
-        string fallbackPath = Path.Combine(localDir, "default_config.json");
-        ModLogger.Verbose("ConfigManager", $"Resolved fallback configuration path: {fallbackPath}");
-        return fallbackPath;
+        string rootDir = ModLogger.GetModRootDirectory();
+        return Path.Combine(rootDir, ConfigFileName);
     }
 
     public static void Initialize()
@@ -87,14 +59,15 @@ public static class ConfigManager
 
     public static void LoadConfig()
     {
-        string path = GetConfigFilePath();
-        ModLogger.Verbose("ConfigManager", $"Attempting to load configuration from path: '{path}'");
+        string primaryPath = GetConfigFilePath();
+        string rootDir = ModLogger.GetModRootDirectory();
+        ModLogger.Verbose("ConfigManager", $"Attempting to load configuration from primary path: '{primaryPath}'");
         try
         {
-            if (File.Exists(path))
+            if (File.Exists(primaryPath))
             {
-                string json = File.ReadAllText(path);
-                ModLogger.Verbose("ConfigManager", $"Read {json.Length} bytes of JSON configuration.");
+                string json = File.ReadAllText(primaryPath);
+                ModLogger.Verbose("ConfigManager", $"Read {json.Length} bytes of JSON configuration from primary path.");
                 ModConfig? loaded = JsonSerializer.Deserialize<ModConfig>(json, JsonOptions);
                 if (loaded != null)
                 {
@@ -107,13 +80,55 @@ public static class ConfigManager
 #else
                     ModLogger.MinimumLevel = Current.General.DebugLogging ? LogLevel.Debug : LogLevel.Info;
 #endif
-                    ModLogger.Info($"Loaded configuration successfully from: {path} (DebugLogging={Current.General.DebugLogging}, MinimumLevel={ModLogger.MinimumLevel})");
+                    ModLogger.Info($"Loaded configuration successfully from root directory: {primaryPath} (DebugLogging={Current.General.DebugLogging}, MinimumLevel={ModLogger.MinimumLevel})");
                     OnConfigChanged?.Invoke(Current);
                     return;
                 }
             }
 
-            ModLogger.Warn($"Configuration file not found or empty at {path}. Generating default configuration.");
+            // Fallback checks if primary config.json in root does not exist yet:
+            // Check config/config.json or config/default_config.json in mod root, or legacy user data dir
+            string[] fallbackCandidates = new[]
+            {
+                Path.Combine(rootDir, "config", "config.json"),
+                Path.Combine(rootDir, "config", "default_config.json"),
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config", "default_config.json"),
+                Path.Combine(OS.GetUserDataDir(), "AIOTweaks", "config.json")
+            };
+
+            foreach (string fallbackPath in fallbackCandidates)
+            {
+                try
+                {
+                    if (!string.IsNullOrEmpty(fallbackPath) && File.Exists(fallbackPath))
+                    {
+                        ModLogger.Verbose("ConfigManager", $"Checking fallback configuration at: '{fallbackPath}'");
+                        string json = File.ReadAllText(fallbackPath);
+                        ModConfig? loaded = JsonSerializer.Deserialize<ModConfig>(json, JsonOptions);
+                        if (loaded != null)
+                        {
+                            Current = loaded;
+                            EnsureHotkeyFailsafes();
+#if DEBUG
+                            Current.General.DebugLogging = true;
+                            ModLogger.MinimumLevel = LogLevel.Debug;
+                            ModLogger.FileLoggingEnabled = true;
+#else
+                            ModLogger.MinimumLevel = Current.General.DebugLogging ? LogLevel.Debug : LogLevel.Info;
+#endif
+                            ModLogger.Info($"Loaded configuration from fallback source: {fallbackPath}. Migrating/saving to root directory: {primaryPath}");
+                            SaveConfig();
+                            return;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    ModLogger.Debug($"ConfigManager fallback check note for '{fallbackPath}': {ex.Message}");
+                }
+            }
+
+            ModLogger.Warn($"Configuration file not found. Generating default configuration at root directory: {primaryPath}");
             Current = new ModConfig();
             EnsureHotkeyFailsafes();
 #if DEBUG
@@ -125,7 +140,7 @@ public static class ConfigManager
         }
         catch (Exception ex)
         {
-            ModLogger.Error($"Failed to parse configuration file at {path}. Reverting to safe defaults.", ex);
+            ModLogger.Error($"Failed to parse configuration file at {primaryPath}. Reverting to safe defaults.", ex);
             Current = new ModConfig();
             EnsureHotkeyFailsafes();
 #if DEBUG
@@ -141,17 +156,23 @@ public static class ConfigManager
     {
         EnsureHotkeyFailsafes();
         string path = GetConfigFilePath();
-        ModLogger.Verbose("ConfigManager", $"Saving configuration to: '{path}'");
+        ModLogger.Verbose("ConfigManager", $"Saving configuration to root directory: '{path}'");
         try
         {
+            string? dir = Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+
             string json = JsonSerializer.Serialize(Current, JsonOptions);
             File.WriteAllText(path, json);
-            ModLogger.Info($"Saved configuration ({json.Length} bytes) to: {path}");
+            ModLogger.Info($"Saved configuration ({json.Length} bytes) to root directory: {path}");
             OnConfigChanged?.Invoke(Current);
         }
         catch (Exception ex)
         {
-            ModLogger.Error($"Failed to save configuration to: {path}", ex);
+            ModLogger.Error($"Failed to save configuration to root directory: {path}", ex);
         }
     }
 

@@ -765,8 +765,33 @@ public static class MapGenerationHooks
             int extraSections = (int)Math.Ceiling(extraHeight / 1080f);
             _currentExtraOffsetY = extraSections * 1080f;
 
+            var mapTop = AccessTools.Field(typeof(NMapBg), "_mapTop")?.GetValue(mapBg) as TextureRect;
             var mapMid = AccessTools.Field(typeof(NMapBg), "_mapMid")?.GetValue(mapBg) as TextureRect;
+            var mapBot = AccessTools.Field(typeof(NMapBg), "_mapBot")?.GetValue(mapBg) as TextureRect;
             var runState = AccessTools.Field(typeof(NMapBg), "_runState")?.GetValue(mapBg) as RunState;
+
+            // Ensure vanilla MapTop, MapMid, and MapBot maintain exact standard dimensions
+            if (mapTop != null)
+            {
+                mapTop.CustomMinimumSize = new Vector2(0f, 1080f);
+                mapTop.ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize;
+                mapTop.StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered;
+                mapTop.UseParentMaterial = true;
+            }
+            if (mapMid != null)
+            {
+                mapMid.CustomMinimumSize = new Vector2(0f, 1080f);
+                mapMid.ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize;
+                mapMid.StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered;
+                mapMid.UseParentMaterial = true;
+            }
+            if (mapBot != null)
+            {
+                mapBot.CustomMinimumSize = new Vector2(0f, 1080f);
+                mapBot.ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize;
+                mapBot.StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered;
+                mapBot.UseParentMaterial = true;
+            }
 
             if (mapMid != null && extraSections > 0)
             {
@@ -776,7 +801,12 @@ public static class MapGenerationHooks
                     {
                         Name = $"MapMid_Extra_{i}",
                         Texture = runState?.Act?.MapMidBg ?? mapMid.Texture,
-                        StretchMode = mapMid.StretchMode,
+                        CustomMinimumSize = new Vector2(0f, 1080f),
+                        LayoutMode = 2,
+                        ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+                        StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+                        UseParentMaterial = true,
+                        MouseFilter = Control.MouseFilterEnum.Ignore,
                         TextureFilter = mapMid.TextureFilter,
                         TextureRepeat = mapMid.TextureRepeat,
                         SizeFlagsHorizontal = mapMid.SizeFlagsHorizontal,
@@ -785,12 +815,6 @@ public static class MapGenerationHooks
                     mapBg.AddChild(extraMid);
                     mapBg.MoveChild(extraMid, 1 + i); // Place between MapTop (0) and MapBot
                 }
-            }
-
-            // Reset any custom minimum size on mapMid so it scales identically to vanilla
-            if (mapMid != null)
-            {
-                mapMid.CustomMinimumSize = Vector2.Zero;
             }
 
             float bgTop = -1620f - _currentExtraOffsetY;

@@ -78,51 +78,61 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
     [ConfigSection("God Mode & Combat Cheats")]
     public bool GodMode
     {
-        get => RuntimeStateManager.GodModeEnabled;
+        get => RuntimeStateManager.GodModeEnabled || ConfigManager.Current.CombatSandbox.GodMode;
         set
         {
             ModLogger.Verbose("AIOTweaksBaseLibConfig", $"GodMode BaseLib set: {value}");
             RuntimeStateManager.GodModeEnabled = value;
+            ConfigManager.Current.CombatSandbox.GodMode = value;
+            ConfigManager.SaveConfig();
         }
     }
 
     public bool OneHitKill
     {
-        get => RuntimeStateManager.OneHitKillEnabled;
+        get => RuntimeStateManager.OneHitKillEnabled || ConfigManager.Current.CombatSandbox.OneHitKill;
         set
         {
             ModLogger.Verbose("AIOTweaksBaseLibConfig", $"OneHitKill BaseLib set: {value}");
             RuntimeStateManager.OneHitKillEnabled = value;
+            ConfigManager.Current.CombatSandbox.OneHitKill = value;
+            ConfigManager.SaveConfig();
         }
     }
 
     public bool InfiniteEnergy
     {
-        get => RuntimeStateManager.InfiniteEnergyEnabled;
+        get => RuntimeStateManager.InfiniteEnergyEnabled || ConfigManager.Current.CombatSandbox.InfiniteEnergy;
         set
         {
             ModLogger.Verbose("AIOTweaksBaseLibConfig", $"InfiniteEnergy BaseLib set: {value}");
             RuntimeStateManager.InfiniteEnergyEnabled = value;
+            ConfigManager.Current.CombatSandbox.InfiniteEnergy = value;
+            ConfigManager.SaveConfig();
         }
     }
 
     public bool InfinitePotions
     {
-        get => RuntimeStateManager.InfinitePotionsEnabled;
+        get => RuntimeStateManager.InfinitePotionsEnabled || ConfigManager.Current.CombatSandbox.InfinitePotions;
         set
         {
             ModLogger.Verbose("AIOTweaksBaseLibConfig", $"InfinitePotions BaseLib set: {value}");
             RuntimeStateManager.InfinitePotionsEnabled = value;
+            ConfigManager.Current.CombatSandbox.InfinitePotions = value;
+            ConfigManager.SaveConfig();
         }
     }
 
     public bool NoCardExhaust
     {
-        get => RuntimeStateManager.NoCardExhaustEnabled;
+        get => RuntimeStateManager.NoCardExhaustEnabled || ConfigManager.Current.CombatSandbox.NoCardExhaust;
         set
         {
             ModLogger.Verbose("AIOTweaksBaseLibConfig", $"NoCardExhaust BaseLib set: {value}");
             RuntimeStateManager.NoCardExhaustEnabled = value;
+            ConfigManager.Current.CombatSandbox.NoCardExhaust = value;
+            ConfigManager.SaveConfig();
         }
     }
 
