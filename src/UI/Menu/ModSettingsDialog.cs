@@ -515,6 +515,7 @@ public partial class ModSettingsDialog : CanvasLayer
             ConfigManager.Current.General.GuiOverlayHotkey = GeneralConfig.DefaultGuiOverlayHotkey;
             ConfigManager.Current.General.QuickGodModeKey = "";
             ConfigManager.Current.General.QuickKillEnemiesKey = "";
+            ConfigManager.Current.General.QuickOpenShopKey = "";
 
             ConfigManager.Current.PreRunTweaks.MapRoomCount = 15;
             ConfigManager.Current.PreRunTweaks.GoldRewardMultiplier = 1.0f;
@@ -762,17 +763,17 @@ public partial class ModSettingsDialog : CanvasLayer
         
         var hotkeyNote = new Label 
         { 
-            Text = "Click 'Assign Key' and press any key (Esc to cancel, Backspace/Clear to remove). If left empty, default hotkeys (F1 for Console, F3 for GUI) will be automatically restored.", 
+            Text = "Click any hotkey button and press a key to rebind (Esc to cancel, Backspace/Clear to remove). If left empty, default hotkeys (F1 for Console, F3 for GUI) will be automatically restored.", 
             Modulate = new Color(0.65f, 0.7f, 0.78f, 0.8f),
             AutowrapMode = TextServer.AutowrapMode.WordSmart
         };
         hotkeysBox.AddChild(hotkeyNote);
 
-        hotkeysBox.AddChild(CreateHotkeyRow("Console Hotkey: ", out _consoleHotkeyInput, "e.g. F1, Quoteleft (Default: F1)"));
-        hotkeysBox.AddChild(CreateHotkeyRow("GUI Menu Overlay Hotkey: ", out _guiHotkeyInput, "e.g. F3, F8 (Default: F3)"));
-        hotkeysBox.AddChild(CreateHotkeyRow("Quick God Mode Hotkey: ", out _quickGodModeInput, "e.g. F2 (Empty = Disabled)"));
-        hotkeysBox.AddChild(CreateHotkeyRow("Quick Kill All Enemies Hotkey: ", out _quickKillEnemiesInput, "e.g. F4 (Empty = Disabled)"));
-        hotkeysBox.AddChild(CreateHotkeyRow("Quick Open Shop Hotkey: ", out _quickOpenShopInput, "e.g. F5, O (Empty = Disabled)"));
+        hotkeysBox.AddChild(CreateHotkeyRow("Console Hotkey: ", out _consoleHotkeyBtn, () => _consoleHotkeyVal, val => _consoleHotkeyVal = val, GeneralConfig.DefaultConsoleHotkey));
+        hotkeysBox.AddChild(CreateHotkeyRow("GUI Menu Overlay Hotkey: ", out _guiHotkeyBtn, () => _guiHotkeyVal, val => _guiHotkeyVal = val, GeneralConfig.DefaultGuiOverlayHotkey));
+        hotkeysBox.AddChild(CreateHotkeyRow("Quick God Mode Hotkey: ", out _quickGodModeBtn, () => _quickGodModeVal, val => _quickGodModeVal = val));
+        hotkeysBox.AddChild(CreateHotkeyRow("Quick Kill All Enemies Hotkey: ", out _quickKillEnemiesBtn, () => _quickKillEnemiesVal, val => _quickKillEnemiesVal = val));
+        hotkeysBox.AddChild(CreateHotkeyRow("Quick Open Shop Hotkey: ", out _quickOpenShopBtn, () => _quickOpenShopVal, val => _quickOpenShopVal = val));
 
         leftCol.AddChild(CreateSectionCard("Keybindings & Hotkeys", hotkeysBox, new Color(0.4f, 0.85f, 1f)));
 
@@ -2927,11 +2928,18 @@ public partial class ModSettingsDialog : CanvasLayer
         var tweaks = ConfigManager.Current.PreRunTweaks;
         var sandbox = ConfigManager.Current.CombatSandbox;
         var general = ConfigManager.Current.General;
-        if (_consoleHotkeyInput != null) _consoleHotkeyInput.Text = general.ConsoleHotkey;
-        if (_guiHotkeyInput != null) _guiHotkeyInput.Text = general.GuiOverlayHotkey;
-        if (_quickGodModeInput != null) _quickGodModeInput.Text = general.QuickGodModeKey;
-        if (_quickKillEnemiesInput != null) _quickKillEnemiesInput.Text = general.QuickKillEnemiesKey;
-        if (_quickOpenShopInput != null) _quickOpenShopInput.Text = general.QuickOpenShopKey;
+
+        _consoleHotkeyVal = string.IsNullOrWhiteSpace(general.ConsoleHotkey) ? GeneralConfig.DefaultConsoleHotkey : general.ConsoleHotkey;
+        _guiHotkeyVal = string.IsNullOrWhiteSpace(general.GuiOverlayHotkey) ? GeneralConfig.DefaultGuiOverlayHotkey : general.GuiOverlayHotkey;
+        _quickGodModeVal = general.QuickGodModeKey ?? "";
+        _quickKillEnemiesVal = general.QuickKillEnemiesKey ?? "";
+        _quickOpenShopVal = general.QuickOpenShopKey ?? "";
+
+        if (_consoleHotkeyBtn != null) UpdateHotkeyButtonText(_consoleHotkeyBtn, _consoleHotkeyVal, GeneralConfig.DefaultConsoleHotkey);
+        if (_guiHotkeyBtn != null) UpdateHotkeyButtonText(_guiHotkeyBtn, _guiHotkeyVal, GeneralConfig.DefaultGuiOverlayHotkey);
+        if (_quickGodModeBtn != null) UpdateHotkeyButtonText(_quickGodModeBtn, _quickGodModeVal);
+        if (_quickKillEnemiesBtn != null) UpdateHotkeyButtonText(_quickKillEnemiesBtn, _quickKillEnemiesVal);
+        if (_quickOpenShopBtn != null) UpdateHotkeyButtonText(_quickOpenShopBtn, _quickOpenShopVal);
 
         if (_mapRoomCountSpin != null)
         {
@@ -3004,20 +3012,11 @@ public partial class ModSettingsDialog : CanvasLayer
         var sandbox = ConfigManager.Current.CombatSandbox;
         var general = ConfigManager.Current.General;
 
-        if (_consoleHotkeyInput != null)
-        {
-            string consoleVal = _consoleHotkeyInput.Text.Trim();
-            general.ConsoleHotkey = string.IsNullOrWhiteSpace(consoleVal) ? GeneralConfig.DefaultConsoleHotkey : consoleVal;
-        }
-
-        if (_guiHotkeyInput != null)
-        {
-            string guiVal = _guiHotkeyInput.Text.Trim();
-            general.GuiOverlayHotkey = string.IsNullOrWhiteSpace(guiVal) ? GeneralConfig.DefaultGuiOverlayHotkey : guiVal;
-        }
-        if (_quickGodModeInput != null) general.QuickGodModeKey = _quickGodModeInput.Text.Trim();
-        if (_quickKillEnemiesInput != null) general.QuickKillEnemiesKey = _quickKillEnemiesInput.Text.Trim();
-        if (_quickOpenShopInput != null) general.QuickOpenShopKey = _quickOpenShopInput.Text.Trim();
+        general.ConsoleHotkey = string.IsNullOrWhiteSpace(_consoleHotkeyVal) ? GeneralConfig.DefaultConsoleHotkey : _consoleHotkeyVal;
+        general.GuiOverlayHotkey = string.IsNullOrWhiteSpace(_guiHotkeyVal) ? GeneralConfig.DefaultGuiOverlayHotkey : _guiHotkeyVal;
+        general.QuickGodModeKey = _quickGodModeVal ?? "";
+        general.QuickKillEnemiesKey = _quickKillEnemiesVal ?? "";
+        general.QuickOpenShopKey = _quickOpenShopVal ?? "";
 
         if (_mapRoomCountSpin != null) tweaks.MapRoomCount = (int)_mapRoomCountSpin.Value;
         if (_goldSlider != null) tweaks.GoldRewardMultiplier = (float)_goldSlider.Value;
@@ -3161,70 +3160,65 @@ public partial class ModSettingsDialog : CanvasLayer
         CallDeferred(nameof(DeferredLogAppend), $"[color={color}]{msg}[/color]");
     }
 
-    private void StartHotkeyAssignment(LineEdit input, Button button, string defaultPlaceholder)
+    private void StartHotkeyAssignment(Button button, string currentVal, string fallbackDefault, Action<string> onAssigned)
     {
-        if (_assigningHotkeyInput != null && _assigningHotkeyInput != input)
+        if (_activeAssignButton != null && _activeAssignButton != button)
         {
             CancelHotkeyAssignment();
         }
 
-        _assigningHotkeyInput = input;
-        _assigningHotkeyButton = button;
-        _previousHotkeyValue = input.Text;
-        _previousHotkeyPlaceholder = defaultPlaceholder;
+        _activeAssignButton = button;
+        _activeAssignCallback = onAssigned;
+        _previousAssignVal = currentVal;
+        _activeFallbackDefault = fallbackDefault;
 
-        button.Text = "Press Key... (Esc: Cancel)";
+        button.Text = "Press any key... (Esc: Cancel)";
         button.Modulate = new Color(1f, 0.85f, 0.3f);
-        input.PlaceholderText = "Press any key... (Esc to cancel, Backspace to clear)";
     }
 
     private void CancelHotkeyAssignment()
     {
-        if (_assigningHotkeyInput != null)
+        if (_activeAssignButton != null)
         {
-            _assigningHotkeyInput.Text = _previousHotkeyValue ?? "";
-            if (!string.IsNullOrEmpty(_previousHotkeyPlaceholder))
-            {
-                _assigningHotkeyInput.PlaceholderText = _previousHotkeyPlaceholder;
-            }
-            _assigningHotkeyInput.ReleaseFocus();
+            UpdateHotkeyButtonText(_activeAssignButton, _previousAssignVal ?? "", _activeFallbackDefault);
+            _activeAssignButton.ReleaseFocus();
         }
 
-        if (_assigningHotkeyButton != null)
-        {
-            _assigningHotkeyButton.Text = "Assign Key";
-            _assigningHotkeyButton.Modulate = Colors.White;
-        }
-
-        _assigningHotkeyInput = null;
-        _assigningHotkeyButton = null;
-        _previousHotkeyValue = null;
-        _previousHotkeyPlaceholder = null;
+        _activeAssignButton = null;
+        _activeAssignCallback = null;
+        _previousAssignVal = null;
+        _activeFallbackDefault = "";
     }
 
     private void CompleteHotkeyAssignment(string keyName)
     {
-        if (_assigningHotkeyInput != null)
+        if (_activeAssignButton != null)
         {
-            _assigningHotkeyInput.Text = keyName;
-            if (!string.IsNullOrEmpty(_previousHotkeyPlaceholder))
-            {
-                _assigningHotkeyInput.PlaceholderText = _previousHotkeyPlaceholder;
-            }
-            _assigningHotkeyInput.ReleaseFocus();
-            MarkTweaksModified();
+            _activeAssignCallback?.Invoke(keyName);
+            UpdateHotkeyButtonText(_activeAssignButton, keyName, _activeFallbackDefault);
+            _activeAssignButton.ReleaseFocus();
+            SaveSettingsValues();
         }
 
-        if (_assigningHotkeyButton != null)
-        {
-            _assigningHotkeyButton.Text = "Assign Key";
-            _assigningHotkeyButton.Modulate = Colors.White;
-        }
+        _activeAssignButton = null;
+        _activeAssignCallback = null;
+        _previousAssignVal = null;
+        _activeFallbackDefault = "";
+    }
 
-        _assigningHotkeyInput = null;
-        _assigningHotkeyButton = null;
-        _previousHotkeyValue = null;
-        _previousHotkeyPlaceholder = null;
+    private static void UpdateHotkeyButtonText(Button btn, string keyVal, string fallbackDefault = "")
+    {
+        string displayKey = !string.IsNullOrWhiteSpace(keyVal) ? keyVal : fallbackDefault;
+        if (string.IsNullOrWhiteSpace(displayKey))
+        {
+            btn.Text = "None (Assign Key)";
+            btn.Modulate = new Color(0.7f, 0.7f, 0.75f);
+        }
+        else
+        {
+            btn.Text = $"{displayKey} (Assign Key)";
+            btn.Modulate = Colors.White;
+        }
     }
 
     private static bool IsModifierKey(Key key)
@@ -3232,81 +3226,55 @@ public partial class ModSettingsDialog : CanvasLayer
         return key is Key.Shift or Key.Ctrl or Key.Alt or Key.Meta or Key.Capslock;
     }
 
-    private HBoxContainer CreateHotkeyRow(string labelText, out LineEdit lineEdit, string placeholderText)
+    private HBoxContainer CreateHotkeyRow(string labelText, out Button outButton, Func<string> getVal, Action<string> setVal, string fallbackDefault = "")
     {
         var row = new HBoxContainer();
-        row.AddThemeConstantOverride("separation", 6);
-        row.AddChild(new Label { Text = labelText, CustomMinimumSize = new Vector2(200, 0) });
-
-        var input = new LineEdit
-        {
-            PlaceholderText = placeholderText,
-            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
-        };
-
-        string savedVal = input.Text;
-        input.FocusEntered += () => savedVal = input.Text;
-        input.TextChanged += _ => MarkTweaksModified();
+        row.AddThemeConstantOverride("separation", 8);
+        row.AddChild(new Label { Text = labelText, CustomMinimumSize = new Vector2(230, 0) });
 
         var assignBtn = new Button
         {
-            Text = "Assign Key",
-            CustomMinimumSize = new Vector2(90, 0)
+            CustomMinimumSize = new Vector2(180, 32),
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
         };
+        UpdateHotkeyButtonText(assignBtn, getVal(), fallbackDefault);
 
         var clearBtn = new Button
         {
             Text = "Clear",
-            CustomMinimumSize = new Vector2(55, 0)
+            CustomMinimumSize = new Vector2(60, 32)
         };
 
         assignBtn.Pressed += () =>
         {
-            if (_assigningHotkeyInput == input)
+            if (_activeAssignButton == assignBtn)
             {
                 CancelHotkeyAssignment();
             }
             else
             {
-                StartHotkeyAssignment(input, assignBtn, placeholderText);
+                StartHotkeyAssignment(assignBtn, getVal(), fallbackDefault, (newKey) =>
+                {
+                    setVal(newKey);
+                });
             }
         };
 
         clearBtn.Pressed += () =>
         {
-            if (_assigningHotkeyInput == input)
+            if (_activeAssignButton == assignBtn)
             {
                 CancelHotkeyAssignment();
             }
-            input.Text = "";
-            MarkTweaksModified();
+            setVal("");
+            UpdateHotkeyButtonText(assignBtn, "", fallbackDefault);
+            SaveSettingsValues();
         };
 
-        input.GuiInput += @event =>
-        {
-            if (@event is InputEventKey keyEvent && keyEvent.Pressed && !keyEvent.Echo)
-            {
-                if (keyEvent.Keycode == Key.Escape)
-                {
-                    if (_assigningHotkeyInput == input)
-                    {
-                        CancelHotkeyAssignment();
-                    }
-                    else
-                    {
-                        input.Text = savedVal;
-                        input.ReleaseFocus();
-                    }
-                    GetViewport().SetInputAsHandled();
-                }
-            }
-        };
-
-        row.AddChild(input);
         row.AddChild(assignBtn);
         row.AddChild(clearBtn);
 
-        lineEdit = input;
+        outButton = assignBtn;
         return row;
     }
 
