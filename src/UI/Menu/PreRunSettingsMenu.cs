@@ -22,6 +22,9 @@ public partial class PreRunSettingsMenu : Control
     private HSlider? _eventSlider;
     private Label? _eventValLabel;
 
+    private HSlider? _treasureSlider;
+    private Label? _treasureValLabel;
+
     private SpinBox? _cardRewardSpin;
     private SpinBox? _bonusGoldSpin;
     private SpinBox? _bonusHpSpin;
@@ -99,6 +102,9 @@ public partial class PreRunSettingsMenu : Control
         var eventRow = CreateSliderRow("Unknown/Event Node Weight:", 0.0f, 5.0f, 0.1f, 1.0f, out _eventSlider, out _eventValLabel);
         vbox.AddChild(eventRow);
 
+        var treasureRow = CreateSliderRow("Treasure Room Multiplier:", 0.0f, 5.0f, 0.1f, 1.0f, out _treasureSlider, out _treasureValLabel);
+        vbox.AddChild(treasureRow);
+
         vbox.AddChild(new HSeparator());
 
         // Reward Customization
@@ -157,6 +163,7 @@ public partial class PreRunSettingsMenu : Control
         if (_eliteSlider != null) _eliteSlider.Value = tweaks.MapNodeDistribution.EliteWeightMultiplier;
         if (_shopSlider != null) _shopSlider.Value = tweaks.MapNodeDistribution.ShopWeightMultiplier;
         if (_eventSlider != null) _eventSlider.Value = tweaks.MapNodeDistribution.EventWeightMultiplier;
+        if (_treasureSlider != null) _treasureSlider.Value = tweaks.MapNodeDistribution.TreasureRoomMultiplier;
         if (_cardRewardSpin != null) _cardRewardSpin.Value = tweaks.CardRewardCount;
         if (_bonusGoldSpin != null) _bonusGoldSpin.Value = tweaks.StartingGoldBonus;
         if (_bonusHpSpin != null) _bonusHpSpin.Value = tweaks.StartingMaxHpBonus;
@@ -170,6 +177,7 @@ public partial class PreRunSettingsMenu : Control
         if (_eliteSlider != null) tweaks.MapNodeDistribution.EliteWeightMultiplier = (float)_eliteSlider.Value;
         if (_shopSlider != null) tweaks.MapNodeDistribution.ShopWeightMultiplier = (float)_shopSlider.Value;
         if (_eventSlider != null) tweaks.MapNodeDistribution.EventWeightMultiplier = (float)_eventSlider.Value;
+        if (_treasureSlider != null) tweaks.MapNodeDistribution.TreasureRoomMultiplier = (float)_treasureSlider.Value;
         if (_cardRewardSpin != null) tweaks.CardRewardCount = (int)_cardRewardSpin.Value;
         if (_bonusGoldSpin != null) tweaks.StartingGoldBonus = (int)_bonusGoldSpin.Value;
         if (_bonusHpSpin != null) tweaks.StartingMaxHpBonus = (int)_bonusHpSpin.Value;

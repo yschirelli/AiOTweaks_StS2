@@ -231,6 +231,17 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
         }
     }
 
+    [ConfigSlider(0.0, 5.0, 0.5)]
+    public double TreasureRoomRate
+    {
+        get => ConfigManager.Current.PreRunTweaks.MapNodeDistribution.TreasureRoomMultiplier;
+        set
+        {
+            ConfigManager.Current.PreRunTweaks.MapNodeDistribution.TreasureRoomMultiplier = (float)value;
+            ConfigManager.SaveConfig();
+        }
+    }
+
     [ConfigButton("Reset All Cheats & State")]
     public void ResetStateAction()
     {

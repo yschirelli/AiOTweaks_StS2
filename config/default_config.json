@@ -28,7 +28,8 @@
       "shopWeightMultiplier": 1.0,
       "eventWeightMultiplier": 1.0,
       "restSiteWeightMultiplier": 1.0,
-      "combatWeightMultiplier": 1.0
+      "combatWeightMultiplier": 1.0,
+      "treasureRoomMultiplier": 1.0
     }
   },
   "combatSandbox": {

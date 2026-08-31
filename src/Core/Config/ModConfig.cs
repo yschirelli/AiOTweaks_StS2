@@ -83,8 +83,8 @@ public sealed class PreRunTweaksConfig
     [JsonPropertyName("mapRoomCount")]
     public int MapRoomCount
     {
-        get => Math.Max(15, _mapRoomCount);
-        set => _mapRoomCount = Math.Max(15, value);
+        get => Math.Clamp(_mapRoomCount, 15, 50);
+        set => _mapRoomCount = Math.Clamp(value, 15, 50);
     }
 
     [JsonPropertyName("playerDamageMultiplier")]
@@ -137,6 +137,16 @@ public sealed class MapNodeDistributionConfig
 
     [JsonPropertyName("combatWeightMultiplier")]
     public float CombatWeightMultiplier { get; set; } = 1.0f;
+
+    [JsonPropertyName("treasureRoomMultiplier")]
+    public float TreasureRoomMultiplier { get; set; } = 1.0f;
+
+    [JsonIgnore]
+    public float TreasureWeightMultiplier
+    {
+        get => TreasureRoomMultiplier;
+        set => TreasureRoomMultiplier = value;
+    }
 }
 
 public sealed class CombatSandboxConfig

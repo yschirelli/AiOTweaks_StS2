@@ -37,12 +37,15 @@ public partial class ModSettingsDialog : CanvasLayer
     private HSlider? _eventSlider;
     private HSlider? _restSlider;
     private HSlider? _combatSlider;
+    private HSlider? _treasureSlider;
     private SpinBox? _cardRewardSpin;
     private SpinBox? _bonusGoldSpin;
     private SpinBox? _bonusHpSpin;
     private SpinBox? _mapRoomCountSpin;
+    private Label? _mapRoomWarningLabel;
     private CheckBox? _forceNeowCheck;
     private Label? _tweaksRunLockNoticeLabel;
+    private PanelContainer? _tweaksRunLockNoticeContainer;
 
     // Player & Combat Scaling
     private HSlider? _playerDmgSlider;
@@ -424,6 +427,7 @@ public partial class ModSettingsDialog : CanvasLayer
             ConfigManager.Current.PreRunTweaks.MapNodeDistribution.EventWeightMultiplier = 1.0f;
             ConfigManager.Current.PreRunTweaks.MapNodeDistribution.RestSiteWeightMultiplier = 1.0f;
             ConfigManager.Current.PreRunTweaks.MapNodeDistribution.CombatWeightMultiplier = 1.0f;
+            ConfigManager.Current.PreRunTweaks.MapNodeDistribution.TreasureRoomMultiplier = 1.0f;
 
             // Reset enemy multipliers & scaling
             ConfigManager.Current.PreRunTweaks.EnemyHealthMultiplier = 1.0f;
@@ -491,154 +495,248 @@ public partial class ModSettingsDialog : CanvasLayer
         }
     }
 
+    private static PanelContainer CreateSectionCard(string title, Control content, Color? accentColor = null, string? subtitle = null)
+    {
+        var card = new PanelContainer
+        {
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            SizeFlagsVertical = Control.SizeFlags.ShrinkBegin
+        };
+        
+        var cardStyle = new StyleBoxFlat
+        {
+            BgColor = new Color(0.09f, 0.10f, 0.14f, 0.95f),
+            BorderColor = new Color(0.20f, 0.25f, 0.35f, 0.85f),
+            BorderWidthLeft = 1,
+            BorderWidthRight = 1,
+            BorderWidthTop = 1,
+            BorderWidthBottom = 1,
+            CornerRadiusTopLeft = 6,
+            CornerRadiusTopRight = 6,
+            CornerRadiusBottomLeft = 6,
+            CornerRadiusBottomRight = 6,
+            ContentMarginLeft = 14,
+            ContentMarginRight = 14,
+            ContentMarginTop = 12,
+            ContentMarginBottom = 12,
+            ShadowColor = new Color(0, 0, 0, 0.35f),
+            ShadowSize = 4
+        };
+        card.AddThemeStyleboxOverride("panel", cardStyle);
+
+        var vbox = new VBoxContainer();
+        vbox.AddThemeConstantOverride("separation", 8);
+
+        var headerHBox = new HBoxContainer();
+        var titleColor = accentColor ?? new Color(0.45f, 0.78f, 1.0f);
+        var titleLabel = new Label
+        {
+            Text = title,
+            Modulate = titleColor
+        };
+        headerHBox.AddChild(titleLabel);
+
+        if (!string.IsNullOrEmpty(subtitle))
+        {
+            var subLabel = new Label
+            {
+                Text = $" — {subtitle}",
+                Modulate = new Color(0.6f, 0.65f, 0.72f, 0.85f)
+            };
+            headerHBox.AddChild(subLabel);
+        }
+        vbox.AddChild(headerHBox);
+
+        var sep = new HSeparator();
+        vbox.AddChild(sep);
+
+        vbox.AddChild(content);
+        card.AddChild(vbox);
+        return card;
+    }
+
     private Control BuildTweaksTab()
     {
-        var scroll = new ScrollContainer { Name = "Tweaks & Multipliers" };
-        var vbox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
-        scroll.AddChild(vbox);
+        var scroll = new ScrollContainer 
+        { 
+            Name = "Tweaks & Multipliers",
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            SizeFlagsVertical = Control.SizeFlags.ExpandFill
+        };
+        var rootVbox = new VBoxContainer 
+        { 
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            SizeFlagsVertical = Control.SizeFlags.ExpandFill
+        };
+        rootVbox.AddThemeConstantOverride("separation", 12);
+        scroll.AddChild(rootVbox);
 
         // Run lock notification banner
+        _tweaksRunLockNoticeContainer = new PanelContainer
+        {
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            Visible = false
+        };
+        var bannerStyle = new StyleBoxFlat
+        {
+            BgColor = new Color(0.2f, 0.08f, 0.08f, 0.95f),
+            BorderColor = new Color(0.9f, 0.35f, 0.25f, 0.9f),
+            BorderWidthLeft = 1,
+            BorderWidthRight = 1,
+            BorderWidthTop = 1,
+            BorderWidthBottom = 1,
+            CornerRadiusTopLeft = 6,
+            CornerRadiusTopRight = 6,
+            CornerRadiusBottomLeft = 6,
+            CornerRadiusBottomRight = 6,
+            ContentMarginLeft = 14,
+            ContentMarginRight = 14,
+            ContentMarginTop = 10,
+            ContentMarginBottom = 10
+        };
+        _tweaksRunLockNoticeContainer.AddThemeStyleboxOverride("panel", bannerStyle);
+
         _tweaksRunLockNoticeLabel = new Label
         {
-            Text = "[Locked] Pre-run map generation & starting bonus settings are locked during an active run.\n   (All options can be freely customized in the Main Menu)",
+            Text = "[Locked] Pre-run map generation & starting bonus settings are locked during an active run.\n(All options can be freely customized from the Main Menu)",
+            Modulate = new Color(1f, 0.7f, 0.6f)
+        };
+        _tweaksRunLockNoticeContainer.AddChild(_tweaksRunLockNoticeLabel);
+        rootVbox.AddChild(_tweaksRunLockNoticeContainer);
+
+        // Two-column layout grid
+        var grid = new GridContainer
+        {
+            Columns = 2,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            SizeFlagsVertical = Control.SizeFlags.ExpandFill
+        };
+        grid.AddThemeConstantOverride("h_separation", 16);
+        grid.AddThemeConstantOverride("v_separation", 14);
+        rootVbox.AddChild(grid);
+
+        var leftCol = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        leftCol.AddThemeConstantOverride("separation", 14);
+        var rightCol = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        rightCol.AddThemeConstantOverride("separation", 14);
+        grid.AddChild(leftCol);
+        grid.AddChild(rightCol);
+
+        // --- Card 1: Keybindings & Hotkeys ---
+        var hotkeysBox = new VBoxContainer();
+        hotkeysBox.AddThemeConstantOverride("separation", 8);
+        
+        var hotkeyNote = new Label 
+        { 
+            Text = "If left empty, default hotkeys (F1 for Console, F3 for GUI) will be automatically restored.", 
+            Modulate = new Color(0.65f, 0.7f, 0.78f, 0.8f),
+            AutowrapMode = TextServer.AutowrapMode.WordSmart
+        };
+        hotkeysBox.AddChild(hotkeyNote);
+
+        var consoleKeyRow = new HBoxContainer();
+        consoleKeyRow.AddChild(new Label { Text = "Console Hotkey: ", CustomMinimumSize = new Vector2(200, 0) });
+        _consoleHotkeyInput = new LineEdit { PlaceholderText = "e.g. F1, Quoteleft (Default: F1)", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        _consoleHotkeyInput.TextChanged += _ => MarkTweaksModified();
+        consoleKeyRow.AddChild(_consoleHotkeyInput);
+        hotkeysBox.AddChild(consoleKeyRow);
+
+        var guiKeyRow = new HBoxContainer();
+        guiKeyRow.AddChild(new Label { Text = "GUI Menu Overlay Hotkey: ", CustomMinimumSize = new Vector2(200, 0) });
+        _guiHotkeyInput = new LineEdit { PlaceholderText = "e.g. F3, F8 (Default: F3)", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        _guiHotkeyInput.TextChanged += _ => MarkTweaksModified();
+        guiKeyRow.AddChild(_guiHotkeyInput);
+        hotkeysBox.AddChild(guiKeyRow);
+
+        var godKeyRow = new HBoxContainer();
+        godKeyRow.AddChild(new Label { Text = "Quick God Mode Hotkey: ", CustomMinimumSize = new Vector2(200, 0) });
+        _quickGodModeInput = new LineEdit { PlaceholderText = "e.g. F2 (Empty = Disabled)", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        _quickGodModeInput.TextChanged += _ => MarkTweaksModified();
+        godKeyRow.AddChild(_quickGodModeInput);
+        hotkeysBox.AddChild(godKeyRow);
+
+        var killKeyRow = new HBoxContainer();
+        killKeyRow.AddChild(new Label { Text = "Quick Kill All Enemies Hotkey: ", CustomMinimumSize = new Vector2(200, 0) });
+        _quickKillEnemiesInput = new LineEdit { PlaceholderText = "e.g. F4 (Empty = Disabled)", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        _quickKillEnemiesInput.TextChanged += _ => MarkTweaksModified();
+        killKeyRow.AddChild(_quickKillEnemiesInput);
+        hotkeysBox.AddChild(killKeyRow);
+
+        leftCol.AddChild(CreateSectionCard("Keybindings & Hotkeys", hotkeysBox, new Color(0.4f, 0.85f, 1f)));
+
+        // --- Card 2: Pre-Run Tweaks & Map Generation ---
+        var preRunBox = new VBoxContainer();
+        preRunBox.AddThemeConstantOverride("separation", 8);
+
+        var mapRoomRow = new HBoxContainer();
+        mapRoomRow.AddChild(new Label { Text = "Map Size (Floors / Room Count): ", CustomMinimumSize = new Vector2(230, 0) });
+        _mapRoomCountSpin = new SpinBox { MinValue = 15, MaxValue = 50, Value = 15, Step = 1, TooltipText = "Sets the number of rooms/floors per act (15 to 50). Minimum 15 is required by map generator." };
+        _mapRoomWarningLabel = new Label
+        {
+            Text = "  [Warning: >30 rooms may cause unexpected crashes and bugs]",
             Modulate = new Color(1f, 0.45f, 0.3f),
             Visible = false
         };
-        vbox.AddChild(_tweaksRunLockNoticeLabel);
-
-        vbox.AddChild(new Label { Text = "--- Keybindings & Hotkeys ---", Modulate = new Color(0.35f, 0.85f, 1f) });
-        vbox.AddChild(new Label { Text = "Note: If left empty, default hotkeys (F1 for Console, F3 for GUI) will be automatically restored.", Modulate = new Color(0.7f, 0.7f, 0.7f) });
-
-        var consoleKeyRow = new HBoxContainer();
-        consoleKeyRow.AddChild(new Label { Text = "Console Hotkey: ", CustomMinimumSize = new Vector2(240, 0) });
-        _consoleHotkeyInput = new LineEdit { PlaceholderText = "e.g. F1, Quoteleft (Default: F1)", CustomMinimumSize = new Vector2(200, 0) };
-        _consoleHotkeyInput.TextChanged += _ => MarkTweaksModified();
-        consoleKeyRow.AddChild(_consoleHotkeyInput);
-        vbox.AddChild(consoleKeyRow);
-
-        var guiKeyRow = new HBoxContainer();
-        guiKeyRow.AddChild(new Label { Text = "GUI Menu Overlay Hotkey: ", CustomMinimumSize = new Vector2(240, 0) });
-        _guiHotkeyInput = new LineEdit { PlaceholderText = "e.g. F3, F8 (Default: F3)", CustomMinimumSize = new Vector2(200, 0) };
-        _guiHotkeyInput.TextChanged += _ => MarkTweaksModified();
-        guiKeyRow.AddChild(_guiHotkeyInput);
-        vbox.AddChild(guiKeyRow);
-
-        var godKeyRow = new HBoxContainer();
-        godKeyRow.AddChild(new Label { Text = "Quick God Mode Hotkey: ", CustomMinimumSize = new Vector2(240, 0) });
-        _quickGodModeInput = new LineEdit { PlaceholderText = "e.g. F2 (Empty = Disabled)", CustomMinimumSize = new Vector2(200, 0) };
-        _quickGodModeInput.TextChanged += _ => MarkTweaksModified();
-        godKeyRow.AddChild(_quickGodModeInput);
-        vbox.AddChild(godKeyRow);
-
-        var killKeyRow = new HBoxContainer();
-        killKeyRow.AddChild(new Label { Text = "Quick Kill All Enemies Hotkey: ", CustomMinimumSize = new Vector2(240, 0) });
-        _quickKillEnemiesInput = new LineEdit { PlaceholderText = "e.g. F4 (Empty = Disabled)", CustomMinimumSize = new Vector2(200, 0) };
-        _quickKillEnemiesInput.TextChanged += _ => MarkTweaksModified();
-        killKeyRow.AddChild(_quickKillEnemiesInput);
-        vbox.AddChild(killKeyRow);
-
-        vbox.AddChild(new HSeparator());
-        vbox.AddChild(new Label { Text = "--- Pre-Run Tweaks & Map Generation (Pre-Run Only) ---", Modulate = new Color(1f, 0.85f, 0.3f) });
-
-        var mapRoomRow = new HBoxContainer();
-        mapRoomRow.AddChild(new Label { Text = "Map Size (Floors / Room Count): ", CustomMinimumSize = new Vector2(240, 0) });
-        _mapRoomCountSpin = new SpinBox { MinValue = 15, MaxValue = 30, Value = 15, Step = 1, TooltipText = "Sets the number of rooms/floors per act (15 to 30). Minimum 15 is required by map generator." };
-        _mapRoomCountSpin.ValueChanged += _ => MarkTweaksModified();
+        _mapRoomCountSpin.ValueChanged += val =>
+        {
+            MarkTweaksModified();
+            if (_mapRoomWarningLabel != null)
+            {
+                _mapRoomWarningLabel.Visible = val > 30;
+            }
+        };
         mapRoomRow.AddChild(_mapRoomCountSpin);
-        vbox.AddChild(mapRoomRow);
+        mapRoomRow.AddChild(_mapRoomWarningLabel);
+        preRunBox.AddChild(mapRoomRow);
 
-        _goldSlider = AddSliderControl(vbox, "Gold Drop Multiplier:", 0.1f, 5.0f, 0.1f, 1.0f);
+        _goldSlider = AddSliderControl(preRunBox, "Gold Drop Multiplier:", 0.1f, 5.0f, 0.1f, 1.0f);
         _goldSlider.ValueChanged += _ => MarkTweaksModified();
-        _shopDiscountSlider = AddSliderControl(vbox, "Shop Discount Multiplier:", 0.1f, 2.0f, 0.05f, 1.0f);
+        _shopDiscountSlider = AddSliderControl(preRunBox, "Shop Discount Multiplier:", 0.1f, 2.0f, 0.05f, 1.0f);
         _shopDiscountSlider.ValueChanged += _ => MarkTweaksModified();
 
         var cardRewardRow = new HBoxContainer();
-        cardRewardRow.AddChild(new Label { Text = "Card Choices per Reward: ", CustomMinimumSize = new Vector2(240, 0) });
+        cardRewardRow.AddChild(new Label { Text = "Card Choices per Reward: ", CustomMinimumSize = new Vector2(230, 0) });
         _cardRewardSpin = new SpinBox { MinValue = 1, MaxValue = 10, Value = 3 };
         _cardRewardSpin.ValueChanged += _ => MarkTweaksModified();
         cardRewardRow.AddChild(_cardRewardSpin);
-        vbox.AddChild(cardRewardRow);
+        preRunBox.AddChild(cardRewardRow);
 
         var startGoldRow = new HBoxContainer();
-        startGoldRow.AddChild(new Label { Text = "Starting Gold Bonus: ", CustomMinimumSize = new Vector2(240, 0) });
+        startGoldRow.AddChild(new Label { Text = "Starting Gold Bonus: ", CustomMinimumSize = new Vector2(230, 0) });
         _bonusGoldSpin = new SpinBox { MinValue = 0, MaxValue = 9999, Step = 25, Value = 0 };
         _bonusGoldSpin.ValueChanged += _ => MarkTweaksModified();
         startGoldRow.AddChild(_bonusGoldSpin);
-        vbox.AddChild(startGoldRow);
+        preRunBox.AddChild(startGoldRow);
 
         var startHpRow = new HBoxContainer();
-        startHpRow.AddChild(new Label { Text = "Starting Max HP Bonus: ", CustomMinimumSize = new Vector2(240, 0) });
+        startHpRow.AddChild(new Label { Text = "Starting Max HP Bonus: ", CustomMinimumSize = new Vector2(230, 0) });
         _bonusHpSpin = new SpinBox { MinValue = 0, MaxValue = 500, Step = 5, Value = 0 };
         _bonusHpSpin.ValueChanged += _ => MarkTweaksModified();
         startHpRow.AddChild(_bonusHpSpin);
-        vbox.AddChild(startHpRow);
+        preRunBox.AddChild(startHpRow);
 
-        _forceNeowCheck = new CheckBox { Text = " Spawn Neow at start? (Uncheck to skip Neow and start directly on map)", TooltipText = "Guarantees Neow blessing when checked. When unchecked, skips Neow and starts directly on the map." };
+        _forceNeowCheck = new CheckBox { Text = " Spawn Neow at start? (Uncheck to skip Neow and start on map)", TooltipText = "Guarantees Neow blessing when checked. When unchecked, skips Neow and starts directly on the map." };
         _forceNeowCheck.Toggled += _ => MarkTweaksModified();
-        vbox.AddChild(_forceNeowCheck);
+        preRunBox.AddChild(_forceNeowCheck);
 
-        vbox.AddChild(new HSeparator());
-        vbox.AddChild(new Label { Text = "--- Map Node Generation Weights ---", Modulate = new Color(0.4f, 1f, 0.6f) });
-        var fairNote = new Label
-        {
-            Text = "Note: Fair Play: Non-default map multipliers mark runs as Seeded/Custom (locks achievements/unlocks).\n   Keep all at 1.0x for standard runs.",
-            Modulate = new Color(1f, 0.8f, 0.4f)
-        };
-        vbox.AddChild(fairNote);
+        leftCol.AddChild(CreateSectionCard("Pre-Run Tweaks & Map Generation (Pre-Run Only)", preRunBox, new Color(1f, 0.85f, 0.35f)));
 
-        _eliteSlider = AddSliderControl(vbox, "Elite Encounter Weight:", 0.0f, 5.0f, 0.1f, 1.0f);
-        _eliteSlider.ValueChanged += _ => MarkTweaksModified();
-        _shopSlider = AddSliderControl(vbox, "Shop Node Weight:", 0.0f, 5.0f, 0.1f, 1.0f);
-        _shopSlider.ValueChanged += _ => MarkTweaksModified();
-        _eventSlider = AddSliderControl(vbox, "Event / Unknown Weight:", 0.0f, 5.0f, 0.1f, 1.0f);
-        _eventSlider.ValueChanged += _ => MarkTweaksModified();
-        _restSlider = AddSliderControl(vbox, "Rest Site Weight:", 0.0f, 5.0f, 0.1f, 1.0f);
-        _restSlider.ValueChanged += _ => MarkTweaksModified();
-        _combatSlider = AddSliderControl(vbox, "Normal Combat Weight:", 0.0f, 5.0f, 0.1f, 1.0f);
-        _combatSlider.ValueChanged += _ => MarkTweaksModified();
-
-        vbox.AddChild(new HSeparator());
-        vbox.AddChild(new Label { Text = "--- Enemy Multipliers & Scaling ---", Modulate = new Color(1f, 0.4f, 0.4f) });
-
-        _enemyHpSlider = AddSliderControl(vbox, "Enemy Health Multiplier:", 0.1f, 10.0f, 0.1f, 1.0f);
-        _enemyHpSlider.ValueChanged += val =>
-        {
-            MarkTweaksModified();
-            ConfigManager.Current.PreRunTweaks.EnemyHealthMultiplier = (float)val;
-            GameHelper.RefreshCombatIntents();
-        };
-
-        _enemyDmgSlider = AddSliderControl(vbox, "Enemy Damage Multiplier:", 0.0f, 10.0f, 0.1f, 1.0f);
-        _enemyDmgSlider.ValueChanged += val =>
-        {
-            MarkTweaksModified();
-            ConfigManager.Current.PreRunTweaks.EnemyDamageMultiplier = (float)val;
-            GameHelper.RefreshCombatIntents();
-        };
-
-        _enemyDefSlider = AddSliderControl(vbox, "Enemy Defend/Block Multiplier:", 0.0f, 10.0f, 0.1f, 1.0f);
-        _enemyDefSlider.ValueChanged += val =>
-        {
-            MarkTweaksModified();
-            ConfigManager.Current.PreRunTweaks.EnemyDefendMultiplier = (float)val;
-            GameHelper.RefreshCombatIntents();
-        };
-
-        vbox.AddChild(new HSeparator());
-        vbox.AddChild(new Label { Text = "--- Endless Mode & Free Map Navigation ---", Modulate = new Color(0.8f, 0.5f, 1f) });
+        // --- Card 3: Endless Mode & Free Map Navigation ---
+        var endlessBox = new VBoxContainer();
+        endlessBox.AddThemeConstantOverride("separation", 8);
 
         _endlessModeCheck = new CheckBox { Text = " Enable Endless Mode (Scale enemies progressively each loop reset)" };
         _endlessModeCheck.Toggled += _ => MarkTweaksModified();
-        vbox.AddChild(_endlessModeCheck);
+        endlessBox.AddChild(_endlessModeCheck);
 
         var endlessMultRow = new HBoxContainer();
-        endlessMultRow.AddChild(new Label { Text = "Endless Loop Scaling Multiplier: ", CustomMinimumSize = new Vector2(240, 0) });
+        endlessMultRow.AddChild(new Label { Text = "Endless Loop Scaling Multiplier: ", CustomMinimumSize = new Vector2(230, 0) });
         _endlessMultiplierSpin = new SpinBox { MinValue = 1.0, MaxValue = 10.0, Step = 0.1, Value = 2.0 };
         _endlessMultiplierSpin.ValueChanged += _ => MarkTweaksModified();
         endlessMultRow.AddChild(_endlessMultiplierSpin);
-        vbox.AddChild(endlessMultRow);
+        endlessBox.AddChild(endlessMultRow);
 
-        _freeMapNavCheck = new CheckBox { Text = " Free Map Navigation (Flying Boots mode: click & travel to ANY room freely on map)" };
+        _freeMapNavCheck = new CheckBox { Text = " Free Map Navigation (Click & travel to ANY room freely on map)" };
         _freeMapNavCheck.Toggled += val =>
         {
             MarkTweaksModified();
@@ -654,12 +752,70 @@ public partial class ModSettingsDialog : CanvasLayer
             }
             catch { }
         };
-        vbox.AddChild(_freeMapNavCheck);
+        endlessBox.AddChild(_freeMapNavCheck);
 
-        vbox.AddChild(new HSeparator());
-        vbox.AddChild(new Label { Text = "--- Player & Combat Scaling ---", Modulate = new Color(0.3f, 0.8f, 1f) });
+        leftCol.AddChild(CreateSectionCard("Endless Mode & Map Navigation", endlessBox, new Color(0.8f, 0.55f, 1f)));
 
-        _playerDmgSlider = AddSliderControl(vbox, "Player Damage Multiplier:", 0.0f, 10.0f, 0.1f, 1.0f);
+        // --- Card 4: Map Node Generation Weights ---
+        var weightsBox = new VBoxContainer();
+        weightsBox.AddThemeConstantOverride("separation", 8);
+
+        var fairNote = new Label
+        {
+            Text = "Note: Non-default map multipliers mark runs as Seeded/Custom (locks achievements). Keep all at 1.0x for standard runs.",
+            Modulate = new Color(1f, 0.8f, 0.4f),
+            AutowrapMode = TextServer.AutowrapMode.WordSmart
+        };
+        weightsBox.AddChild(fairNote);
+
+        _eliteSlider = AddSliderControl(weightsBox, "Elite Encounter Weight:", 0.0f, 5.0f, 0.1f, 1.0f);
+        _eliteSlider.ValueChanged += _ => MarkTweaksModified();
+        _shopSlider = AddSliderControl(weightsBox, "Shop Node Weight:", 0.0f, 5.0f, 0.1f, 1.0f);
+        _shopSlider.ValueChanged += _ => MarkTweaksModified();
+        _eventSlider = AddSliderControl(weightsBox, "Event / Unknown Weight:", 0.0f, 5.0f, 0.1f, 1.0f);
+        _eventSlider.ValueChanged += _ => MarkTweaksModified();
+        _restSlider = AddSliderControl(weightsBox, "Rest Site Weight:", 0.0f, 5.0f, 0.1f, 1.0f);
+        _restSlider.ValueChanged += _ => MarkTweaksModified();
+        _combatSlider = AddSliderControl(weightsBox, "Normal Combat Weight:", 0.0f, 5.0f, 0.1f, 1.0f);
+        _combatSlider.ValueChanged += _ => MarkTweaksModified();
+
+        rightCol.AddChild(CreateSectionCard("Map Node Generation Weights", weightsBox, new Color(0.45f, 0.95f, 0.65f)));
+
+        // --- Card 5: Enemy Multipliers & Scaling ---
+        var enemyBox = new VBoxContainer();
+        enemyBox.AddThemeConstantOverride("separation", 8);
+
+        _enemyHpSlider = AddSliderControl(enemyBox, "Enemy Health Multiplier:", 0.1f, 10.0f, 0.1f, 1.0f);
+        _enemyHpSlider.ValueChanged += val =>
+        {
+            MarkTweaksModified();
+            ConfigManager.Current.PreRunTweaks.EnemyHealthMultiplier = (float)val;
+            GameHelper.RefreshCombatIntents();
+        };
+
+        _enemyDmgSlider = AddSliderControl(enemyBox, "Enemy Damage Multiplier:", 0.0f, 10.0f, 0.1f, 1.0f);
+        _enemyDmgSlider.ValueChanged += val =>
+        {
+            MarkTweaksModified();
+            ConfigManager.Current.PreRunTweaks.EnemyDamageMultiplier = (float)val;
+            GameHelper.RefreshCombatIntents();
+        };
+
+        _enemyDefSlider = AddSliderControl(enemyBox, "Enemy Defend/Block Multiplier:", 0.0f, 10.0f, 0.1f, 1.0f);
+        _enemyDefSlider.ValueChanged += val =>
+        {
+            MarkTweaksModified();
+            ConfigManager.Current.PreRunTweaks.EnemyDefendMultiplier = (float)val;
+            GameHelper.RefreshCombatIntents();
+        };
+
+        rightCol.AddChild(CreateSectionCard("Enemy Multipliers & Scaling", enemyBox, new Color(1f, 0.45f, 0.45f)));
+
+        // --- Card 6: Player & Combat Scaling ---
+        var playerScalingBox = new VBoxContainer();
+        playerScalingBox.AddThemeConstantOverride("separation", 8);
+
+        _playerDmgSlider = AddSliderControl(playerScalingBox, "Player Damage Multiplier:", 0.0f, 10.0f, 0.1f, 1.0f);
         _playerDmgSlider.ValueChanged += val =>
         {
             MarkTweaksModified();
@@ -668,7 +824,7 @@ public partial class ModSettingsDialog : CanvasLayer
         };
 
         var maxEnergyRow = new HBoxContainer();
-        maxEnergyRow.AddChild(new Label { Text = "Max Energy Count: ", CustomMinimumSize = new Vector2(240, 0) });
+        maxEnergyRow.AddChild(new Label { Text = "Max Energy Count: ", CustomMinimumSize = new Vector2(230, 0) });
         _maxEnergySpin = new SpinBox { MinValue = 1, MaxValue = 20, Step = 1, Value = GameHelper.GetPlayerMaxEnergy(), TooltipText = "Sets the baseline Max Energy count. Dynamically reads and syncs with the active game state." };
         _maxEnergySpin.ValueChanged += val =>
         {
@@ -677,14 +833,20 @@ public partial class ModSettingsDialog : CanvasLayer
             GameHelper.SetPlayerMaxEnergy((int)val);
         };
         maxEnergyRow.AddChild(_maxEnergySpin);
-        vbox.AddChild(maxEnergyRow);
+        playerScalingBox.AddChild(maxEnergyRow);
+
+        rightCol.AddChild(CreateSectionCard("Player & Combat Scaling", playerScalingBox, new Color(0.35f, 0.85f, 1f)));
 
         return scroll;
     }
 
     private void UpdateTweaksRunLockState(bool inRun)
     {
-        if (_tweaksRunLockNoticeLabel != null)
+        if (_tweaksRunLockNoticeContainer != null)
+        {
+            _tweaksRunLockNoticeContainer.Visible = inRun;
+        }
+        else if (_tweaksRunLockNoticeLabel != null)
         {
             _tweaksRunLockNoticeLabel.Visible = inRun;
         }
@@ -703,64 +865,114 @@ public partial class ModSettingsDialog : CanvasLayer
         if (_eventSlider != null) _eventSlider.Editable = allowPreRunEdits;
         if (_restSlider != null) _restSlider.Editable = allowPreRunEdits;
         if (_combatSlider != null) _combatSlider.Editable = allowPreRunEdits;
+        if (_treasureSlider != null) _treasureSlider.Editable = allowPreRunEdits;
     }
 
     private Control BuildCombatSandboxTab()
     {
-        var scroll = new ScrollContainer { Name = "Combat Sandbox" };
-        var vbox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
-        scroll.AddChild(vbox);
+        var scroll = new ScrollContainer 
+        { 
+            Name = "Combat Sandbox",
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            SizeFlagsVertical = Control.SizeFlags.ExpandFill
+        };
+        var rootVbox = new VBoxContainer 
+        { 
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            SizeFlagsVertical = Control.SizeFlags.ExpandFill
+        };
+        rootVbox.AddThemeConstantOverride("separation", 14);
+        scroll.AddChild(rootVbox);
 
-        vbox.AddChild(new Label { Text = "--- Real-Time Combat Cheats ---", Modulate = new Color(1f, 0.4f, 0.4f) });
+        // --- Card 1: Real-Time Combat Cheats ---
+        var cheatsBox = new VBoxContainer();
+        cheatsBox.AddThemeConstantOverride("separation", 10);
+
+        var cheatsGrid = new GridContainer
+        {
+            Columns = 2,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+        };
+        cheatsGrid.AddThemeConstantOverride("h_separation", 24);
+        cheatsGrid.AddThemeConstantOverride("v_separation", 10);
+        cheatsBox.AddChild(cheatsGrid);
 
         _godModeCheck = new CheckBox { Text = " God Mode (Immune to all incoming damage)" };
         _godModeCheck.Toggled += val => { RuntimeStateManager.GodModeEnabled = val; ConfigManager.Current.CombatSandbox.GodMode = val; };
-        vbox.AddChild(_godModeCheck);
+        cheatsGrid.AddChild(_godModeCheck);
 
         _infEnergyCheck = new CheckBox { Text = " Infinite Energy (Playing cards does not drain energy)" };
         _infEnergyCheck.Toggled += val => { RuntimeStateManager.InfiniteEnergyEnabled = val; ConfigManager.Current.CombatSandbox.InfiniteEnergy = val; };
-        vbox.AddChild(_infEnergyCheck);
+        cheatsGrid.AddChild(_infEnergyCheck);
 
         _oneHitKillCheck = new CheckBox { Text = " 1-Hit Kill (Attacks deal lethal damage to enemies)" };
         _oneHitKillCheck.Toggled += val => { RuntimeStateManager.OneHitKillEnabled = val; ConfigManager.Current.CombatSandbox.OneHitKill = val; };
-        vbox.AddChild(_oneHitKillCheck);
+        cheatsGrid.AddChild(_oneHitKillCheck);
 
         _infPotionsCheck = new CheckBox { Text = " Infinite Potions (Using potions does not consume them)" };
         _infPotionsCheck.Toggled += val => ConfigManager.Current.CombatSandbox.InfinitePotions = val;
-        vbox.AddChild(_infPotionsCheck);
+        cheatsGrid.AddChild(_infPotionsCheck);
 
         _noExhaustCheck = new CheckBox { Text = " No Card Exhaust (Exhausted cards are retained)" };
         _noExhaustCheck.Toggled += val => ConfigManager.Current.CombatSandbox.NoCardExhaust = val;
-        vbox.AddChild(_noExhaustCheck);
+        cheatsGrid.AddChild(_noExhaustCheck);
 
         var drawRow = new HBoxContainer();
-        drawRow.AddChild(new Label { Text = "Bonus Card Draw per Turn: ", CustomMinimumSize = new Vector2(240, 0) });
+        drawRow.AddChild(new Label { Text = "Bonus Card Draw per Turn: ", CustomMinimumSize = new Vector2(200, 0) });
         _bonusDrawSpin = new SpinBox { MinValue = 0, MaxValue = 10, Value = 0 };
         _bonusDrawSpin.ValueChanged += val => ConfigManager.Current.CombatSandbox.BonusDrawPerTurn = (int)val;
         drawRow.AddChild(_bonusDrawSpin);
-        vbox.AddChild(drawRow);
+        cheatsGrid.AddChild(drawRow);
 
-        vbox.AddChild(new HSeparator());
-        vbox.AddChild(new Label { Text = "--- Immediate Combat Actions ---", Modulate = new Color(1f, 0.7f, 0.2f) });
+        rootVbox.AddChild(CreateSectionCard("Real-Time Combat Cheats", cheatsBox, new Color(1f, 0.45f, 0.45f)));
 
-        var actionHBox = new HBoxContainer();
-        var killAllBtn = new Button { Text = " Kill All Enemies Now " };
+        // --- Card 2: Immediate Combat Actions ---
+        var actionsBox = new VBoxContainer();
+        actionsBox.AddThemeConstantOverride("separation", 10);
+
+        var actionGrid = new GridContainer
+        {
+            Columns = 4,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+        };
+        actionGrid.AddThemeConstantOverride("h_separation", 12);
+        actionGrid.AddThemeConstantOverride("v_separation", 8);
+
+        var killAllBtn = new Button 
+        { 
+            Text = " Kill All Enemies Now ",
+            CustomMinimumSize = new Vector2(180, 38)
+        };
         killAllBtn.Pressed += CombatDirector.KillAllEnemies;
 
-        var endTurnBtn = new Button { Text = " Force End Turn " };
+        var endTurnBtn = new Button 
+        { 
+            Text = " Force End Turn ",
+            CustomMinimumSize = new Vector2(180, 38)
+        };
         endTurnBtn.Pressed += CombatDirector.EndTurn;
 
-        var draw3Btn = new Button { Text = " Draw 3 Cards " };
+        var draw3Btn = new Button 
+        { 
+            Text = " Draw 3 Cards ",
+            CustomMinimumSize = new Vector2(180, 38)
+        };
         draw3Btn.Pressed += () => CombatDirector.DrawCards(3);
 
-        var energy3Btn = new Button { Text = " +3 Energy " };
+        var energy3Btn = new Button 
+        { 
+            Text = " +3 Energy ",
+            CustomMinimumSize = new Vector2(180, 38)
+        };
         energy3Btn.Pressed += () => CombatDirector.AddEnergy(3);
 
-        actionHBox.AddChild(killAllBtn);
-        actionHBox.AddChild(endTurnBtn);
-        actionHBox.AddChild(draw3Btn);
-        actionHBox.AddChild(energy3Btn);
-        vbox.AddChild(actionHBox);
+        actionGrid.AddChild(killAllBtn);
+        actionGrid.AddChild(endTurnBtn);
+        actionGrid.AddChild(draw3Btn);
+        actionGrid.AddChild(energy3Btn);
+        actionsBox.AddChild(actionGrid);
+
+        rootVbox.AddChild(CreateSectionCard("Immediate Combat Actions", actionsBox, new Color(1f, 0.75f, 0.3f)));
 
         return scroll;
     }
@@ -2360,16 +2572,17 @@ public partial class ModSettingsDialog : CanvasLayer
     {
         var scroll = new ScrollContainer 
         { 
-            Name = "Player & Events", 
+            Name = "Player Sandbox", 
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, 
             SizeFlagsVertical = Control.SizeFlags.ExpandFill 
         };
-        var vbox = new VBoxContainer 
+        var rootVbox = new VBoxContainer 
         { 
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, 
             SizeFlagsVertical = Control.SizeFlags.ExpandFill 
         };
-        scroll.AddChild(vbox);
+        rootVbox.AddThemeConstantOverride("separation", 14);
+        scroll.AddChild(rootVbox);
 
         var selectedChar = GameHelper.GetSelectedCharacterModel();
         var activePlayer = GameHelper.GetActivePlayer();
@@ -2378,48 +2591,58 @@ public partial class ModSettingsDialog : CanvasLayer
         int defaultMaxHp = (activePlayer?.Creature != null) ? (int)activePlayer.Creature.MaxHp : (selectedChar != null ? selectedChar.StartingHp : 80);
         int defaultCurrentHp = (activePlayer?.Creature != null) ? (int)activePlayer.Creature.CurrentHp : defaultMaxHp;
 
-        vbox.AddChild(new Label { Text = "--- Gold & Health Manipulation ---", Modulate = new Color(0.3f, 1f, 0.5f) });
+        // --- Card 1: Gold & Health Manipulation ---
+        var vitalsBox = new VBoxContainer();
+        vitalsBox.AddThemeConstantOverride("separation", 10);
+
         var goldRow = new HBoxContainer();
-        _goldAmountSpin = new SpinBox { MinValue = 0, MaxValue = 99999, Step = 50, Value = Math.Max(0, defaultGold) };
-        var addGoldBtn = new Button { Text = " Add Gold " };
+        goldRow.AddThemeConstantOverride("separation", 8);
+        goldRow.AddChild(new Label { Text = "Gold Amount: ", CustomMinimumSize = new Vector2(140, 0) });
+        _goldAmountSpin = new SpinBox { MinValue = 0, MaxValue = 99999, Step = 50, Value = Math.Max(0, defaultGold), CustomMinimumSize = new Vector2(120, 0) };
+        var addGoldBtn = new Button { Text = " Add Gold ", CustomMinimumSize = new Vector2(110, 32) };
         addGoldBtn.Pressed += () => InventoryDirector.AddGold((int)_goldAmountSpin.Value);
-        var setGoldBtn = new Button { Text = " Set Exact Gold " };
+        var setGoldBtn = new Button { Text = " Set Exact Gold ", CustomMinimumSize = new Vector2(130, 32) };
         setGoldBtn.Pressed += () => InventoryDirector.SetGold((int)_goldAmountSpin.Value);
-        goldRow.AddChild(new Label { Text = "Gold Amount: ", CustomMinimumSize = new Vector2(120, 0) });
         goldRow.AddChild(_goldAmountSpin);
         goldRow.AddChild(addGoldBtn);
         goldRow.AddChild(setGoldBtn);
-        vbox.AddChild(goldRow);
+        vitalsBox.AddChild(goldRow);
 
         var healRow = new HBoxContainer();
-        _currentHpAmountSpin = new SpinBox { MinValue = 1, MaxValue = 999, Step = 10, Value = defaultCurrentHp };
-        var healBtn = new Button { Text = " Heal Player " };
+        healRow.AddThemeConstantOverride("separation", 8);
+        healRow.AddChild(new Label { Text = "Heal Amount: ", CustomMinimumSize = new Vector2(140, 0) });
+        _currentHpAmountSpin = new SpinBox { MinValue = 1, MaxValue = 999, Step = 10, Value = defaultCurrentHp, CustomMinimumSize = new Vector2(120, 0) };
+        var healBtn = new Button { Text = " Heal Player ", CustomMinimumSize = new Vector2(110, 32) };
         healBtn.Pressed += () => InventoryDirector.Heal((int)_currentHpAmountSpin.Value);
-        healRow.AddChild(new Label { Text = "Heal Amount: ", CustomMinimumSize = new Vector2(120, 0) });
         healRow.AddChild(_currentHpAmountSpin);
         healRow.AddChild(healBtn);
-        vbox.AddChild(healRow);
+        vitalsBox.AddChild(healRow);
 
         var damageRow = new HBoxContainer();
-        _damageAmountSpin = new SpinBox { MinValue = 1, MaxValue = 999, Step = 5, Value = 5 };
-        var damageBtn = new Button { Text = " Damage Player " };
+        damageRow.AddThemeConstantOverride("separation", 8);
+        damageRow.AddChild(new Label { Text = "Damage Amount: ", CustomMinimumSize = new Vector2(140, 0) });
+        _damageAmountSpin = new SpinBox { MinValue = 1, MaxValue = 999, Step = 5, Value = 5, CustomMinimumSize = new Vector2(120, 0) };
+        var damageBtn = new Button { Text = " Damage Player ", CustomMinimumSize = new Vector2(110, 32) };
         damageBtn.Pressed += () => InventoryDirector.DamagePlayer((int)_damageAmountSpin.Value);
-        damageRow.AddChild(new Label { Text = "Damage Amount: ", CustomMinimumSize = new Vector2(120, 0) });
         damageRow.AddChild(_damageAmountSpin);
         damageRow.AddChild(damageBtn);
-        vbox.AddChild(damageRow);
+        vitalsBox.AddChild(damageRow);
 
         var maxHpRow = new HBoxContainer();
-        _maxHpAmountSpin = new SpinBox { MinValue = 1, MaxValue = 999, Step = 10, Value = defaultMaxHp };
-        var maxHpBtn = new Button { Text = " Set Max HP " };
+        maxHpRow.AddThemeConstantOverride("separation", 8);
+        maxHpRow.AddChild(new Label { Text = "Max HP Amount: ", CustomMinimumSize = new Vector2(140, 0) });
+        _maxHpAmountSpin = new SpinBox { MinValue = 1, MaxValue = 999, Step = 10, Value = defaultMaxHp, CustomMinimumSize = new Vector2(120, 0) };
+        var maxHpBtn = new Button { Text = " Set Max HP ", CustomMinimumSize = new Vector2(110, 32) };
         maxHpBtn.Pressed += () => InventoryDirector.SetMaxHp((int)_maxHpAmountSpin.Value);
-        maxHpRow.AddChild(new Label { Text = "Max HP Amount: ", CustomMinimumSize = new Vector2(120, 0) });
         maxHpRow.AddChild(_maxHpAmountSpin);
         maxHpRow.AddChild(maxHpBtn);
-        vbox.AddChild(maxHpRow);
+        vitalsBox.AddChild(maxHpRow);
 
-        vbox.AddChild(new HSeparator());
-        vbox.AddChild(new Label { Text = "--- Special Rooms & Event Director ---", Modulate = new Color(1f, 0.9f, 0.4f) });
+        rootVbox.AddChild(CreateSectionCard("Gold & Health Manipulation", vitalsBox, new Color(0.4f, 0.95f, 0.65f)));
+
+        // --- Card 2: Special Rooms & Event Director ---
+        var eventCardBox = new VBoxContainer();
+        eventCardBox.AddThemeConstantOverride("separation", 10);
 
         var shopRow = new HBoxContainer();
         var openShopBtn = new Button
@@ -2436,9 +2659,10 @@ public partial class ModSettingsDialog : CanvasLayer
             }
         };
         shopRow.AddChild(openShopBtn);
-        vbox.AddChild(shopRow);
+        eventCardBox.AddChild(shopRow);
         
         var indicatorRow = new HBoxContainer();
+        indicatorRow.AddThemeConstantOverride("separation", 8);
         indicatorRow.AddChild(new Label { Text = "Current Override: " });
         _eventOverrideLabel = new Label { Text = "None", Modulate = new Color(1f, 0.5f, 0.5f) };
         indicatorRow.AddChild(_eventOverrideLabel);
@@ -2446,7 +2670,7 @@ public partial class ModSettingsDialog : CanvasLayer
         var clearEventBtn = new Button { Text = " Clear Override " };
         clearEventBtn.Pressed += EventDirector.ClearForcedEvent;
         indicatorRow.AddChild(clearEventBtn);
-        vbox.AddChild(indicatorRow);
+        eventCardBox.AddChild(indicatorRow);
 
         EventDirector.OnForcedEventChanged += (eventId) => 
         {
@@ -2471,7 +2695,7 @@ public partial class ModSettingsDialog : CanvasLayer
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
         };
         searchRow.AddChild(searchInput);
-        vbox.AddChild(searchRow);
+        eventCardBox.AddChild(searchRow);
 
         var grid = new GridContainer 
         { 
@@ -2481,7 +2705,7 @@ public partial class ModSettingsDialog : CanvasLayer
         };
         grid.AddThemeConstantOverride("h_separation", 10);
         grid.AddThemeConstantOverride("v_separation", 10);
-        vbox.AddChild(grid);
+        eventCardBox.AddChild(grid);
 
         var allEvents = GameHelper.GetAllEventInfos();
         var eventEntries = new System.Collections.Generic.List<(GameHelper.EventInfo Info, Control Container)>();
@@ -2588,13 +2812,15 @@ public partial class ModSettingsDialog : CanvasLayer
             _eventOverrideLabel.Text = "None";
         }
 
+        rootVbox.AddChild(CreateSectionCard("Special Rooms & Event Director", eventCardBox, new Color(1f, 0.88f, 0.4f)));
+
         return scroll;
     }
 
-    private static HSlider AddSliderControl(VBoxContainer parent, string labelText, float min, float max, float step, float def)
+    private static HSlider AddSliderControl(Control parent, string labelText, float min, float max, float step, float def)
     {
         var row = new HBoxContainer();
-        row.AddChild(new Label { Text = labelText, CustomMinimumSize = new Vector2(240, 0) });
+        row.AddChild(new Label { Text = labelText, CustomMinimumSize = new Vector2(230, 0) });
 
         var slider = new HSlider
         {
@@ -2602,11 +2828,12 @@ public partial class ModSettingsDialog : CanvasLayer
             MaxValue = max,
             Step = step,
             Value = def,
-            CustomMinimumSize = new Vector2(200, 0)
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            CustomMinimumSize = new Vector2(160, 0)
         };
         row.AddChild(slider);
 
-        var valLabel = new Label { Text = $" {def:F2}x" };
+        var valLabel = new Label { Text = $" {def:F2}x", CustomMinimumSize = new Vector2(60, 0), HorizontalAlignment = HorizontalAlignment.Right };
         slider.ValueChanged += val => valLabel.Text = $" {val:F2}x";
         row.AddChild(valLabel);
 
@@ -2625,7 +2852,14 @@ public partial class ModSettingsDialog : CanvasLayer
         if (_quickGodModeInput != null) _quickGodModeInput.Text = general.QuickGodModeKey;
         if (_quickKillEnemiesInput != null) _quickKillEnemiesInput.Text = general.QuickKillEnemiesKey;
 
-        if (_mapRoomCountSpin != null) _mapRoomCountSpin.Value = tweaks.MapRoomCount;
+        if (_mapRoomCountSpin != null)
+        {
+            _mapRoomCountSpin.Value = tweaks.MapRoomCount;
+            if (_mapRoomWarningLabel != null)
+            {
+                _mapRoomWarningLabel.Visible = tweaks.MapRoomCount > 30;
+            }
+        }
         if (_goldSlider != null) _goldSlider.Value = tweaks.GoldRewardMultiplier;
         if (_shopDiscountSlider != null) _shopDiscountSlider.Value = tweaks.ShopDiscountMultiplier;
         if (_cardRewardSpin != null) _cardRewardSpin.Value = tweaks.CardRewardCount;
@@ -2638,6 +2872,7 @@ public partial class ModSettingsDialog : CanvasLayer
         if (_eventSlider != null) _eventSlider.Value = tweaks.MapNodeDistribution.EventWeightMultiplier;
         if (_restSlider != null) _restSlider.Value = tweaks.MapNodeDistribution.RestSiteWeightMultiplier;
         if (_combatSlider != null) _combatSlider.Value = tweaks.MapNodeDistribution.CombatWeightMultiplier;
+        if (_treasureSlider != null) _treasureSlider.Value = tweaks.MapNodeDistribution.TreasureRoomMultiplier;
 
         if (_enemyHpSlider != null) _enemyHpSlider.Value = tweaks.EnemyHealthMultiplier;
         if (_enemyDmgSlider != null) _enemyDmgSlider.Value = tweaks.EnemyDamageMultiplier;
@@ -2730,6 +2965,7 @@ public partial class ModSettingsDialog : CanvasLayer
         if (_eventSlider != null) tweaks.MapNodeDistribution.EventWeightMultiplier = (float)_eventSlider.Value;
         if (_restSlider != null) tweaks.MapNodeDistribution.RestSiteWeightMultiplier = (float)_restSlider.Value;
         if (_combatSlider != null) tweaks.MapNodeDistribution.CombatWeightMultiplier = (float)_combatSlider.Value;
+        if (_treasureSlider != null) tweaks.MapNodeDistribution.TreasureRoomMultiplier = (float)_treasureSlider.Value;
 
         if (_enemyHpSlider != null) tweaks.EnemyHealthMultiplier = (float)_enemyHpSlider.Value;
         if (_enemyDmgSlider != null) tweaks.EnemyDamageMultiplier = (float)_enemyDmgSlider.Value;
