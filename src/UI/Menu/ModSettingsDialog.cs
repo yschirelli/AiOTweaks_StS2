@@ -23,13 +23,11 @@ public partial class ModSettingsDialog : CanvasLayer
     private PanelContainer? _dialogPanel;
     private TabContainer? _tabs;
 
-    // Hotkey fields
     private LineEdit? _consoleHotkeyInput;
     private LineEdit? _guiHotkeyInput;
     private LineEdit? _quickGodModeInput;
     private LineEdit? _quickKillEnemiesInput;
 
-    // Tweak sliders & spinners
     private HSlider? _goldSlider;
     private HSlider? _shopDiscountSlider;
     private HSlider? _eliteSlider;
@@ -47,11 +45,9 @@ public partial class ModSettingsDialog : CanvasLayer
     private Label? _tweaksRunLockNoticeLabel;
     private PanelContainer? _tweaksRunLockNoticeContainer;
 
-    // Player & Combat Scaling
     private HSlider? _playerDmgSlider;
     private SpinBox? _maxEnergySpin;
 
-    // Enemy Multipliers & Endless Mode
     private HSlider? _enemyHpSlider;
     private HSlider? _enemyDmgSlider;
     private HSlider? _enemyDefSlider;
@@ -59,7 +55,6 @@ public partial class ModSettingsDialog : CanvasLayer
     private SpinBox? _endlessMultiplierSpin;
     private CheckBox? _freeMapNavCheck;
 
-    // Sandbox Checkboxes
     private CheckBox? _godModeCheck;
     private CheckBox? _infEnergyCheck;
     private CheckBox? _oneHitKillCheck;
@@ -67,7 +62,6 @@ public partial class ModSettingsDialog : CanvasLayer
     private CheckBox? _noExhaustCheck;
     private SpinBox? _bonusDrawSpin;
 
-    // Real-time Card Grids
     private GridContainer? _deckGrid;
     private GridContainer? _handGrid;
     private GridContainer? _drawGrid;
@@ -80,11 +74,9 @@ public partial class ModSettingsDialog : CanvasLayer
     private Label? _exhaustTitleLabel;
     private System.Collections.Generic.List<ItemEntry> _availableCardEntries = new();
 
-    // Real-time Relic Grids
     private GridContainer? _activeRelicsGrid;
     private System.Collections.Generic.List<ItemEntry> _availableRelicEntries = new();
 
-    // Spawner fields
     private LineEdit? _relicInput;
     private LineEdit? _cardInput;
     private SpinBox? _goldAmountSpin;
@@ -92,17 +84,14 @@ public partial class ModSettingsDialog : CanvasLayer
     private SpinBox? _damageAmountSpin;
     private SpinBox? _maxHpAmountSpin;
     private Label? _eventOverrideLabel;
-    private Button? _applyConfigBtn;
-    private bool _tweaksModified = false;
 
-    // Log terminal
     private RichTextLabel? _logLabel;
     private LineEdit? _commandInput;
 
     public override void _Ready()
     {
         _instance = this;
-        Layer = 130; // Render above pause menu and gameplay UI
+        Layer = 130;
         SetupDialogUI();
 
         ModLogger.OnLogged += OnLogReceived;
@@ -145,7 +134,6 @@ public partial class ModSettingsDialog : CanvasLayer
 
         if (@event is InputEventKey keyEvent && keyEvent.Pressed && !keyEvent.Echo)
         {
-            // Toggle via configured GUI overlay key (with failsafe fallback)
             string guiKey = !string.IsNullOrWhiteSpace(ConfigManager.Current.General.GuiOverlayHotkey) && !ConfigManager.Current.General.GuiOverlayHotkey.Equals("None", StringComparison.OrdinalIgnoreCase)
                 ? ConfigManager.Current.General.GuiOverlayHotkey
                 : GeneralConfig.DefaultGuiOverlayHotkey;
@@ -156,7 +144,6 @@ public partial class ModSettingsDialog : CanvasLayer
                 return;
             }
 
-            // Close dialog via Escape if open
             if (isDialogOpen && keyEvent.Keycode == Key.Escape)
             {
                 CloseDialog();
@@ -213,12 +200,8 @@ public partial class ModSettingsDialog : CanvasLayer
             ModLogger.Verbose("ModSettingsDialog", $"Player inRun status: {inRun}");
             if (_tabs != null)
             {
-                int tweaksIdx = 4; // Tweaks is the 5th tab
+                int tweaksIdx = 4;
                 _tabs.SetTabDisabled(tweaksIdx, false);
-                if (_applyConfigBtn != null)
-                {
-                    _applyConfigBtn.Visible = (_tabs.CurrentTab == tweaksIdx);
-                }
             }
             UpdateTweaksRunLockState(inRun);
 
@@ -232,6 +215,7 @@ public partial class ModSettingsDialog : CanvasLayer
     public void CloseDialog()
     {
         ModLogger.Verbose("ModSettingsDialog", "CloseDialog called.");
+        SaveSettingsValues();
         if (_dialogPanel != null)
         {
             _dialogPanel.Visible = false;
@@ -269,11 +253,10 @@ public partial class ModSettingsDialog : CanvasLayer
     {
         var theme = new Theme();
 
-        // High contrast, solid / non-transparent dark tooltip styling
         var tooltipStyle = new StyleBoxFlat
         {
-            BgColor = new Color(0.06f, 0.07f, 0.10f, 0.98f), // Solid, opaque dark background
-            BorderColor = new Color(0.35f, 0.6f, 0.95f, 0.9f), // Crisp blue accent border
+            BgColor = new Color(0.06f, 0.07f, 0.10f, 0.98f),
+            BorderColor = new Color(0.35f, 0.6f, 0.95f, 0.9f),
             BorderWidthBottom = 1,
             BorderWidthLeft = 1,
             BorderWidthRight = 1,
@@ -302,7 +285,6 @@ public partial class ModSettingsDialog : CanvasLayer
 
     private void SetupDialogUI()
     {
-        // Dark background overlay backdrop
         var backdrop = new ColorRect
         {
             Name = "Backdrop",
@@ -337,7 +319,6 @@ public partial class ModSettingsDialog : CanvasLayer
         contentVBox.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         _dialogPanel.AddChild(contentVBox);
 
-        // Header
         var header = new HBoxContainer();
         var title = new Label
         {
@@ -353,7 +334,6 @@ public partial class ModSettingsDialog : CanvasLayer
         contentVBox.AddChild(header);
         contentVBox.AddChild(new HSeparator());
 
-        // Tab container
         _tabs = new TabContainer
         {
             SizeFlagsVertical = Control.SizeFlags.ExpandFill,
@@ -361,58 +341,38 @@ public partial class ModSettingsDialog : CanvasLayer
         };
         contentVBox.AddChild(_tabs);
 
-        // 1. Relics Tab
         _tabs.AddChild(BuildRelicsTab());
 
-        // 2. Cards Tab
         _tabs.AddChild(BuildCardsTab());
 
-        // 3. Player Tab
         _tabs.AddChild(BuildPlayerTab());
 
-        // 4. Combat Tab
         _tabs.AddChild(BuildCombatSandboxTab());
 
-        // 5. Tweaks Tab
         _tabs.AddChild(BuildTweaksTab());
 
         _tabs.TabChanged += (tabIdx) =>
         {
-            if (tabIdx == 0) // Relics Tab
+            if (tabIdx == 0)
             {
                 RefreshRealTimeRelicTabs();
             }
-            else if (tabIdx == 1) // Cards Tab
+            else if (tabIdx == 1)
             {
                 RefreshRealTimeCardTabs();
             }
-            
-            if (_applyConfigBtn != null)
-            {
-                _applyConfigBtn.Visible = (tabIdx == 4);
-            }
         };
 
-        // Bottom Action Bar (Save / Apply / Close)
         var footer = new HBoxContainer();
-        _applyConfigBtn = new Button { Text = " Apply Configuration ", Disabled = true, Visible = false };
-        _applyConfigBtn.Pressed += () =>
-        {
-            SaveSettingsValues();
-            _applyConfigBtn.Disabled = true;
-            _tweaksModified = false;
-        };
 
         var defaultBtn = new Button { Text = " Reset to Game Defaults " };
         defaultBtn.Pressed += () =>
         {
-            // Reset hotkeys under Tweaks tab to defaults
             ConfigManager.Current.General.ConsoleHotkey = GeneralConfig.DefaultConsoleHotkey;
             ConfigManager.Current.General.GuiOverlayHotkey = GeneralConfig.DefaultGuiOverlayHotkey;
             ConfigManager.Current.General.QuickGodModeKey = "";
             ConfigManager.Current.General.QuickKillEnemiesKey = "";
 
-            // Reset all pre-run tweaks & map generation settings
             ConfigManager.Current.PreRunTweaks.MapRoomCount = 15;
             ConfigManager.Current.PreRunTweaks.GoldRewardMultiplier = 1.0f;
             ConfigManager.Current.PreRunTweaks.ShopDiscountMultiplier = 1.0f;
@@ -421,7 +381,6 @@ public partial class ModSettingsDialog : CanvasLayer
             ConfigManager.Current.PreRunTweaks.StartingMaxHpBonus = 0;
             ConfigManager.Current.PreRunTweaks.ForceNeowBonus = true;
 
-            // Reset map node distribution weights
             ConfigManager.Current.PreRunTweaks.MapNodeDistribution.EliteWeightMultiplier = 1.0f;
             ConfigManager.Current.PreRunTweaks.MapNodeDistribution.ShopWeightMultiplier = 1.0f;
             ConfigManager.Current.PreRunTweaks.MapNodeDistribution.EventWeightMultiplier = 1.0f;
@@ -429,21 +388,17 @@ public partial class ModSettingsDialog : CanvasLayer
             ConfigManager.Current.PreRunTweaks.MapNodeDistribution.CombatWeightMultiplier = 1.0f;
             ConfigManager.Current.PreRunTweaks.MapNodeDistribution.TreasureRoomMultiplier = 1.0f;
 
-            // Reset enemy multipliers & scaling
             ConfigManager.Current.PreRunTweaks.EnemyHealthMultiplier = 1.0f;
             ConfigManager.Current.PreRunTweaks.EnemyDamageMultiplier = 1.0f;
             ConfigManager.Current.PreRunTweaks.EnemyDefendMultiplier = 1.0f;
 
-            // Reset endless mode & navigation
             ConfigManager.Current.PreRunTweaks.EndlessMode.Enabled = false;
             ConfigManager.Current.PreRunTweaks.EndlessMode.EnemyScalingMultiplier = 2.0f;
             ConfigManager.Current.PreRunTweaks.FreeMapNavigation = false;
 
-            // Reset player & combat scaling
             ConfigManager.Current.PreRunTweaks.PlayerDamageMultiplier = 1.0f;
             ConfigManager.Current.PreRunTweaks.MaxEnergy = 3;
 
-            // Reset combat sandbox
             ConfigManager.Current.CombatSandbox.GodMode = false;
             ConfigManager.Current.CombatSandbox.InfiniteEnergy = false;
             ConfigManager.Current.CombatSandbox.OneHitKill = false;
@@ -451,7 +406,6 @@ public partial class ModSettingsDialog : CanvasLayer
             ConfigManager.Current.CombatSandbox.NoCardExhaust = false;
             ConfigManager.Current.CombatSandbox.BonusDrawPerTurn = 0;
 
-            // Reset runtime session state & active player energy
             RuntimeStateManager.ResetSessionState();
             RuntimeStateManager.FreeMapNavigationEnabled = false;
             GameHelper.SetPlayerMaxEnergy(3);
@@ -465,18 +419,12 @@ public partial class ModSettingsDialog : CanvasLayer
 
             LoadSettingsValues();
             ConfigManager.SaveConfig();
-            _tweaksModified = false;
-            if (_applyConfigBtn != null)
-            {
-                _applyConfigBtn.Disabled = true;
-            }
             ModLogger.Info("Reset all tweaks and settings to game defaults.");
         };
 
         var doneBtn = new Button { Text = " Return to Game " };
         doneBtn.Pressed += CloseDialog;
 
-        footer.AddChild(_applyConfigBtn);
         footer.AddChild(defaultBtn);
         footer.AddSpacer(false);
         footer.AddChild(doneBtn);
@@ -488,11 +436,7 @@ public partial class ModSettingsDialog : CanvasLayer
 
     private void MarkTweaksModified()
     {
-        _tweaksModified = true;
-        if (_applyConfigBtn != null)
-        {
-            _applyConfigBtn.Disabled = false;
-        }
+        SaveSettingsValues();
     }
 
     private static PanelContainer CreateSectionCard(string title, Control content, Color? accentColor = null, string? subtitle = null)
@@ -571,7 +515,6 @@ public partial class ModSettingsDialog : CanvasLayer
         rootVbox.AddThemeConstantOverride("separation", 12);
         scroll.AddChild(rootVbox);
 
-        // Run lock notification banner
         _tweaksRunLockNoticeContainer = new PanelContainer
         {
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
@@ -604,7 +547,6 @@ public partial class ModSettingsDialog : CanvasLayer
         _tweaksRunLockNoticeContainer.AddChild(_tweaksRunLockNoticeLabel);
         rootVbox.AddChild(_tweaksRunLockNoticeContainer);
 
-        // Two-column layout grid
         var grid = new GridContainer
         {
             Columns = 2,
@@ -622,7 +564,6 @@ public partial class ModSettingsDialog : CanvasLayer
         grid.AddChild(leftCol);
         grid.AddChild(rightCol);
 
-        // --- Card 1: Keybindings & Hotkeys ---
         var hotkeysBox = new VBoxContainer();
         hotkeysBox.AddThemeConstantOverride("separation", 8);
         
@@ -664,7 +605,6 @@ public partial class ModSettingsDialog : CanvasLayer
 
         leftCol.AddChild(CreateSectionCard("Keybindings & Hotkeys", hotkeysBox, new Color(0.4f, 0.85f, 1f)));
 
-        // --- Card 2: Pre-Run Tweaks & Map Generation ---
         var preRunBox = new VBoxContainer();
         preRunBox.AddThemeConstantOverride("separation", 8);
 
@@ -721,7 +661,6 @@ public partial class ModSettingsDialog : CanvasLayer
 
         leftCol.AddChild(CreateSectionCard("Pre-Run Tweaks & Map Generation (Pre-Run Only)", preRunBox, new Color(1f, 0.85f, 0.35f)));
 
-        // --- Card 3: Endless Mode & Free Map Navigation ---
         var endlessBox = new VBoxContainer();
         endlessBox.AddThemeConstantOverride("separation", 8);
 
@@ -756,7 +695,6 @@ public partial class ModSettingsDialog : CanvasLayer
 
         leftCol.AddChild(CreateSectionCard("Endless Mode & Map Navigation", endlessBox, new Color(0.8f, 0.55f, 1f)));
 
-        // --- Card 4: Map Node Generation Weights ---
         var weightsBox = new VBoxContainer();
         weightsBox.AddThemeConstantOverride("separation", 8);
 
@@ -778,10 +716,11 @@ public partial class ModSettingsDialog : CanvasLayer
         _restSlider.ValueChanged += _ => MarkTweaksModified();
         _combatSlider = AddSliderControl(weightsBox, "Normal Combat Weight:", 0.0f, 5.0f, 0.1f, 1.0f);
         _combatSlider.ValueChanged += _ => MarkTweaksModified();
+        _treasureSlider = AddSliderControl(weightsBox, "Treasure Room Multiplier:", 0.0f, 5.0f, 0.1f, 1.0f);
+        _treasureSlider.ValueChanged += _ => MarkTweaksModified();
 
         rightCol.AddChild(CreateSectionCard("Map Node Generation Weights", weightsBox, new Color(0.45f, 0.95f, 0.65f)));
 
-        // --- Card 5: Enemy Multipliers & Scaling ---
         var enemyBox = new VBoxContainer();
         enemyBox.AddThemeConstantOverride("separation", 8);
 
@@ -811,7 +750,6 @@ public partial class ModSettingsDialog : CanvasLayer
 
         rightCol.AddChild(CreateSectionCard("Enemy Multipliers & Scaling", enemyBox, new Color(1f, 0.45f, 0.45f)));
 
-        // --- Card 6: Player & Combat Scaling ---
         var playerScalingBox = new VBoxContainer();
         playerScalingBox.AddThemeConstantOverride("separation", 8);
 
@@ -884,7 +822,6 @@ public partial class ModSettingsDialog : CanvasLayer
         rootVbox.AddThemeConstantOverride("separation", 14);
         scroll.AddChild(rootVbox);
 
-        // --- Card 1: Real-Time Combat Cheats ---
         var cheatsBox = new VBoxContainer();
         cheatsBox.AddThemeConstantOverride("separation", 10);
 
@@ -898,35 +835,34 @@ public partial class ModSettingsDialog : CanvasLayer
         cheatsBox.AddChild(cheatsGrid);
 
         _godModeCheck = new CheckBox { Text = " God Mode (Immune to all incoming damage)" };
-        _godModeCheck.Toggled += val => { RuntimeStateManager.GodModeEnabled = val; ConfigManager.Current.CombatSandbox.GodMode = val; };
+        _godModeCheck.Toggled += val => { RuntimeStateManager.GodModeEnabled = val; ConfigManager.Current.CombatSandbox.GodMode = val; ConfigManager.SaveConfig(); };
         cheatsGrid.AddChild(_godModeCheck);
 
         _infEnergyCheck = new CheckBox { Text = " Infinite Energy (Playing cards does not drain energy)" };
-        _infEnergyCheck.Toggled += val => { RuntimeStateManager.InfiniteEnergyEnabled = val; ConfigManager.Current.CombatSandbox.InfiniteEnergy = val; };
+        _infEnergyCheck.Toggled += val => { RuntimeStateManager.InfiniteEnergyEnabled = val; ConfigManager.Current.CombatSandbox.InfiniteEnergy = val; ConfigManager.SaveConfig(); };
         cheatsGrid.AddChild(_infEnergyCheck);
 
         _oneHitKillCheck = new CheckBox { Text = " 1-Hit Kill (Attacks deal lethal damage to enemies)" };
-        _oneHitKillCheck.Toggled += val => { RuntimeStateManager.OneHitKillEnabled = val; ConfigManager.Current.CombatSandbox.OneHitKill = val; };
+        _oneHitKillCheck.Toggled += val => { RuntimeStateManager.OneHitKillEnabled = val; ConfigManager.Current.CombatSandbox.OneHitKill = val; ConfigManager.SaveConfig(); };
         cheatsGrid.AddChild(_oneHitKillCheck);
 
         _infPotionsCheck = new CheckBox { Text = " Infinite Potions (Using potions does not consume them)" };
-        _infPotionsCheck.Toggled += val => ConfigManager.Current.CombatSandbox.InfinitePotions = val;
+        _infPotionsCheck.Toggled += val => { ConfigManager.Current.CombatSandbox.InfinitePotions = val; ConfigManager.SaveConfig(); };
         cheatsGrid.AddChild(_infPotionsCheck);
 
         _noExhaustCheck = new CheckBox { Text = " No Card Exhaust (Exhausted cards are retained)" };
-        _noExhaustCheck.Toggled += val => ConfigManager.Current.CombatSandbox.NoCardExhaust = val;
+        _noExhaustCheck.Toggled += val => { ConfigManager.Current.CombatSandbox.NoCardExhaust = val; ConfigManager.SaveConfig(); };
         cheatsGrid.AddChild(_noExhaustCheck);
 
         var drawRow = new HBoxContainer();
         drawRow.AddChild(new Label { Text = "Bonus Card Draw per Turn: ", CustomMinimumSize = new Vector2(200, 0) });
         _bonusDrawSpin = new SpinBox { MinValue = 0, MaxValue = 10, Value = 0 };
-        _bonusDrawSpin.ValueChanged += val => ConfigManager.Current.CombatSandbox.BonusDrawPerTurn = (int)val;
+        _bonusDrawSpin.ValueChanged += val => { ConfigManager.Current.CombatSandbox.BonusDrawPerTurn = (int)val; ConfigManager.SaveConfig(); };
         drawRow.AddChild(_bonusDrawSpin);
         cheatsGrid.AddChild(drawRow);
 
         rootVbox.AddChild(CreateSectionCard("Real-Time Combat Cheats", cheatsBox, new Color(1f, 0.45f, 0.45f)));
 
-        // --- Card 2: Immediate Combat Actions ---
         var actionsBox = new VBoxContainer();
         actionsBox.AddThemeConstantOverride("separation", 10);
 
@@ -1080,7 +1016,6 @@ public partial class ModSettingsDialog : CanvasLayer
             var row = new HBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, Alignment = BoxContainer.AlignmentMode.Center };
             margin.AddChild(row);
 
-            // Relic Icon
             var tex = GameHelper.GetRelicIcon(canonical);
             if (tex != null)
             {
@@ -1182,7 +1117,6 @@ public partial class ModSettingsDialog : CanvasLayer
         var player = GameHelper.GetActivePlayer();
         var playerRelics = GameHelper.GetPlayerRelics();
 
-        // 1. Update Active Relics Grid
         if (_activeRelicsGrid != null)
         {
             _activeRelicsGrid.Columns = 4;
@@ -1310,7 +1244,6 @@ public partial class ModSettingsDialog : CanvasLayer
             ModLogger.Verbose("ModSettingsDialog", $"RefreshRealTimeRelicTabs: Rendered {playerRelics?.Count ?? 0} active player relics.");
         }
 
-        // 2. Update Available Relic counts
         if (playerRelics != null)
         {
             var relicCountMap = new System.Collections.Generic.Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
@@ -1392,7 +1325,6 @@ public partial class ModSettingsDialog : CanvasLayer
         titleBox.AddChild(addAllBtn);
         vbox.AddChild(titleBox);
 
-        // Filter Controls Row (Search Box + Multi-Select Pools, Types, and Rarities)
         var filterRow = new HBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         var searchInput = new LineEdit
         {
@@ -1401,7 +1333,6 @@ public partial class ModSettingsDialog : CanvasLayer
         };
         filterRow.AddChild(searchInput);
 
-        // 1. Character / Pool Multi-Select Filter
         var poolFilterButton = new MenuButton 
         { 
             Text = "All Pools", 
@@ -1468,7 +1399,6 @@ public partial class ModSettingsDialog : CanvasLayer
             }
         }
 
-        // 2. Card Type Multi-Select Filter
         var typeFilterButton = new MenuButton
         {
             Text = "All Types",
@@ -1515,7 +1445,6 @@ public partial class ModSettingsDialog : CanvasLayer
             }
         }
 
-        // 3. Card Rarity Multi-Select Filter
         var rarityFilterButton = new MenuButton
         {
             Text = "All Rarities",
@@ -1622,7 +1551,6 @@ public partial class ModSettingsDialog : CanvasLayer
             var cardVbox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, Alignment = BoxContainer.AlignmentMode.Center };
             margin.AddChild(cardVbox);
 
-            // 1. Portrait texture from card model
             Texture2D? tex = canonical?.Portrait;
             if (tex == null && !string.IsNullOrEmpty(canonical?.PortraitPath))
             {
@@ -1651,7 +1579,6 @@ public partial class ModSettingsDialog : CanvasLayer
                 cardVbox.AddChild(texRect);
             }
 
-            // 2. Card Title & Count Label
             string cardTitle = !string.IsNullOrWhiteSpace(canonical?.Title) ? canonical.Title : c;
             var lbl = new Label 
             { 
@@ -1663,7 +1590,6 @@ public partial class ModSettingsDialog : CanvasLayer
             };
             cardVbox.AddChild(lbl);
 
-            // 3. Card Type / Rarity & Keywords mini badges
             if (canonical != null)
             {
                 string costText = canonical.EnergyCost?.CostsX == true ? "X" : (canonical.EnergyCost?.Canonical >= 0 ? canonical.EnergyCost.Canonical.ToString() : "-");
@@ -1698,7 +1624,6 @@ public partial class ModSettingsDialog : CanvasLayer
                 }
             }
 
-            // 4. Action Buttons Grid
             var actionGrid = new GridContainer 
             { 
                 Columns = 2, 
@@ -1752,11 +1677,10 @@ public partial class ModSettingsDialog : CanvasLayer
             }
         };
 
-        // Pool Popup Selection Handlers
         poolPopup.IndexPressed += (long index) =>
         {
             int idx = (int)index;
-            if (idx == 0) // Select All
+            if (idx == 0)
             {
                 for (int i = poolItemOffset; i < poolPopup.ItemCount; i++)
                 {
@@ -1764,7 +1688,7 @@ public partial class ModSettingsDialog : CanvasLayer
                     selectedPools.Add(poolPopup.GetItemMetadata(i).AsString());
                 }
             }
-            else if (idx == 1) // Clear All
+            else if (idx == 1)
             {
                 for (int i = poolItemOffset; i < poolPopup.ItemCount; i++)
                 {
@@ -1784,11 +1708,10 @@ public partial class ModSettingsDialog : CanvasLayer
             applyFilter();
         };
 
-        // Type Popup Selection Handlers
         typePopup.IndexPressed += (long index) =>
         {
             int idx = (int)index;
-            if (idx == 0) // Select All
+            if (idx == 0)
             {
                 for (int i = typeItemOffset; i < typePopup.ItemCount; i++)
                 {
@@ -1796,7 +1719,7 @@ public partial class ModSettingsDialog : CanvasLayer
                     selectedTypes.Add((MegaCrit.Sts2.Core.Entities.Cards.CardType)typePopup.GetItemMetadata(i).AsInt32());
                 }
             }
-            else if (idx == 1) // Clear All
+            else if (idx == 1)
             {
                 for (int i = typeItemOffset; i < typePopup.ItemCount; i++)
                 {
@@ -1816,11 +1739,10 @@ public partial class ModSettingsDialog : CanvasLayer
             applyFilter();
         };
 
-        // Rarity Popup Selection Handlers
         rarityPopup.IndexPressed += (long index) =>
         {
             int idx = (int)index;
-            if (idx == 0) // Select All
+            if (idx == 0)
             {
                 for (int i = rarityItemOffset; i < rarityPopup.ItemCount; i++)
                 {
@@ -1828,7 +1750,7 @@ public partial class ModSettingsDialog : CanvasLayer
                     selectedRarities.Add((MegaCrit.Sts2.Core.Entities.Cards.CardRarity)rarityPopup.GetItemMetadata(i).AsInt32());
                 }
             }
-            else if (idx == 1) // Clear All
+            else if (idx == 1)
             {
                 for (int i = rarityItemOffset; i < rarityPopup.ItemCount; i++)
                 {
@@ -1971,7 +1893,6 @@ public partial class ModSettingsDialog : CanvasLayer
         var exhaustCards = GameHelper.GetPlayerExhaustPileCards();
         bool inCombat = GameHelper.IsInCombat();
 
-        // Update real-time title counts
         if (_deckTitleLabel != null) _deckTitleLabel.Text = $"Current Deck ({deckCards?.Count ?? 0} cards):";
         if (_handTitleLabel != null) _handTitleLabel.Text = inCombat ? $"Combat Hand ({handCards?.Count ?? 0} cards):" : "Combat Hand (Not in combat):";
         if (_drawTitleLabel != null) _drawTitleLabel.Text = inCombat ? $"Draw Pile ({drawCards?.Count ?? 0} cards):" : "Draw Pile (Not in combat):";
@@ -2040,11 +1961,9 @@ public partial class ModSettingsDialog : CanvasLayer
     {
         if (grid == null) return;
         
-        // Fancier grid styling
         grid.AddThemeConstantOverride("h_separation", 15);
         grid.AddThemeConstantOverride("v_separation", 15);
         
-        // Remove existing children
         foreach (Node child in grid.GetChildren())
         {
             grid.RemoveChild(child);
@@ -2124,7 +2043,6 @@ public partial class ModSettingsDialog : CanvasLayer
             var vbox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, Alignment = BoxContainer.AlignmentMode.Center };
             margin.AddChild(vbox);
             
-            // 1. Direct portrait texture from card model
             Texture2D? tex = c.Portrait;
             if (tex == null && !string.IsNullOrEmpty(c.PortraitPath))
             {
@@ -2152,7 +2070,6 @@ public partial class ModSettingsDialog : CanvasLayer
                 vbox.AddChild(texRect);
             }
 
-            // 2. Determine hand presence indicator (H)
             bool isInHand = false;
             if (inCombat && handCards != null)
             {
@@ -2171,7 +2088,6 @@ public partial class ModSettingsDialog : CanvasLayer
                 }
             }
 
-            // 3. Card Title & Upgrade / Hand State
             string cardTitle = !string.IsNullOrWhiteSpace(c.Title) ? c.Title : c.GetType().Name;
             if (c.IsUpgraded && !cardTitle.Contains('+'))
             {
@@ -2185,11 +2101,11 @@ public partial class ModSettingsDialog : CanvasLayer
             Color titleColor;
             if (isInHand)
             {
-                titleColor = new Color(0.4f, 1f, 0.9f); // Cyan highlight for on-hand
+                titleColor = new Color(0.4f, 1f, 0.9f);
             }
             else if (c.IsUpgraded)
             {
-                titleColor = new Color(0.4f, 1f, 0.5f); // Green for upgraded
+                titleColor = new Color(0.4f, 1f, 0.5f);
             }
             else
             {
@@ -2206,7 +2122,6 @@ public partial class ModSettingsDialog : CanvasLayer
             };
             vbox.AddChild(lbl);
 
-            // 4. Enchantment Badge (if enchanted)
             if (c.Enchantment != null)
             {
                 string enchName = !string.IsNullOrWhiteSpace(c.Enchantment.Title?.GetFormattedText()) 
@@ -2222,13 +2137,12 @@ public partial class ModSettingsDialog : CanvasLayer
                     CustomMinimumSize = new Vector2(110, 20),
                     ClipText = true,
                     HorizontalAlignment = HorizontalAlignment.Center,
-                    Modulate = new Color(0.9f, 0.65f, 1f), // Lilac / magical purple
+                    Modulate = new Color(0.9f, 0.65f, 1f),
                     TooltipText = fullTooltip
                 };
                 vbox.AddChild(enchBadge);
             }
 
-            // 5. Keyword / Attribute Badges
             var cardKeywords = GameHelper.GetCardKeywords(c);
             if (cardKeywords != null && cardKeywords.Count > 0)
             {
@@ -2248,7 +2162,6 @@ public partial class ModSettingsDialog : CanvasLayer
                 vbox.AddChild(kwHBox);
             }
 
-            // 6. Action Buttons Grid (2 columns for compact & clean alignment)
             var actionGrid = new GridContainer 
             { 
                 Columns = 2, 
@@ -2591,7 +2504,6 @@ public partial class ModSettingsDialog : CanvasLayer
         int defaultMaxHp = (activePlayer?.Creature != null) ? (int)activePlayer.Creature.MaxHp : (selectedChar != null ? selectedChar.StartingHp : 80);
         int defaultCurrentHp = (activePlayer?.Creature != null) ? (int)activePlayer.Creature.CurrentHp : defaultMaxHp;
 
-        // --- Card 1: Gold & Health Manipulation ---
         var vitalsBox = new VBoxContainer();
         vitalsBox.AddThemeConstantOverride("separation", 10);
 
@@ -2640,7 +2552,6 @@ public partial class ModSettingsDialog : CanvasLayer
 
         rootVbox.AddChild(CreateSectionCard("Gold & Health Manipulation", vitalsBox, new Color(0.4f, 0.95f, 0.65f)));
 
-        // --- Card 2: Special Rooms & Event Director ---
         var eventCardBox = new VBoxContainer();
         eventCardBox.AddThemeConstantOverride("separation", 10);
 
@@ -2800,7 +2711,6 @@ public partial class ModSettingsDialog : CanvasLayer
             }
         };
 
-        // Initialize label
         string? currentForced = EventDirector.GetForcedEvent();
         if (!string.IsNullOrEmpty(currentForced))
         {
@@ -2915,11 +2825,6 @@ public partial class ModSettingsDialog : CanvasLayer
         {
             _damageAmountSpin.Value = 5;
         }
-
-        if (!_tweaksModified && _applyConfigBtn != null)
-        {
-            _applyConfigBtn.Disabled = true;
-        }
     }
 
     private void SaveSettingsValues()
@@ -2931,23 +2836,13 @@ public partial class ModSettingsDialog : CanvasLayer
         if (_consoleHotkeyInput != null)
         {
             string consoleVal = _consoleHotkeyInput.Text.Trim();
-            if (string.IsNullOrWhiteSpace(consoleVal) || consoleVal.Equals("None", StringComparison.OrdinalIgnoreCase))
-            {
-                consoleVal = GeneralConfig.DefaultConsoleHotkey;
-                _consoleHotkeyInput.Text = consoleVal;
-            }
-            general.ConsoleHotkey = consoleVal;
+            general.ConsoleHotkey = string.IsNullOrWhiteSpace(consoleVal) ? GeneralConfig.DefaultConsoleHotkey : consoleVal;
         }
 
         if (_guiHotkeyInput != null)
         {
             string guiVal = _guiHotkeyInput.Text.Trim();
-            if (string.IsNullOrWhiteSpace(guiVal) || guiVal.Equals("None", StringComparison.OrdinalIgnoreCase))
-            {
-                guiVal = GeneralConfig.DefaultGuiOverlayHotkey;
-                _guiHotkeyInput.Text = guiVal;
-            }
-            general.GuiOverlayHotkey = guiVal;
+            general.GuiOverlayHotkey = string.IsNullOrWhiteSpace(guiVal) ? GeneralConfig.DefaultGuiOverlayHotkey : guiVal;
         }
         if (_quickGodModeInput != null) general.QuickGodModeKey = _quickGodModeInput.Text.Trim();
         if (_quickKillEnemiesInput != null) general.QuickKillEnemiesKey = _quickKillEnemiesInput.Text.Trim();

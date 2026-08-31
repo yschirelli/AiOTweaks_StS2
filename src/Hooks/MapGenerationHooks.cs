@@ -288,14 +288,12 @@ public static class MapGenerationHooks
                 int rowCount = __instance.GetRowCount();
                 if (grid == null || rowCount < 2) return true;
 
-                // 1. Rest site row directly preceding boss
                 ForEachInRow(grid, rowCount - 1, p =>
                 {
                     p.PointType = MapPointType.RestSite;
                     p.CanBeModified = false;
                 });
 
-                // 2. Proportional treasure rooms (or elites if ShouldReplaceTreasureWithElites is active)
                 float treasureMult = ConfigManager.Current.PreRunTweaks.MapNodeDistribution.TreasureRoomMultiplier;
                 var treasureRows = CalculateTreasureRows(rowCount, treasureMult);
                 var treasureType = __instance.ShouldReplaceTreasureWithElites ? MapPointType.Elite : MapPointType.Treasure;
@@ -309,14 +307,12 @@ public static class MapGenerationHooks
                     });
                 }
 
-                // 3. First floor is always monster combat
                 ForEachInRow(grid, 1, p =>
                 {
                     p.PointType = MapPointType.Monster;
                     p.CanBeModified = false;
                 });
 
-                // 4. Assign remaining node types from _pointTypeCounts
                 var pointTypeCounts = PointTypeCountsField?.GetValue(__instance) as MapPointTypeCounts;
                 if (pointTypeCounts != null && AssignRemainingTypesMethod != null)
                 {
@@ -330,7 +326,6 @@ public static class MapGenerationHooks
                     AssignRemainingTypesMethod.Invoke(__instance, new object[] { queue });
                 }
 
-                // 5. Fill any unassigned points with Monster
                 foreach (MapPoint p in __instance.GetAllMapPoints())
                 {
                     if (p.PointType == MapPointType.Unassigned)
@@ -339,7 +334,6 @@ public static class MapGenerationHooks
                     }
                 }
 
-                // 6. Boss and Starting ancient node assignment
                 __instance.BossMapPoint.PointType = MapPointType.Boss;
                 __instance.StartingMapPoint.PointType = MapPointType.Ancient;
                 if (__instance.SecondBossMapPoint != null)
@@ -348,7 +342,7 @@ public static class MapGenerationHooks
                 }
 
                 ModLogger.Verbose("MapGenerationHooks", $"AssignPointTypes completed: rowCount={rowCount}, treasureMult={treasureMult:F1}, treasureRows=[{string.Join(",", treasureRows)}]");
-                return false; // Skip original method
+                return false;
             }
             catch (Exception ex)
             {
@@ -381,14 +375,12 @@ public static class MapGenerationHooks
                 var rng = (RngField?.GetValue(__instance) as MegaCrit.Sts2.Core.Random.Rng) ?? new MegaCrit.Sts2.Core.Random.Rng(0, "generate_next_coord_fallback");
                 var directions = new System.Collections.Generic.List<int> { -1, 0, 1 };
 
-                // Shuffle candidate offsets
                 for (int i = directions.Count - 1; i > 0; i--)
                 {
                     int j = rng.NextInt(0, i + 1);
                     (directions[i], directions[j]) = (directions[j], directions[i]);
                 }
 
-                // 1. Try standard candidates without crossover
                 foreach (int dir in directions)
                 {
                     int targetCol = dir switch
@@ -408,7 +400,7 @@ public static class MapGenerationHooks
                     if (!hasCrossover)
                     {
                         __result = new MapCoord { col = targetCol, row = row };
-                        return false; // Skip original method
+                        return false;
                     }
                 }
 
@@ -481,7 +473,7 @@ public static class MapGenerationHooks
 
                 Dfs(currentMapPoint);
                 __result = result;
-                return false; // Skip original unbounded exponential recursive method
+                return false;
             }
             catch (Exception ex)
             {
@@ -520,7 +512,7 @@ public static class MapGenerationHooks
                     iterations++;
                     matchingSegments = MapPathPruning.FindMatchingSegments(startingMapPoint);
                 }
-                return false; // Handled safely
+                return false;
             }
             catch (Exception ex)
             {
@@ -902,7 +894,6 @@ public static class MapGenerationHooks
                     nNormalMapPoint.SetAngle(Rng.Chaotic.NextGaussianFloat(0f, 8f));
                 }
 
-                // Place Boss above the top floor row
                 float bossY = (740f - totalHeight - 395f) * num;
                 var bossPointNode = NBossMapPoint.Create(map.BossMapPoint, __instance, runState);
                 bossPointNode.Position = new Vector2(-200f, bossY);
@@ -941,10 +932,8 @@ public static class MapGenerationHooks
                 mapPointDict[map.StartingMapPoint.coord] = startingPointNode;
                 StartingPointNodeField.SetValue(__instance, startingPointNode);
 
-                // Adjust parchment background to match the proportional map height
                 AdjustMapBackground(mapBgContainer, totalHeight);
 
-                // Draw connecting paths
                 foreach (MapPoint allMapPoint2 in map.GetAllMapPoints())
                 {
                     DrawPathsMethod.Invoke(__instance, new object[] { mapPointDict[allMapPoint2.coord], allMapPoint2 });
@@ -952,7 +941,6 @@ public static class MapGenerationHooks
                 DrawPathsMethod.Invoke(__instance, new object[] { startingPointNode, map.StartingMapPoint });
                 DrawPathsMethod.Invoke(__instance, new object[] { bossPointNode, map.BossMapPoint });
 
-                // Highlight visited path ticks
                 IReadOnlyList<MapCoord> visitedMapCoords = runState.VisitedMapCoords;
                 Vector2 tickTraveledScale = (Vector2)(TickTraveledScaleField.GetValue(null) ?? new Vector2(1.2f, 1.2f));
                 for (int i = 0; i < visitedMapCoords.Count - 1; i++)
@@ -971,7 +959,6 @@ public static class MapGenerationHooks
                 InitMapVotesMethod.Invoke(__instance, null);
                 RefreshAllMapPointVotesMethod.Invoke(__instance, null);
 
-                // Focus neighbors
                 for (int j = 0; j < map.GetRowCount(); j++)
                 {
                     IEnumerable<MapPoint> pointsInRow = map.GetPointsInRow(j);
@@ -1019,7 +1006,7 @@ public static class MapGenerationHooks
                 }
 
                 ModLogger.Verbose("MapGenerationHooks", $"SetMap completed: rowCount={rowCount}, distY={distY:F1}, totalHeight={totalHeight:F1}, maxScrollTop={GetMaxScrollTop(__instance):F1}");
-                return false; // Skip original method
+                return false;
             }
             catch (Exception ex)
             {
@@ -1076,7 +1063,7 @@ public static class MapGenerationHooks
                 }
 
                 NGame.Instance?.RemoteCursorContainer?.ForceUpdateAllCursors();
-                return false; // Skip original method
+                return false;
             }
             catch (Exception ex)
             {

@@ -81,8 +81,6 @@ public partial class ModEntry : Node
 
         try
         {
-            // 1. Initialize Configuration
-            ModLogger.Verbose("ModEntry", "Step 1/4: Initializing Configuration...");
             ConfigManager.Initialize();
             ModLogger.Info("=========================================");
             ModLogger.Info($"Initializing {ModName} v{ModVersion}...");
@@ -92,7 +90,6 @@ public partial class ModEntry : Node
 #endif
             ModLogger.Info("=========================================");
 
-            // Register with BaseLib Mod Config Registry if available
             try
             {
                 ModLogger.Verbose("ModEntry", "Registering AIOTweaks with BaseLib ModConfigRegistry...");
@@ -110,16 +107,9 @@ public partial class ModEntry : Node
                 return;
             }
 
-            // 2. Initialize Harmony Patches
-            ModLogger.Verbose("ModEntry", "Step 2/4: Applying Harmony patches...");
             InitializeHarmony();
-
-            // 3. Attach In-Run Debug Overlay & Pause Menu Mod Settings Dialog
-            ModLogger.Verbose("ModEntry", "Step 3/4: Attaching UI components...");
             AttachUIComponents();
 
-            // 4. Hook into Scene Tree signals for lifecycle cleanup
-            ModLogger.Verbose("ModEntry", "Step 4/4: Connecting SceneTree lifecycle signals...");
             if (GetTree()?.Root != null)
             {
                 GetTree().Root.Connect("child_order_changed", Callable.From(OnSceneChanged));

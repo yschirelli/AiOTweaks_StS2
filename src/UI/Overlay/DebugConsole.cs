@@ -31,7 +31,7 @@ public partial class DebugConsole : CanvasLayer
     public override void _Ready()
     {
         ModLogger.Verbose("DebugConsole", "_Ready called: setting Layer=128, constructing UI...");
-        Layer = 128; // Ensure it renders on top of game UI
+        Layer = 128;
         SetupUI();
 
         ModLogger.OnLogged += OnLogReceived;
@@ -53,7 +53,6 @@ public partial class DebugConsole : CanvasLayer
     {
         if (@event is InputEventKey keyEvent && keyEvent.Pressed && !keyEvent.Echo)
         {
-            // Toggle AIOTweaks Console
             string consoleHotkey = !string.IsNullOrWhiteSpace(ConfigManager.Current.General.ConsoleHotkey) && !ConfigManager.Current.General.ConsoleHotkey.Equals("None", StringComparison.OrdinalIgnoreCase)
                 ? ConfigManager.Current.General.ConsoleHotkey
                 : GeneralConfig.DefaultConsoleHotkey;
@@ -65,7 +64,6 @@ public partial class DebugConsole : CanvasLayer
                 return;
             }
 
-            // Close console on Escape if currently visible
             if (_isConsoleVisible && keyEvent.Keycode == Key.Escape)
             {
                 ModLogger.Verbose("DebugConsole", "Escape key pressed while console visible. Closing console...");
@@ -74,10 +72,8 @@ public partial class DebugConsole : CanvasLayer
                 return;
             }
 
-            // If console is NOT visible, allow opening GUI overlay and quick cheat shortcuts
             if (!_isConsoleVisible)
             {
-                // Toggle GUI Menu Overlay (Default: F3)
                 string guiHotkey = !string.IsNullOrWhiteSpace(ConfigManager.Current.General.GuiOverlayHotkey) && !ConfigManager.Current.General.GuiOverlayHotkey.Equals("None", StringComparison.OrdinalIgnoreCase)
                     ? ConfigManager.Current.General.GuiOverlayHotkey
                     : GeneralConfig.DefaultGuiOverlayHotkey;
@@ -89,7 +85,6 @@ public partial class DebugConsole : CanvasLayer
                     return;
                 }
 
-                // Quick God Mode
                 if (GameHelper.IsKeyMatch(keyEvent, ConfigManager.Current.General.QuickGodModeKey))
                 {
                     ModLogger.Verbose("DebugConsole", "Quick God Mode hotkey matched. Toggling GodMode...");
@@ -99,7 +94,6 @@ public partial class DebugConsole : CanvasLayer
                     return;
                 }
 
-                // Quick Kill Enemies
                 if (GameHelper.IsKeyMatch(keyEvent, ConfigManager.Current.General.QuickKillEnemiesKey))
                 {
                     ModLogger.Verbose("DebugConsole", "Quick Kill Enemies hotkey matched. Invoking KillAllEnemies...");
@@ -110,7 +104,6 @@ public partial class DebugConsole : CanvasLayer
             }
         }
 
-        // When console is shown, consume all remaining unhandled inputs so normal game inputs/hotkeys are disabled
         if (_isConsoleVisible)
         {
             GetViewport().SetInputAsHandled();
@@ -220,7 +213,6 @@ public partial class DebugConsole : CanvasLayer
         vbox.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         _rootPanel.AddChild(vbox);
 
-        // Header bar
         var headerHBox = new HBoxContainer();
         var title = new Label { Text = " [AIOTweaks] Slay the Spire 2 Sandbox & Debug Console ", Modulate = new Color(0.3f, 0.85f, 1f) };
         var closeBtn = new Button { Text = " X " };
@@ -230,7 +222,6 @@ public partial class DebugConsole : CanvasLayer
         headerHBox.AddChild(closeBtn);
         vbox.AddChild(headerHBox);
 
-        // Fast Action Bar
         var fastBar = new HBoxContainer();
         _godModeBtn = CreateActionButton("God Mode: OFF", () => { CombatDirector.ToggleGodMode(); UpdateStatusButtons(); });
         _infEnergyBtn = CreateActionButton("Inf Energy: OFF", () => { CombatDirector.ToggleInfiniteEnergy(); UpdateStatusButtons(); });
@@ -253,7 +244,6 @@ public partial class DebugConsole : CanvasLayer
         fastBar.AddChild(clearLogBtn);
         vbox.AddChild(fastBar);
 
-        // Scrollable Log Console
         _logLabel = new RichTextLabel
         {
             Name = "ConsoleLog",
@@ -263,7 +253,6 @@ public partial class DebugConsole : CanvasLayer
         };
         vbox.AddChild(_logLabel);
 
-        // Command line input
         var inputHBox = new HBoxContainer();
         var promptLabel = new Label { Text = "> " };
         _commandInput = new LineEdit

@@ -55,7 +55,6 @@ public partial class PreRunSettingsMenu : Control
         var vbox = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         scroll.AddChild(vbox);
 
-        // Header
         var header = new Label
         {
             Text = "AIOTweaks - Pre-Run Configuration & Modifiers",
@@ -64,7 +63,6 @@ public partial class PreRunSettingsMenu : Control
         vbox.AddChild(header);
         vbox.AddChild(new HSeparator());
 
-        // Economy Section
         vbox.AddChild(new Label { Text = "--- Economy Tweaks ---", Modulate = new Color(1f, 0.85f, 0.3f) });
 
         var goldRow = CreateSliderRow("Gold Reward Multiplier:", 0.1f, 5.0f, 0.1f, 1.0f, out _goldSlider, out _goldValLabel);
@@ -84,7 +82,6 @@ public partial class PreRunSettingsMenu : Control
 
         vbox.AddChild(new HSeparator());
 
-        // Map Node Distribution Section
         vbox.AddChild(new Label { Text = "--- Map Node Generation Multipliers ---", Modulate = new Color(0.4f, 1f, 0.6f) });
         var fairPlayNote = new Label
         {
@@ -107,7 +104,6 @@ public partial class PreRunSettingsMenu : Control
 
         vbox.AddChild(new HSeparator());
 
-        // Reward Customization
         vbox.AddChild(new Label { Text = "--- Rewards & Deck Tweaks ---", Modulate = new Color(0.7f, 0.5f, 1f) });
         var cardRewardRow = new HBoxContainer();
         cardRewardRow.AddChild(new Label { Text = "Card Choices per Reward: " });
@@ -117,7 +113,6 @@ public partial class PreRunSettingsMenu : Control
 
         vbox.AddChild(new HSeparator());
 
-        // Action Buttons (Save, Reset, Close)
         var btnRow = new HBoxContainer();
         var saveBtn = new Button { Text = " Save & Apply " };
         saveBtn.Pressed += OnSavePressed;

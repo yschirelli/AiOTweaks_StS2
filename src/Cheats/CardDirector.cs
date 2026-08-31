@@ -71,7 +71,6 @@ public static class CardDirector
                         }
                     }
 
-                    // 1. Add directly to master deck
                     if (player.Deck != null)
                     {
                         player.Deck.AddInternal(newCard, -1, false);
@@ -80,7 +79,6 @@ public static class CardDirector
                         ModLogger.Info($"Card '{canonical.GetType().Name}' (Upgraded: {newCard.IsUpgraded}) added directly to Master Deck. (Deck count: {player.Deck.Cards.Count})");
                     }
 
-                    // 2. If currently in combat, also add a scoped active instance to Draw Pile for immediate availability
                     if (player.PlayerCombatState?.DrawPile != null)
                     {
                         try
@@ -233,7 +231,6 @@ public static class CardDirector
             var player = GameHelper.GetActivePlayer();
             bool removed = false;
 
-            // 1. Remove from its current host pile directly
             if (card.Pile != null)
             {
                 var pile = card.Pile;
@@ -244,7 +241,6 @@ public static class CardDirector
                 removed = true;
             }
 
-            // 2. Remove from player master deck if present (or remove master deck version if this was a combat copy)
             if (player?.Deck != null)
             {
                 if (player.Deck.Cards.Contains(card))
@@ -265,7 +261,6 @@ public static class CardDirector
                 }
             }
 
-            // 3. Remove from combat piles if in combat
             if (player?.PlayerCombatState != null)
             {
                 var combatMatches = player.PlayerCombatState.AllPiles
@@ -309,7 +304,6 @@ public static class CardDirector
                 }
             }
 
-            // 4. Safe state removal notify
             try
             {
                 card.RemoveFromState();

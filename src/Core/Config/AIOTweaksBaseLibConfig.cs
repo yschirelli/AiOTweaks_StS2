@@ -17,9 +17,6 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
         ModId = "AIOTweaks";
     }
 
-    // ==========================================
-    // SECTION: GENERAL SETTINGS
-    // ==========================================
     [ConfigSection("General Settings")]
     public bool ModEnabled
     {
@@ -42,9 +39,6 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
         }
     }
 
-    // ==========================================
-    // SECTION: KEYBINDINGS & OVERLAY
-    // ==========================================
     [ConfigSection("Keybindings & Overlay")]
     [ConfigTextInput(TextInputPreset.Alphanumeric)]
     public string ConsoleHotkey
@@ -81,9 +75,6 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
         ModSettingsDialog.ShowDialog();
     }
 
-    // ==========================================
-    // SECTION: GOD MODE & COMBAT CHEATS
-    // ==========================================
     [ConfigSection("God Mode & Combat Cheats")]
     public bool GodMode
     {
@@ -146,9 +137,6 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
         }
     }
 
-    // ==========================================
-    // SECTION: ECONOMY & REWARD MULTIPLIERS
-    // ==========================================
     [ConfigSection("Economy & Multipliers")]
     [ConfigSlider(1.0, 10.0, 0.5)]
     public double GoldRewardMultiplier
@@ -205,9 +193,6 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
         }
     }
 
-    // ==========================================
-    // SECTION: MAP & SPIRE UTILITIES
-    // ==========================================
     [ConfigSection("Map & Spire Utilities")]
     [ConfigSlider(1.0, 5.0, 0.5)]
     public double EliteNodeEncounterRate
@@ -220,6 +205,28 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
         }
     }
 
+    [ConfigSlider(0.0, 5.0, 0.5)]
+    public double ShopNodeRate
+    {
+        get => ConfigManager.Current.PreRunTweaks.MapNodeDistribution.ShopWeightMultiplier;
+        set
+        {
+            ConfigManager.Current.PreRunTweaks.MapNodeDistribution.ShopWeightMultiplier = (float)value;
+            ConfigManager.SaveConfig();
+        }
+    }
+
+    [ConfigSlider(0.0, 5.0, 0.5)]
+    public double EventNodeRate
+    {
+        get => ConfigManager.Current.PreRunTweaks.MapNodeDistribution.EventWeightMultiplier;
+        set
+        {
+            ConfigManager.Current.PreRunTweaks.MapNodeDistribution.EventWeightMultiplier = (float)value;
+            ConfigManager.SaveConfig();
+        }
+    }
+
     [ConfigSlider(1.0, 5.0, 0.5)]
     public double RestSiteRate
     {
@@ -227,6 +234,17 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
         set
         {
             ConfigManager.Current.PreRunTweaks.MapNodeDistribution.RestSiteWeightMultiplier = (float)value;
+            ConfigManager.SaveConfig();
+        }
+    }
+
+    [ConfigSlider(0.0, 5.0, 0.5)]
+    public double CombatNodeRate
+    {
+        get => ConfigManager.Current.PreRunTweaks.MapNodeDistribution.CombatWeightMultiplier;
+        set
+        {
+            ConfigManager.Current.PreRunTweaks.MapNodeDistribution.CombatWeightMultiplier = (float)value;
             ConfigManager.SaveConfig();
         }
     }
