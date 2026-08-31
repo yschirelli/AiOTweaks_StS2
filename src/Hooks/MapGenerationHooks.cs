@@ -712,15 +712,15 @@ public static class MapGenerationHooks
         }
     }
 
-    private static float _currentDeltaHeight = 0f;
+    private static float _currentExtraOffsetY = 0f;
 
     /// <summary>
-    /// Gets the current extra vertical height added to the map beyond standard 15-floor act (2325px).
+    /// Gets the current extra vertical offset for the parchment background (NMapBg).
     /// </summary>
-    public static float GetCurrentDeltaHeight() => _currentDeltaHeight;
+    public static float GetCurrentExtraOffsetY() => _currentExtraOffsetY;
 
     /// <summary>
-    /// Computes the dynamic maximum top scroll position based on the act's total height.
+    /// Computes the dynamic maximum top scroll position based on the act's total height and boss position.
     /// </summary>
     public static float GetMaxScrollTop(NMapScreen screen)
     {
@@ -731,27 +731,70 @@ public static class MapGenerationHooks
         float num = (map.SecondBossMapPoint != null) ? 0.9f : 1f;
         float distY = (float)(AccessTools.Field(typeof(NMapScreen), "_distY")?.GetValue(screen) ?? (166.0714f * num));
         float totalHeight = (rowCount - 1) * distY;
-        return -600f + totalHeight + (map.SecondBossMapPoint != null ? 375f : 75f);
+        float bossY = (740f - totalHeight - 395f) * num;
+        if (map.SecondBossMapPoint != null)
+        {
+            bossY -= 300f * num;
+        }
+
+        // Camera top limit is reached when boss is clearly visible at top of viewport
+        float maxScroll = -bossY - 180f;
+        return Math.Max(-600f, maxScroll);
     }
 
     /// <summary>
-    /// Adjusts the parchment background (NMapBg) height and Y position to fit the expanded map.
+    /// Adjusts the parchment background (NMapBg) height and Y position to fit the act seamlessly.
     /// </summary>
-    private static void AdjustMapBackground(NMapBg? mapBg, float totalHeight)
+    private static void AdjustMapBackground(NMapBg? mapBg, float totalHeight, float bossY)
     {
         try
         {
             if (mapBg == null) return;
-            float deltaHeight = Math.Max(0f, totalHeight - 2325f);
-            _currentDeltaHeight = deltaHeight;
+
+            // Clean up any previously added dynamic extra middle segments
+            var existingExtras = mapBg.GetChildren().OfType<TextureRect>().Where(c => c.Name.ToString().StartsWith("MapMid_Extra_")).ToList();
+            foreach (var extra in existingExtras)
+            {
+                mapBg.RemoveChild(extra);
+                extra.QueueFree();
+            }
+
+            // Vanilla parchment covers boss at -1980 with bg top at -1620 (height = 3240px)
+            // If map is longer than 15 floors, add identical 1080px middle parchment tiles
+            float extraHeight = Math.Max(0f, (-bossY - 360f) - 1620f);
+            int extraSections = (int)Math.Ceiling(extraHeight / 1080f);
+            _currentExtraOffsetY = extraSections * 1080f;
 
             var mapMid = AccessTools.Field(typeof(NMapBg), "_mapMid")?.GetValue(mapBg) as TextureRect;
+            var runState = AccessTools.Field(typeof(NMapBg), "_runState")?.GetValue(mapBg) as RunState;
+
+            if (mapMid != null && extraSections > 0)
+            {
+                for (int i = 0; i < extraSections; i++)
+                {
+                    var extraMid = new TextureRect
+                    {
+                        Name = $"MapMid_Extra_{i}",
+                        Texture = runState?.Act?.MapMidBg ?? mapMid.Texture,
+                        StretchMode = mapMid.StretchMode,
+                        TextureFilter = mapMid.TextureFilter,
+                        TextureRepeat = mapMid.TextureRepeat,
+                        SizeFlagsHorizontal = mapMid.SizeFlagsHorizontal,
+                        SizeFlagsVertical = mapMid.SizeFlagsVertical
+                    };
+                    mapBg.AddChild(extraMid);
+                    mapBg.MoveChild(extraMid, 1 + i); // Place between MapTop (0) and MapBot
+                }
+            }
+
+            // Reset any custom minimum size on mapMid so it scales identically to vanilla
             if (mapMid != null)
             {
-                mapMid.TextureRepeat = CanvasItem.TextureRepeatEnum.Enabled;
-                mapMid.StretchMode = TextureRect.StretchModeEnum.Tile;
-                mapMid.CustomMinimumSize = new Vector2(mapMid.CustomMinimumSize.X, 1080f + deltaHeight);
+                mapMid.CustomMinimumSize = Vector2.Zero;
             }
+
+            float bgTop = -1620f - _currentExtraOffsetY;
+            float adjustY = -1540f - _currentExtraOffsetY;
 
             var window = AccessTools.Field(typeof(NMapBg), "_window")?.GetValue(mapBg) as Window;
             float offsetX = (float)(AccessTools.Field(typeof(NMapBg), "_offsetX")?.GetValue(mapBg) ?? mapBg.Position.X);
@@ -762,16 +805,16 @@ public static class MapGenerationHooks
                 if (num < 1.7777778f)
                 {
                     float p = (num - 1.3333334f) / 0.44444442f;
-                    mapBg.Position = new Vector2(offsetX, Mathf.Remap(Ease.CubicOut(p), 0f, 1f, -1540f - deltaHeight, -1620f - deltaHeight));
+                    mapBg.Position = new Vector2(offsetX, Mathf.Remap(Ease.CubicOut(p), 0f, 1f, adjustY, bgTop));
                 }
                 else
                 {
-                    mapBg.Position = new Vector2(offsetX, -1620f - deltaHeight);
+                    mapBg.Position = new Vector2(offsetX, bgTop);
                 }
             }
             else
             {
-                mapBg.Position = new Vector2(offsetX, -1620f - deltaHeight);
+                mapBg.Position = new Vector2(offsetX, bgTop);
             }
 
             var drawings = AccessTools.Field(typeof(NMapBg), "_drawings")?.GetValue(mapBg) as NMapDrawings;
@@ -789,24 +832,43 @@ public static class MapGenerationHooks
     [HarmonyPatch(typeof(NMapBg), "OnWindowChange")]
     public static class NMapBgOnWindowChangePatch
     {
-        [HarmonyPostfix]
-        public static void Postfix(NMapBg __instance)
+        [HarmonyPrefix]
+        public static bool Prefix(NMapBg __instance)
         {
             try
             {
-                float deltaHeight = GetCurrentDeltaHeight();
-                if (deltaHeight > 0f)
+                var window = AccessTools.Field(typeof(NMapBg), "_window")?.GetValue(__instance) as Window;
+                float offsetX = (float)(AccessTools.Field(typeof(NMapBg), "_offsetX")?.GetValue(__instance) ?? __instance.Position.X);
+                float extraOffsetY = GetCurrentExtraOffsetY();
+                float bgTop = -1620f - extraOffsetY;
+                float adjustY = -1540f - extraOffsetY;
+
+                if (window != null)
                 {
-                    var pos = __instance.Position;
-                    pos.Y -= deltaHeight;
-                    __instance.Position = pos;
-                    var drawings = AccessTools.Field(typeof(NMapBg), "_drawings")?.GetValue(__instance) as NMapDrawings;
-                    drawings?.RepositionBasedOnBackground(__instance);
+                    float num = Math.Max(1.3333334f, (float)window.Size.X / (float)window.Size.Y);
+                    if (num < 1.7777778f)
+                    {
+                        float p = (num - 1.3333334f) / 0.44444442f;
+                        __instance.Position = new Vector2(offsetX, Mathf.Remap(Ease.CubicOut(p), 0f, 1f, adjustY, bgTop));
+                    }
+                    else
+                    {
+                        __instance.Position = new Vector2(offsetX, bgTop);
+                    }
                 }
+                else
+                {
+                    __instance.Position = new Vector2(offsetX, bgTop);
+                }
+
+                var drawings = AccessTools.Field(typeof(NMapBg), "_drawings")?.GetValue(__instance) as NMapDrawings;
+                drawings?.RepositionBasedOnBackground(__instance);
+                return false; // Skip original method
             }
             catch (Exception ex)
             {
-                ModLogger.Error("Error in NMapBg.OnWindowChange postfix", ex);
+                ModLogger.Error("Error in NMapBg.OnWindowChange prefix", ex);
+                return true;
             }
         }
     }
@@ -932,7 +994,8 @@ public static class MapGenerationHooks
                 mapPointDict[map.StartingMapPoint.coord] = startingPointNode;
                 StartingPointNodeField.SetValue(__instance, startingPointNode);
 
-                AdjustMapBackground(mapBgContainer, totalHeight);
+                // Adjust parchment background to match the boss position and proportional map height
+                AdjustMapBackground(mapBgContainer, totalHeight, bossY);
 
                 foreach (MapPoint allMapPoint2 in map.GetAllMapPoints())
                 {
