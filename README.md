@@ -170,9 +170,14 @@ AiOTweaks_StS2/
 ## Building from Source
 
 ### Quick Build (Linux / Steam Deck)
-Run the root build script, which automatically detects your .NET SDK, locates Steam game assemblies across standard directories, compiles the Release binary, and displays the output location:
+Run the root build script, which automatically detects your .NET SDK, locates Steam game assemblies across standard directories, compiles the binary, and displays the output location:
+
 ```bash
+# Compile Release build (default)
 ./build.sh
+
+# Compile Debug build (forcefully enables verbose logging and writes to aiotweaks_debug.log in mod root)
+./build.sh debug
 ```
 
 ### Manual Build
@@ -182,18 +187,26 @@ Run the root build script, which automatically detects your .NET SDK, locates St
    cd AiOTweaks_StS2
    ```
 
-2. Restore dependencies and compile the release binary:
+2. Restore dependencies and compile the binary:
    ```bash
+   # Release build
    dotnet restore aiotweaks.sln
    dotnet build aiotweaks.sln -c Release
+
+   # Debug build (with forced verbose logging and file logger)
+   dotnet build aiotweaks.sln -c Debug
    ```
 
 3. The compiled assembly and manifest will be output to:
    ```text
-   src/.godot/mono/temp/bin/Release/
+   src/.godot/mono/temp/bin/Release/  (or bin/Debug/)
    ├── AIOTweaks.dll
+   ├── AIOTweaks.pdb
    └── AIOTweaks.json
    ```
+
+> [!NOTE]
+> **Debug Builds**: When built in `Debug` configuration, verbose logging is forcefully enabled by default regardless of config file settings, and all real-time diagnostics are written to `aiotweaks_debug.log` directly in the mod's root folder.
 
 ---
 

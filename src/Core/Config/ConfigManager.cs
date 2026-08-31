@@ -100,7 +100,13 @@ public static class ConfigManager
                 {
                     Current = loaded;
                     EnsureHotkeyFailsafes();
+#if DEBUG
+                    Current.General.DebugLogging = true;
+                    ModLogger.MinimumLevel = LogLevel.Debug;
+                    ModLogger.FileLoggingEnabled = true;
+#else
                     ModLogger.MinimumLevel = Current.General.DebugLogging ? LogLevel.Debug : LogLevel.Info;
+#endif
                     ModLogger.Info($"Loaded configuration successfully from: {path} (DebugLogging={Current.General.DebugLogging}, MinimumLevel={ModLogger.MinimumLevel})");
                     OnConfigChanged?.Invoke(Current);
                     return;
@@ -110,6 +116,11 @@ public static class ConfigManager
             ModLogger.Warn($"Configuration file not found or empty at {path}. Generating default configuration.");
             Current = new ModConfig();
             EnsureHotkeyFailsafes();
+#if DEBUG
+            Current.General.DebugLogging = true;
+            ModLogger.MinimumLevel = LogLevel.Debug;
+            ModLogger.FileLoggingEnabled = true;
+#endif
             SaveConfig();
         }
         catch (Exception ex)
@@ -117,6 +128,11 @@ public static class ConfigManager
             ModLogger.Error($"Failed to parse configuration file at {path}. Reverting to safe defaults.", ex);
             Current = new ModConfig();
             EnsureHotkeyFailsafes();
+#if DEBUG
+            Current.General.DebugLogging = true;
+            ModLogger.MinimumLevel = LogLevel.Debug;
+            ModLogger.FileLoggingEnabled = true;
+#endif
             OnConfigChanged?.Invoke(Current);
         }
     }

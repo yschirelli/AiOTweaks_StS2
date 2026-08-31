@@ -2,10 +2,46 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG="${1:-Release}"
+
+# Parse build arguments
+CONFIG="Release"
+case "${1,,}" in
+    debug|-d|--debug)
+        CONFIG="Debug"
+        ;;
+    release|-r|--release|"")
+        CONFIG="Release"
+        ;;
+    -h|--help|help)
+        echo "========================================="
+        echo " AIOTweaks Build Script"
+        echo "========================================="
+        echo "Usage: ./build.sh [Configuration]"
+        echo ""
+        echo "Options:"
+        echo "  Release, -r, --release   (Default) Build optimized Release binary."
+        echo "  Debug,   -d, --debug     Build Debug binary (forcefully enables verbose"
+        echo "                           logging and saves logs to aiotweaks_debug.log"
+        echo "                           in the mod's root folder)."
+        echo "  -h,      --help          Display this help message."
+        echo ""
+        echo "Environment Variables (Optional):"
+        echo "  STS2_PATH      Explicit path to sts2.dll"
+        echo "  BASELIB_PATH   Explicit path to BaseLib.dll"
+        echo "========================================="
+        exit 0
+        ;;
+    *)
+        CONFIG="$1"
+        ;;
+esac
 
 echo "========================================="
-echo " Building AIOTweaks (${CONFIG})"
+if [ "$CONFIG" = "Debug" ]; then
+    echo " Building AIOTweaks (${CONFIG}) [Debug Mode: Force Verbose + File Logging]"
+else
+    echo " Building AIOTweaks (${CONFIG})"
+fi
 echo "========================================="
 
 # Locate dotnet binary

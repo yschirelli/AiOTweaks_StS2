@@ -86,6 +86,10 @@ public partial class ModEntry : Node
             ConfigManager.Initialize();
             ModLogger.Info("=========================================");
             ModLogger.Info($"Initializing {ModName} v{ModVersion}...");
+#if DEBUG
+            ModLogger.Info($"[DEBUG BUILD] Verbose logging forcefully enabled by default.");
+            ModLogger.Info($"[DEBUG BUILD] Mod log file: {ModLogger.LogFilePath}");
+#endif
             ModLogger.Info("=========================================");
 
             // Register with BaseLib Mod Config Registry if available

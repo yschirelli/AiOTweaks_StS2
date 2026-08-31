@@ -385,15 +385,25 @@ public partial class DebugConsole : CanvasLayer
                 {
                     bool enable = parts[1].Equals("on", StringComparison.OrdinalIgnoreCase) || parts[1].Equals("true", StringComparison.OrdinalIgnoreCase) || parts[1] == "1";
                     ConfigManager.Current.General.DebugLogging = enable;
+#if DEBUG
+                    ModLogger.MinimumLevel = LogLevel.Debug;
+                    LogToConsole($"[color=green]Debug Build: Verbose debugging is forcefully ENABLED by default (Log: {ModLogger.LogFilePath}).[/color]");
+#else
                     ModLogger.MinimumLevel = enable ? LogLevel.Debug : LogLevel.Info;
                     LogToConsole($"[color=green]Verbose debugging log is now {(enable ? "ENABLED" : "DISABLED")}.[/color]");
+#endif
                 }
                 else
                 {
                     bool toggle = !ConfigManager.Current.General.DebugLogging;
                     ConfigManager.Current.General.DebugLogging = toggle;
+#if DEBUG
+                    ModLogger.MinimumLevel = LogLevel.Debug;
+                    LogToConsole($"[color=green]Debug Build: Verbose debugging is forcefully ENABLED by default (Log: {ModLogger.LogFilePath}).[/color]");
+#else
                     ModLogger.MinimumLevel = toggle ? LogLevel.Debug : LogLevel.Info;
                     LogToConsole($"[color=green]Verbose debugging log toggled to {(toggle ? "ENABLED" : "DISABLED")}.[/color]");
+#endif
                 }
                 break;
 

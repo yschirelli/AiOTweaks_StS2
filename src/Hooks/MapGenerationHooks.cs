@@ -158,10 +158,13 @@ public static class MapGenerationHooks
                 int desiredRooms = Math.Max(15, ConfigManager.Current.PreRunTweaks.MapRoomCount);
                 float roomScale = desiredRooms > 15 ? (float)desiredRooms / 15.0f : 1.0f;
 
-                float eliteMult = dist.EliteWeightMultiplier * runSettings.EliteSpawnMultiplier * roomScale;
-                float shopMult = dist.ShopWeightMultiplier * runSettings.ShopSpawnMultiplier * roomScale;
-                float eventMult = dist.EventWeightMultiplier * runSettings.EventSpawnMultiplier * roomScale;
-                float restMult = dist.RestSiteWeightMultiplier * roomScale;
+                float combatMult = dist.CombatWeightMultiplier;
+                float normalize = 1.0f / Math.Max(0.01f, combatMult);
+
+                float eliteMult = dist.EliteWeightMultiplier * runSettings.EliteSpawnMultiplier * roomScale * normalize;
+                float shopMult = dist.ShopWeightMultiplier * runSettings.ShopSpawnMultiplier * roomScale * normalize;
+                float eventMult = dist.EventWeightMultiplier * runSettings.EventSpawnMultiplier * roomScale * normalize;
+                float restMult = dist.RestSiteWeightMultiplier * roomScale * normalize;
 
                 ModLogger.Verbose("MapGenerationHooks", $"MapPointTypeCounts constructor postfix: raw Elites={__instance.NumOfElites}, Shops={__instance.NumOfShops}, Unknowns={__instance.NumOfUnknowns}, Rests={__instance.NumOfRests}, roomScale={roomScale:F2}");
 
@@ -218,7 +221,7 @@ public static class MapGenerationHooks
                 int rightCol = Math.Min(col + 1, 6);
                 int row = current.coord.row + 1;
 
-                var rng = (RngField?.GetValue(__instance) as MegaCrit.Sts2.Core.Random.Rng) ?? new MegaCrit.Sts2.Core.Random.Rng();
+                var rng = (RngField?.GetValue(__instance) as MegaCrit.Sts2.Core.Random.Rng) ?? new MegaCrit.Sts2.Core.Random.Rng(0, "generate_next_coord_fallback");
                 var directions = new System.Collections.Generic.List<int> { -1, 0, 1 };
 
                 // Shuffle candidate offsets
@@ -280,42 +283,6 @@ public static class MapGenerationHooks
         }
     }
 
-    /// <summary>
-    /// Prevents map pruning from throwing 'Unable to prune matching segments in 50 iterations' on large maps.
-    /// Pruning duplicate cosmetic segments is non-essential and should fail gracefully rather than crash into a black screen.
-    /// </summary>
-    [HarmonyPatch(typeof(MapPathPruning), nameof(MapPathPruning.PruneDuplicateSegments))]
-    public static class MapPathPruningPruneDuplicateSegmentsPatch
-    {
-        [HarmonyFinalizer]
-        public static Exception? Finalizer(Exception? __exception)
-        {
-            if (__exception != null)
-            {
-                ModLogger.Verbose("MapGenerationHooks", $"MapPathPruning duplicate segment pruning completed with safe stop: {__exception.Message}");
-                return null; // Suppress exception so map generation succeeds cleanly
-            }
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// Protects PruneAndRepair against any uncaught generation edge cases.
-    /// </summary>
-    [HarmonyPatch(typeof(MapPathPruning), nameof(MapPathPruning.PruneAndRepair))]
-    public static class MapPathPruningPruneAndRepairPatch
-    {
-        [HarmonyFinalizer]
-        public static Exception? Finalizer(Exception? __exception)
-        {
-            if (__exception != null)
-            {
-                ModLogger.Verbose("MapGenerationHooks", $"MapPathPruning.PruneAndRepair finished with safe recovery: {__exception.Message}");
-                return null;
-            }
-            return null;
-        }
-    }
 
     /// <summary>
     /// Protects StandardActMap.CreateFor against any uncaught exceptions by returning a verified fallback map.
@@ -443,46 +410,5 @@ public static class MapGenerationHooks
         }
     }
 
-    /// <summary>
-    /// Computes adjusted room node weight based on active config multipliers.
-    /// </summary>
-    public static float AdjustNodeWeight(string nodeType, float baseWeight)
-    {
-        var dist = ConfigManager.Current.PreRunTweaks.MapNodeDistribution;
-        float multiplier = 1.0f;
 
-        switch (nodeType.ToLowerInvariant())
-        {
-            case "elite":
-            case "monster_elite":
-                multiplier = dist.EliteWeightMultiplier * ConfigManager.ActiveRunSettings.EliteSpawnMultiplier;
-                break;
-            case "shop":
-            case "merchant":
-                multiplier = dist.ShopWeightMultiplier * ConfigManager.ActiveRunSettings.ShopSpawnMultiplier;
-                break;
-            case "event":
-            case "unknown":
-            case "question":
-                multiplier = dist.EventWeightMultiplier * ConfigManager.ActiveRunSettings.EventSpawnMultiplier;
-                break;
-            case "rest":
-            case "campfire":
-                multiplier = dist.RestSiteWeightMultiplier;
-                break;
-            case "combat":
-            case "normal_combat":
-                multiplier = dist.CombatWeightMultiplier;
-                break;
-        }
-
-        if (Math.Abs(multiplier - 1.0f) > 0.001f)
-        {
-            float adjusted = Math.Max(0.01f, baseWeight * multiplier);
-            ModLogger.Info($"MapHook: {nodeType} weight {baseWeight:F2} -> {adjusted:F2} (x{multiplier:F2})");
-            return adjusted;
-        }
-
-        return baseWeight;
-    }
 }
