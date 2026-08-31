@@ -20,8 +20,16 @@ public partial class ModSettingsDialog : CanvasLayer
     private static ModSettingsDialog? _instance;
     public static ModSettingsDialog? Instance => _instance;
 
+    private ColorRect? _backdrop;
     private PanelContainer? _dialogPanel;
     private TabContainer? _tabs;
+
+    private bool _isDragging = false;
+    private Vector2 _dragOffset;
+
+    private bool _isResizing = false;
+    private Vector2 _resizeStartMousePos;
+    private Vector2 _resizeStartPanelSize;
 
     private LineEdit? _consoleHotkeyInput;
     private LineEdit? _guiHotkeyInput;
@@ -132,6 +140,12 @@ public partial class ModSettingsDialog : CanvasLayer
     {
         bool isDialogOpen = _dialogPanel != null && _dialogPanel.Visible;
 
+        if (@event is InputEventMouseButton mouseEv && !mouseEv.Pressed && mouseEv.ButtonIndex == MouseButton.Left)
+        {
+            _isDragging = false;
+            _isResizing = false;
+        }
+
         if (@event is InputEventKey keyEvent && keyEvent.Pressed && !keyEvent.Echo)
         {
             string guiKey = !string.IsNullOrWhiteSpace(ConfigManager.Current.General.GuiOverlayHotkey) && !ConfigManager.Current.General.GuiOverlayHotkey.Equals("None", StringComparison.OrdinalIgnoreCase)
@@ -195,6 +209,7 @@ public partial class ModSettingsDialog : CanvasLayer
         if (_dialogPanel != null)
         {
             LoadSettingsValues();
+            ApplyOrRestoreWindowLayout();
             
             bool inRun = GameHelper.GetActivePlayer() != null;
             ModLogger.Verbose("ModSettingsDialog", $"Player inRun status: {inRun}");
@@ -205,6 +220,7 @@ public partial class ModSettingsDialog : CanvasLayer
             }
             UpdateTweaksRunLockState(inRun);
 
+            if (_backdrop != null) _backdrop.Visible = true;
             _dialogPanel.Visible = true;
             UpdateBlockingState(true);
             RefreshRealTimeCardTabs();
@@ -215,12 +231,18 @@ public partial class ModSettingsDialog : CanvasLayer
     public void CloseDialog()
     {
         ModLogger.Verbose("ModSettingsDialog", "CloseDialog called.");
+        _isDragging = false;
+        _isResizing = false;
         SaveSettingsValues();
         if (_dialogPanel != null)
         {
             _dialogPanel.Visible = false;
-            UpdateBlockingState(false);
         }
+        if (_backdrop != null)
+        {
+            _backdrop.Visible = false;
+        }
+        UpdateBlockingState(false);
     }
 
     private void UpdateBlockingState(bool block)
@@ -283,49 +305,116 @@ public partial class ModSettingsDialog : CanvasLayer
         return theme;
     }
 
+    private void ApplyOrRestoreWindowLayout()
+    {
+        if (_dialogPanel == null) return;
+
+        Vector2 viewportSize = GetViewport()?.GetVisibleRect().Size ?? new Vector2(1920, 1080);
+        if (viewportSize.X <= 200 || viewportSize.Y <= 200)
+        {
+            viewportSize = new Vector2(1920, 1080);
+        }
+
+        // Proportional initial size: 85% width, 85% height of active game resolution
+        float propWidth = Mathf.Clamp(viewportSize.X * 0.85f, 650f, Math.Max(650f, viewportSize.X - 40f));
+        float propHeight = Mathf.Clamp(viewportSize.Y * 0.85f, 450f, Math.Max(450f, viewportSize.Y - 40f));
+        float propX = Math.Max(0f, (viewportSize.X - propWidth) / 2f);
+        float propY = Math.Max(0f, (viewportSize.Y - propHeight) / 2f);
+
+        var uiCfg = ConfigManager.Current.UI;
+        float width = (uiCfg.MenuWidth.HasValue && uiCfg.MenuWidth.Value >= 200f) ? uiCfg.MenuWidth.Value : propWidth;
+        float height = (uiCfg.MenuHeight.HasValue && uiCfg.MenuHeight.Value >= 200f) ? uiCfg.MenuHeight.Value : propHeight;
+
+        // Clamp to current viewport
+        width = Mathf.Clamp(width, 650f, viewportSize.X);
+        height = Mathf.Clamp(height, 450f, viewportSize.Y);
+
+        float posX = uiCfg.MenuPosX.HasValue ? uiCfg.MenuPosX.Value : propX;
+        float posY = uiCfg.MenuPosY.HasValue ? uiCfg.MenuPosY.Value : propY;
+
+        posX = Mathf.Clamp(posX, 0f, Math.Max(0f, viewportSize.X - width));
+        posY = Mathf.Clamp(posY, 0f, Math.Max(0f, viewportSize.Y - height));
+
+        _dialogPanel.Position = new Vector2(posX, posY);
+        _dialogPanel.Size = new Vector2(width, height);
+    }
+
     private void SetupDialogUI()
     {
-        var backdrop = new ColorRect
+        _backdrop = new ColorRect
         {
             Name = "Backdrop",
-            Color = new Color(0, 0, 0, 0.6f)
+            Color = new Color(0, 0, 0, 0.45f),
+            Visible = false
         };
-        backdrop.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-        backdrop.GuiInput += @event =>
+        _backdrop.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        _backdrop.GuiInput += @event =>
         {
             if (@event is InputEventMouseButton mouse && mouse.Pressed && mouse.ButtonIndex == MouseButton.Left)
             {
                 CloseDialog();
             }
         };
+        AddChild(_backdrop);
 
         _dialogPanel = new PanelContainer
         {
             Name = "DialogPanel",
-            AnchorLeft = 0.015f,
-            AnchorTop = 0.015f,
-            AnchorRight = 0.985f,
-            AnchorBottom = 0.985f,
-            OffsetLeft = 0,
-            OffsetTop = 0,
-            OffsetRight = 0,
-            OffsetBottom = 0,
             Theme = CreateModTheme(),
-            Visible = false
+            Visible = false,
+            CustomMinimumSize = new Vector2(650, 450)
         };
-        _dialogPanel.AddChild(backdrop);
+        _dialogPanel.SetAnchorsPreset(Control.LayoutPreset.TopLeft);
 
-        var contentVBox = new VBoxContainer { Name = "ContentBox" };
+        var contentVBox = new VBoxContainer 
+        { 
+            Name = "ContentBox",
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            SizeFlagsVertical = Control.SizeFlags.ExpandFill
+        };
         contentVBox.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         _dialogPanel.AddChild(contentVBox);
 
-        var header = new HBoxContainer();
+        var header = new HBoxContainer
+        {
+            MouseFilter = Control.MouseFilterEnum.Stop,
+            MouseDefaultCursorShape = Control.CursorShape.Move,
+            TooltipText = "Click and drag to move window"
+        };
+        header.GuiInput += @event =>
+        {
+            if (@event is InputEventMouseButton mouse)
+            {
+                if (mouse.ButtonIndex == MouseButton.Left)
+                {
+                    if (mouse.Pressed)
+                    {
+                        _isDragging = true;
+                        _dragOffset = mouse.GlobalPosition - (_dialogPanel?.Position ?? Vector2.Zero);
+                    }
+                    else
+                    {
+                        _isDragging = false;
+                    }
+                }
+            }
+            else if (@event is InputEventMouseMotion motion && _isDragging && _dialogPanel != null)
+            {
+                Vector2 newPos = motion.GlobalPosition - _dragOffset;
+                Vector2 viewportSize = GetViewport()?.GetVisibleRect().Size ?? new Vector2(1920, 1080);
+                float maxX = Math.Max(0f, viewportSize.X - _dialogPanel.Size.X);
+                float maxY = Math.Max(0f, viewportSize.Y - _dialogPanel.Size.Y);
+                _dialogPanel.Position = new Vector2(Mathf.Clamp(newPos.X, 0f, maxX), Mathf.Clamp(newPos.Y, 0f, maxY));
+            }
+        };
+
         var title = new Label
         {
             Text = "  AIOTweaks - In-Game Mod Settings & Sandbox Suite  ",
-            Modulate = new Color(0.35f, 0.85f, 1f)
+            Modulate = new Color(0.35f, 0.85f, 1f),
+            MouseFilter = Control.MouseFilterEnum.Pass
         };
-        var closeBtn = new Button { Text = " X " };
+        var closeBtn = new Button { Text = " X ", MouseDefaultCursorShape = Control.CursorShape.Arrow };
         closeBtn.Pressed += CloseDialog;
 
         header.AddChild(title);
@@ -406,6 +495,12 @@ public partial class ModSettingsDialog : CanvasLayer
             ConfigManager.Current.CombatSandbox.NoCardExhaust = false;
             ConfigManager.Current.CombatSandbox.BonusDrawPerTurn = 0;
 
+            ConfigManager.Current.UI.MenuPosX = null;
+            ConfigManager.Current.UI.MenuPosY = null;
+            ConfigManager.Current.UI.MenuWidth = null;
+            ConfigManager.Current.UI.MenuHeight = null;
+            ApplyOrRestoreWindowLayout();
+
             RuntimeStateManager.ResetSessionState();
             RuntimeStateManager.FreeMapNavigationEnabled = false;
             GameHelper.SetPlayerMaxEnergy(3);
@@ -425,9 +520,58 @@ public partial class ModSettingsDialog : CanvasLayer
         var doneBtn = new Button { Text = " Return to Game " };
         doneBtn.Pressed += CloseDialog;
 
+        var resizeGrip = new Control
+        {
+            Name = "ResizeGrip",
+            CustomMinimumSize = new Vector2(26, 26),
+            MouseFilter = Control.MouseFilterEnum.Stop,
+            MouseDefaultCursorShape = Control.CursorShape.Fdiagsize,
+            TooltipText = "Drag to resize window"
+        };
+        resizeGrip.Draw += () =>
+        {
+            var col = new Color(0.45f, 0.75f, 1.0f, 0.75f);
+            var sz = resizeGrip.Size;
+            resizeGrip.DrawLine(new Vector2(sz.X - 4, sz.Y - 14), new Vector2(sz.X - 14, sz.Y - 4), col, 2f);
+            resizeGrip.DrawLine(new Vector2(sz.X - 4, sz.Y - 9), new Vector2(sz.X - 9, sz.Y - 4), col, 2f);
+            resizeGrip.DrawLine(new Vector2(sz.X - 4, sz.Y - 4), new Vector2(sz.X - 4, sz.Y - 4), col, 2f);
+        };
+
+        resizeGrip.GuiInput += @event =>
+        {
+            if (@event is InputEventMouseButton mouse)
+            {
+                if (mouse.ButtonIndex == MouseButton.Left)
+                {
+                    if (mouse.Pressed)
+                    {
+                        _isResizing = true;
+                        _resizeStartMousePos = mouse.GlobalPosition;
+                        _resizeStartPanelSize = _dialogPanel?.Size ?? Vector2.Zero;
+                    }
+                    else
+                    {
+                        _isResizing = false;
+                    }
+                }
+            }
+            else if (@event is InputEventMouseMotion motion && _isResizing && _dialogPanel != null)
+            {
+                Vector2 delta = motion.GlobalPosition - _resizeStartMousePos;
+                Vector2 newSize = _resizeStartPanelSize + delta;
+                Vector2 viewportSize = GetViewport()?.GetVisibleRect().Size ?? new Vector2(1920, 1080);
+                float maxWidth = viewportSize.X - _dialogPanel.Position.X;
+                float maxHeight = viewportSize.Y - _dialogPanel.Position.Y;
+                float clampedW = Mathf.Clamp(newSize.X, 650f, Math.Max(650f, maxWidth));
+                float clampedH = Mathf.Clamp(newSize.Y, 450f, Math.Max(450f, maxHeight));
+                _dialogPanel.Size = new Vector2(clampedW, clampedH);
+            }
+        };
+
         footer.AddChild(defaultBtn);
         footer.AddSpacer(false);
         footer.AddChild(doneBtn);
+        footer.AddChild(resizeGrip);
         contentVBox.AddChild(new HSeparator());
         contentVBox.AddChild(footer);
 
@@ -2892,6 +3036,14 @@ public partial class ModSettingsDialog : CanvasLayer
         if (_infPotionsCheck != null) sandbox.InfinitePotions = _infPotionsCheck.ButtonPressed;
         if (_noExhaustCheck != null) sandbox.NoCardExhaust = _noExhaustCheck.ButtonPressed;
         if (_bonusDrawSpin != null) sandbox.BonusDrawPerTurn = (int)_bonusDrawSpin.Value;
+
+        if (_dialogPanel != null)
+        {
+            ConfigManager.Current.UI.MenuPosX = _dialogPanel.Position.X;
+            ConfigManager.Current.UI.MenuPosY = _dialogPanel.Position.Y;
+            ConfigManager.Current.UI.MenuWidth = _dialogPanel.Size.X;
+            ConfigManager.Current.UI.MenuHeight = _dialogPanel.Size.Y;
+        }
 
         ConfigManager.SaveConfig();
         ModLogger.Info("Mod settings saved successfully.");

@@ -186,4 +186,17 @@ public sealed class UIConfig
 
     [JsonPropertyName("enableAudioCues")]
     public bool EnableAudioCues { get; set; } = true;
+
+    [JsonPropertyName("menuPosX")]
+    public float? MenuPosX { get; set; }
+
+    [JsonPropertyName("menuPosY")]
+    public float? MenuPosY { get; set; }
+
+    [JsonPropertyName("menuWidth")]
+    public float? MenuWidth { get; set; }
+
+    [JsonPropertyName("menuHeight")]
+    public float? MenuHeight { get; set; }
 }
+

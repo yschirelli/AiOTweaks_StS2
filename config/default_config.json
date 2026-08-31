@@ -45,6 +45,11 @@
     "overlayScale": 1.0,
     "overlayOpacity": 0.95,
     "showDebugConsoleOnStart": false,
-    "enableAudioCues": true
+    "enableAudioCues": true,
+    "menuPosX": null,
+    "menuPosY": null,
+    "menuWidth": null,
+    "menuHeight": null
   }
 }
+
