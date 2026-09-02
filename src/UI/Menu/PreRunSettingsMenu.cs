@@ -3,6 +3,8 @@ using Godot;
 using AIOTweaks.Core;
 using AIOTweaks.Core.Config;
 using AIOTweaks.Core.Logging;
+using AIOTweaks.Core.State;
+using AIOTweaks.Hooks;
 
 namespace AIOTweaks.UI.Menu;
 
@@ -29,6 +31,9 @@ public partial class PreRunSettingsMenu : Control
     private SpinBox? _cardRewardSpin;
     private SpinBox? _bonusGoldSpin;
     private SpinBox? _bonusHpSpin;
+    private SpinBox? _potionSlotsSpin;
+    private CheckBox? _allowMultipleRelicsCheck;
+    private Label? _statusBannerLabel;
 
     public override void _Ready()
     {
@@ -62,6 +67,13 @@ public partial class PreRunSettingsMenu : Control
             HorizontalAlignment = HorizontalAlignment.Center
         };
         vbox.AddChild(header);
+
+        _statusBannerLabel = new Label
+        {
+            HorizontalAlignment = HorizontalAlignment.Center,
+            AutowrapMode = TextServer.AutowrapMode.WordSmart
+        };
+        vbox.AddChild(_statusBannerLabel);
         vbox.AddChild(new HSeparator());
 
         vbox.AddChild(new Label { Text = "--- Economy Tweaks ---", Modulate = new Color(1f, 0.85f, 0.3f) });
@@ -105,12 +117,25 @@ public partial class PreRunSettingsMenu : Control
 
         vbox.AddChild(new HSeparator());
 
-        vbox.AddChild(new Label { Text = "--- Rewards & Deck Tweaks ---", Modulate = new Color(0.7f, 0.5f, 1f) });
+        vbox.AddChild(new Label { Text = "--- Rewards & Relic/Potion Tweaks ---", Modulate = new Color(0.7f, 0.5f, 1f) });
         var cardRewardRow = new HBoxContainer();
         cardRewardRow.AddChild(new Label { Text = "Card Choices per Reward: " });
         _cardRewardSpin = new SpinBox { MinValue = 1, MaxValue = 10, Step = 1, Value = 3 }.MakeNumericOnly();
         cardRewardRow.AddChild(_cardRewardSpin);
         vbox.AddChild(cardRewardRow);
+
+        var potionSlotRow = new HBoxContainer();
+        potionSlotRow.AddChild(new Label { Text = "Starting Potion Slots: " });
+        _potionSlotsSpin = new SpinBox { MinValue = 1, MaxValue = 10, Step = 1, Value = 3 }.MakeNumericOnly();
+        potionSlotRow.AddChild(_potionSlotsSpin);
+        vbox.AddChild(potionSlotRow);
+
+        _allowMultipleRelicsCheck = new CheckBox 
+        { 
+            Text = " Allow Multiple Relics (Equipped relics can reappear in chests, shops, and drops)",
+            TooltipText = "When enabled, relics in your inventory will not be removed from reward/shop/chest grab bags."
+        };
+        vbox.AddChild(_allowMultipleRelicsCheck);
 
         vbox.AddChild(new HSeparator());
 
@@ -155,6 +180,23 @@ public partial class PreRunSettingsMenu : Control
     {
         var tweaks = ConfigManager.Current.PreRunTweaks;
 
+        if (_statusBannerLabel != null)
+        {
+            if (AIOTweaks.Hooks.RunTweaksSaveManager.HasActiveRunSnapshot)
+            {
+                var snap = AIOTweaks.Hooks.RunTweaksSaveManager.ActiveSnapshot;
+                string modeText = (snap?.IsCustom ?? false) ? "[color=yellow]Custom (Locked)[/color]" : "[color=green]Standard (Locked)[/color]";
+                string endlessText = (RuntimeStateManager.CurrentEndlessLoopCount > 0) ? $", Loop #{RuntimeStateManager.CurrentEndlessLoopCount}" : "";
+                _statusBannerLabel.Text = $"Active Run in Progress ({modeText}{endlessText}): Map and starting modifiers are locked for this run. Settings saved below apply to your NEXT run.";
+                _statusBannerLabel.Modulate = new Color(1f, 0.9f, 0.4f);
+            }
+            else
+            {
+                _statusBannerLabel.Text = "Ready for New Run: Pre-run settings configured below will be snapshotted when you embark on your next run.";
+                _statusBannerLabel.Modulate = new Color(0.4f, 0.9f, 1f);
+            }
+        }
+
         if (_goldSlider != null) _goldSlider.Value = tweaks.GoldRewardMultiplier;
         if (_eliteSlider != null) _eliteSlider.Value = tweaks.MapNodeDistribution.EliteWeightMultiplier;
         if (_shopSlider != null) _shopSlider.Value = tweaks.MapNodeDistribution.ShopWeightMultiplier;
@@ -163,6 +205,8 @@ public partial class PreRunSettingsMenu : Control
         if (_cardRewardSpin != null) _cardRewardSpin.Value = tweaks.CardRewardCount;
         if (_bonusGoldSpin != null) _bonusGoldSpin.Value = tweaks.StartingGoldBonus;
         if (_bonusHpSpin != null) _bonusHpSpin.Value = tweaks.StartingMaxHpBonus;
+        if (_potionSlotsSpin != null) _potionSlotsSpin.Value = tweaks.PotionSlots;
+        if (_allowMultipleRelicsCheck != null) _allowMultipleRelicsCheck.ButtonPressed = tweaks.AllowMultipleRelics;
     }
 
     private void OnSavePressed()
@@ -177,6 +221,8 @@ public partial class PreRunSettingsMenu : Control
         if (_cardRewardSpin != null) tweaks.CardRewardCount = (int)_cardRewardSpin.Value;
         if (_bonusGoldSpin != null) tweaks.StartingGoldBonus = (int)_bonusGoldSpin.Value;
         if (_bonusHpSpin != null) tweaks.StartingMaxHpBonus = (int)_bonusHpSpin.Value;
+        if (_potionSlotsSpin != null) tweaks.PotionSlots = (int)_potionSlotsSpin.Value;
+        if (_allowMultipleRelicsCheck != null) tweaks.AllowMultipleRelics = _allowMultipleRelicsCheck.ButtonPressed;
 
         ConfigManager.SaveConfig();
         ModLogger.Info("Pre-run settings saved successfully.");

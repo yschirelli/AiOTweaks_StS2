@@ -64,6 +64,18 @@ Whether you are testing new card synergies, prototyping custom balance patches, 
 - **Free Map Navigation ("Flying Boots" mode)**: Click and travel to ANY room freely on the map, omni-directionally without pathing restrictions.
 - **Fair Play Safety**: Non-default map node weights automatically mark runs as Seeded/Custom to safeguard standard achievements and epoch unlocks.
 
+### Potion Management & Real-Time Slot Adjustment
+- **Dedicated Potions Tab**: Split into **Available Potions** (searchable compendium with rarity-colored titles, full game descriptions, and instant inventory add) and **Current Potions** (real-time slot inventory overview, equipped descriptions, and individual discard or use controls).
+- **Dynamic Potion Slots Adjustment**: Tweak maximum potion slots (1 to 10) in real-time with instant synchronization when relics or game events modify capacity.
+- **Top-Bar Anti-Overlap Layout System**: Expanding potion slots beyond the standard 3 smoothly shifts the Floor count, Room indicator, Boss icon, and timer to the right; reducing slots immediately pulls them back adjacent to potion holders without clipping or overlapping.
+
+### Allow Multiple Relics (Pre-Run Setting)
+- New pre-run setting **Allow Multiple Relics**: When enabled, relics in the player's inventory remain in grab bags and drop pools, allowing equipped relics to reappear in chests, shops, and combat rewards for crazy stacking runs.
+
+### Combat Status Effects (Powers / Buffs / Debuffs)
+- **Player Status Effects Subtab**: Inspect active powers on the player, increment/decrement amounts in real-time, remove specific effects, or clear all player statuses. Search and apply any power from the compendium (Weak, Frail, Vulnerable, Strength, Dexterity, Poison, Artifact, Barricade, Buffer, etc.) with custom amounts.
+- **Enemy Status Effects Subtab**: Select individual combat monsters or all active enemies simultaneously to view active status effects, modify stack counts, remove debuffs/buffs, or apply any power to target enemies. Includes out-of-battle safety notices.
+
 ### Non-Destructive Hook Architecture & BaseLib Integration
 - Built with **HarmonyX** prefix and postfix patches across core game assemblies.
 - Patches fail open, ensure RoomSet Ancient/Boss fallbacks, and wrap all reflection queries in safe try-catch blocks to prevent game crashes.
@@ -159,13 +171,16 @@ AiOTweaks_StS2/
     │   ├── EconomyHooks.cs      # Gold reward & shop price patches
     │   ├── EventHooks.cs        # Event manipulation & forcing
     │   ├── MapGenerationHooks.cs# Map weights, room length, free navigation, Neow & Ancient fallbacks
-    │   └── ModdingScreenHooks.cs# Modding screen, Mod Info container & Character select button injections
+    │   ├── ModdingScreenHooks.cs# Modding screen, Mod Info container & Character select button injections
+    │   └── RelicHooks.cs        # Allow Multiple Relics & TopBar anti-overlap layout patches
     ├── Cheats/                  # Domain-specific cheat managers
     │   ├── CardDirector.cs      # Deck, hand, pile, attribute & enchantment spawning
     │   ├── CombatDirector.cs    # Combat sandbox & turn management
     │   ├── EventDirector.cs     # Event routing and queue forcing
-    │   ├── InventoryDirector.cs # Currency, HP, and potion operations
-    │   └── RelicDirector.cs     # Atomic relic injection/removal
+    │   ├── InventoryDirector.cs # Currency and HP operations
+    │   ├── PotionDirector.cs    # Atomic potion grant/discard and slot management
+    │   ├── RelicDirector.cs     # Atomic relic injection/removal
+    │   └── StatusDirector.cs    # Real-time player and enemy power/status effects
     └── UI/                      # Godot scene overlays and controls
         ├── UIHelper.cs          # SpinBox numeric validation & UI helper extensions
         ├── Menu/
@@ -272,6 +287,8 @@ Settings persist directly inside the mod root directory (`mods/AIOTweaks/config.
     "enemyHealthMultiplier": 1.0,
     "enemyDamageMultiplier": 1.0,
     "enemyDefendMultiplier": 1.0,
+    "allowMultipleRelics": false,
+    "potionSlots": 3,
     "freeMapNavigation": false,
     "endlessMode": {
       "enabled": false,

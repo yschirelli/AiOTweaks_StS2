@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Text.Json;
 using AIOTweaks.Core.Logging;
+using AIOTweaks.Hooks;
 using Godot;
 
 namespace AIOTweaks.Core.Config;
@@ -27,6 +28,9 @@ public static class ConfigManager
 
     public static event Action<ModConfig>? OnConfigChanged;
 
+    public static PreRunTweaksConfig GetEffectivePreRunTweaks() => RunTweaksSaveManager.GetEffectivePreRunTweaks();
+    public static RunSettings GetEffectiveRunSettings() => RunTweaksSaveManager.GetEffectiveRunSettings();
+
     public static string GetConfigFilePath()
     {
         string rootDir = ModLogger.GetModRootDirectory();
@@ -37,6 +41,7 @@ public static class ConfigManager
     {
         ModLogger.Verbose("ConfigManager", "Initializing ConfigManager subsystem...");
         LoadConfig();
+        RunTweaksSaveManager.Initialize();
     }
 
     public static void EnsureHotkeyFailsafes()

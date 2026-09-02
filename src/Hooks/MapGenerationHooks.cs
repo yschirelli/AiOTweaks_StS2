@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using AIOTweaks.Core;
 using AIOTweaks.Core.Config;
@@ -24,6 +27,348 @@ using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Unlocks;
 
 namespace AIOTweaks.Hooks;
+
+/// <summary>
+/// Serializable data container representing the immutable pre-run configuration snapshot bound to an active run.
+/// Persists across game restarts, quits, relogs, and endless loops.
+/// </summary>
+public sealed class ActiveRunTweaksSnapshot
+{
+    [JsonPropertyName("profileId")]
+    public int ProfileId { get; set; } = 0;
+
+    [JsonPropertyName("startTime")]
+    public long StartTime { get; set; } = 0;
+
+    [JsonPropertyName("runSeed")]
+    public string RunSeed { get; set; } = "";
+
+    [JsonPropertyName("isCustom")]
+    public bool IsCustom { get; set; } = false;
+
+    [JsonPropertyName("endlessLoopCount")]
+    public int EndlessLoopCount { get; set; } = 0;
+
+    [JsonPropertyName("savedAtUtc")]
+    public DateTime SavedAtUtc { get; set; } = DateTime.UtcNow;
+
+    [JsonPropertyName("preRunTweaks")]
+    public PreRunTweaksConfig PreRunTweaks { get; set; } = new();
+
+    [JsonPropertyName("runSettings")]
+    public RunSettings RunSettings { get; set; } = new();
+
+    public ActiveRunTweaksSnapshot Clone()
+    {
+        return new ActiveRunTweaksSnapshot
+        {
+            ProfileId = ProfileId,
+            StartTime = StartTime,
+            RunSeed = RunSeed,
+            IsCustom = IsCustom,
+            EndlessLoopCount = EndlessLoopCount,
+            SavedAtUtc = SavedAtUtc,
+            PreRunTweaks = ClonePreRunTweaks(PreRunTweaks),
+            RunSettings = RunSettings.Clone()
+        };
+    }
+
+    public static PreRunTweaksConfig ClonePreRunTweaks(PreRunTweaksConfig source)
+    {
+        if (source == null) return new PreRunTweaksConfig();
+        return new PreRunTweaksConfig
+        {
+            GoldRewardMultiplier = source.GoldRewardMultiplier,
+            ShopDiscountMultiplier = source.ShopDiscountMultiplier,
+            CardRewardCount = source.CardRewardCount,
+            StartingGoldBonus = source.StartingGoldBonus,
+            StartingMaxHpBonus = source.StartingMaxHpBonus,
+            ForceNeowBonus = source.ForceNeowBonus,
+            MapRoomCount = source.MapRoomCount,
+            PlayerDamageMultiplier = source.PlayerDamageMultiplier,
+            MaxEnergy = source.MaxEnergy,
+            EnemyHealthMultiplier = source.EnemyHealthMultiplier,
+            EnemyDamageMultiplier = source.EnemyDamageMultiplier,
+            EnemyDefendMultiplier = source.EnemyDefendMultiplier,
+            FreeMapNavigation = source.FreeMapNavigation,
+            EndlessMode = new EndlessModeConfig
+            {
+                Enabled = source.EndlessMode.Enabled,
+                EnemyScalingMultiplier = source.EndlessMode.EnemyScalingMultiplier
+            },
+            MapNodeDistribution = new MapNodeDistributionConfig
+            {
+                EliteWeightMultiplier = source.MapNodeDistribution.EliteWeightMultiplier,
+                ShopWeightMultiplier = source.MapNodeDistribution.ShopWeightMultiplier,
+                EventWeightMultiplier = source.MapNodeDistribution.EventWeightMultiplier,
+                RestSiteWeightMultiplier = source.MapNodeDistribution.RestSiteWeightMultiplier,
+                CombatWeightMultiplier = source.MapNodeDistribution.CombatWeightMultiplier,
+                TreasureRoomMultiplier = source.MapNodeDistribution.TreasureRoomMultiplier
+            }
+        };
+    }
+}
+
+/// <summary>
+/// Manages persistence, lifecycle, and retrieval of active run pre-run tweaks.
+/// Ensures runs generated with custom map generation parameters remain immutable across sessions,
+/// endless loops inherit the original snapshot, and default vanilla runs remain non-custom.
+/// </summary>
+public static class RunTweaksSaveManager
+{
+    private const string SnapshotFilePrefix = "active_run_tweaks_p";
+    private static readonly object FileLock = new();
+
+    private static readonly JsonSerializerOptions JsonOpts = new()
+    {
+        WriteIndented = true,
+        PropertyNameCaseInsensitive = true
+    };
+
+    public static ActiveRunTweaksSnapshot? ActiveSnapshot { get; private set; } = null;
+    public static bool HasActiveRunSnapshot => ActiveSnapshot != null;
+
+    public static string GetSnapshotPath(int profileId)
+    {
+        string rootDir = ModLogger.GetModRootDirectory();
+        return Path.Combine(rootDir, $"{SnapshotFilePrefix}{profileId}.json");
+    }
+
+    public static int GetCurrentProfileId()
+    {
+        try
+        {
+            if (MegaCrit.Sts2.Core.Saves.SaveManager.Instance != null)
+            {
+                return MegaCrit.Sts2.Core.Saves.SaveManager.Instance.CurrentProfileId;
+            }
+        }
+        catch { }
+        return 0;
+    }
+
+    public static void Initialize()
+    {
+        ModLogger.Verbose("RunTweaksSaveManager", "Initializing RunTweaksSaveManager subsystem...");
+        TryLoadFromDisk(GetCurrentProfileId());
+    }
+
+    public static bool TryLoadFromDisk(int profileId)
+    {
+        lock (FileLock)
+        {
+            try
+            {
+                string path = GetSnapshotPath(profileId);
+                if (File.Exists(path))
+                {
+                    string json = File.ReadAllText(path);
+                    var loaded = JsonSerializer.Deserialize<ActiveRunTweaksSnapshot>(json, JsonOpts);
+                    if (loaded != null)
+                    {
+                        ActiveSnapshot = loaded;
+                        RuntimeStateManager.CurrentEndlessLoopCount = loaded.EndlessLoopCount;
+                        ModLogger.Info($"RunTweaksSaveManager: Loaded persisted active run snapshot for profile {profileId} (IsCustom={loaded.IsCustom}, RoomCount={loaded.PreRunTweaks.MapRoomCount}, Endless={loaded.PreRunTweaks.EndlessMode.Enabled}, Loop={loaded.EndlessLoopCount})");
+                        return true;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error($"RunTweaksSaveManager: Error reading snapshot for profile {profileId}", ex);
+            }
+            return false;
+        }
+    }
+
+    public static void SaveActiveSnapshot()
+    {
+        if (ActiveSnapshot == null) return;
+        lock (FileLock)
+        {
+            try
+            {
+                string path = GetSnapshotPath(ActiveSnapshot.ProfileId);
+                string? dir = Path.GetDirectoryName(path);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                {
+                    Directory.CreateDirectory(dir);
+                }
+                string json = JsonSerializer.Serialize(ActiveSnapshot, JsonOpts);
+                File.WriteAllText(path, json);
+                ModLogger.Info($"RunTweaksSaveManager: Saved active run tweaks snapshot to {path}");
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error("RunTweaksSaveManager: Failed to write active run tweaks snapshot", ex);
+            }
+        }
+    }
+
+    public static void StartNewRun(RunState runState)
+    {
+        int profileId = GetCurrentProfileId();
+        var pendingTweaks = ConfigManager.Current.PreRunTweaks;
+        var pendingSettings = ConfigManager.ActiveRunSettings;
+
+        bool isCustom = IsCustomRun(pendingTweaks, pendingSettings);
+
+        var snapshot = new ActiveRunTweaksSnapshot
+        {
+            ProfileId = profileId,
+            StartTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            RunSeed = runState?.Rng?.Seed.ToString() ?? "",
+            IsCustom = isCustom,
+            EndlessLoopCount = 0,
+            SavedAtUtc = DateTime.UtcNow,
+            PreRunTweaks = ActiveRunTweaksSnapshot.ClonePreRunTweaks(pendingTweaks),
+            RunSettings = pendingSettings.Clone()
+        };
+
+        ActiveSnapshot = snapshot;
+        RuntimeStateManager.CurrentEndlessLoopCount = 0;
+        SaveActiveSnapshot();
+
+        ModLogger.Info($"RunTweaksSaveManager: Started NEW run snapshot (Profile={profileId}, IsCustom={isCustom}, RoomCount={snapshot.PreRunTweaks.MapRoomCount}, Endless={snapshot.PreRunTweaks.EndlessMode.Enabled})");
+    }
+
+    public static void LoadSavedRun(RunState runState, MegaCrit.Sts2.Core.Saves.SerializableRun? save)
+    {
+        int profileId = GetCurrentProfileId();
+        ModLogger.Verbose("RunTweaksSaveManager", $"Loading saved run for profile {profileId}...");
+
+        bool loaded = TryLoadFromDisk(profileId);
+        if (!loaded)
+        {
+            // If no custom snapshot was saved on disk for this run, the run was started as a vanilla default run.
+            // Create a clean default snapshot so pending modified menu tweaks do NOT contaminate this existing run!
+            ModLogger.Info($"RunTweaksSaveManager: No custom snapshot found on disk for profile {profileId}. Binding clean default snapshot (GameMode.Standard).");
+            ActiveSnapshot = new ActiveRunTweaksSnapshot
+            {
+                ProfileId = profileId,
+                StartTime = save?.StartTime ?? 0,
+                IsCustom = false,
+                EndlessLoopCount = 0,
+                PreRunTweaks = new PreRunTweaksConfig(),
+                RunSettings = new RunSettings()
+            };
+            RuntimeStateManager.CurrentEndlessLoopCount = 0;
+        }
+        else if (ActiveSnapshot != null)
+        {
+            RuntimeStateManager.CurrentEndlessLoopCount = ActiveSnapshot.EndlessLoopCount;
+        }
+    }
+
+    public static void ClearActiveRun(string reason)
+    {
+        int profileId = ActiveSnapshot?.ProfileId ?? GetCurrentProfileId();
+        ModLogger.Info($"RunTweaksSaveManager: Clearing active run snapshot (Reason: {reason}, Profile: {profileId}).");
+        ActiveSnapshot = null;
+        RuntimeStateManager.CurrentEndlessLoopCount = 0;
+
+        lock (FileLock)
+        {
+            try
+            {
+                string path = GetSnapshotPath(profileId);
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                    ModLogger.Verbose("RunTweaksSaveManager", $"Deleted snapshot file: {path}");
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error($"RunTweaksSaveManager: Failed to delete snapshot file for profile {profileId}", ex);
+            }
+        }
+    }
+
+    public static void IncrementEndlessLoop()
+    {
+        if (ActiveSnapshot != null)
+        {
+            ActiveSnapshot.EndlessLoopCount++;
+            RuntimeStateManager.CurrentEndlessLoopCount = ActiveSnapshot.EndlessLoopCount;
+            SaveActiveSnapshot();
+            ModLogger.Info($"RunTweaksSaveManager: Endless loop incremented to {ActiveSnapshot.EndlessLoopCount} (Scaling factor: {Math.Pow(ActiveSnapshot.PreRunTweaks.EndlessMode.EnemyScalingMultiplier, ActiveSnapshot.EndlessLoopCount):F2}x)");
+        }
+        else
+        {
+            RuntimeStateManager.CurrentEndlessLoopCount++;
+        }
+    }
+
+    public static PreRunTweaksConfig GetEffectivePreRunTweaks()
+    {
+        if (ActiveSnapshot != null)
+        {
+            return ActiveSnapshot.PreRunTweaks;
+        }
+        return ConfigManager.Current.PreRunTweaks;
+    }
+
+    public static RunSettings GetEffectiveRunSettings()
+    {
+        if (ActiveSnapshot != null)
+        {
+            return ActiveSnapshot.RunSettings;
+        }
+        return ConfigManager.ActiveRunSettings;
+    }
+
+    public static bool IsMapTweakModified(PreRunTweaksConfig preRun, RunSettings runSettings)
+    {
+        if (preRun == null || runSettings == null) return false;
+        var dist = preRun.MapNodeDistribution;
+
+        return Math.Abs(dist.EliteWeightMultiplier - 1.0f) > 0.001f ||
+               Math.Abs(dist.ShopWeightMultiplier - 1.0f) > 0.001f ||
+               Math.Abs(dist.EventWeightMultiplier - 1.0f) > 0.001f ||
+               Math.Abs(dist.RestSiteWeightMultiplier - 1.0f) > 0.001f ||
+               Math.Abs(dist.CombatWeightMultiplier - 1.0f) > 0.001f ||
+               Math.Abs(dist.TreasureRoomMultiplier - 1.0f) > 0.001f ||
+               Math.Abs(runSettings.EliteSpawnMultiplier - 1.0f) > 0.001f ||
+               Math.Abs(runSettings.ShopSpawnMultiplier - 1.0f) > 0.001f ||
+               Math.Abs(runSettings.EventSpawnMultiplier - 1.0f) > 0.001f ||
+               preRun.MapRoomCount != 15 ||
+               preRun.FreeMapNavigation ||
+               RuntimeStateManager.FreeMapNavigationEnabled ||
+               preRun.EndlessMode.Enabled;
+    }
+
+    public static bool IsCustomRun(PreRunTweaksConfig preRun, RunSettings runSettings)
+    {
+        if (IsMapTweakModified(preRun, runSettings)) return true;
+
+        return Math.Abs(preRun.GoldRewardMultiplier - 1.0f) > 0.001f ||
+               Math.Abs(preRun.ShopDiscountMultiplier - 1.0f) > 0.001f ||
+               preRun.CardRewardCount != 3 ||
+               preRun.StartingGoldBonus != 0 ||
+               preRun.StartingMaxHpBonus != 0 ||
+               Math.Abs(preRun.PlayerDamageMultiplier - 1.0f) > 0.001f ||
+               preRun.MaxEnergy != 3 ||
+               Math.Abs(preRun.EnemyHealthMultiplier - 1.0f) > 0.001f ||
+               Math.Abs(preRun.EnemyDamageMultiplier - 1.0f) > 0.001f ||
+               Math.Abs(preRun.EnemyDefendMultiplier - 1.0f) > 0.001f ||
+               Math.Abs(runSettings.GoldMultiplier - 1.0f) > 0.001f ||
+               runSettings.ActiveModifiers.Count > 0 ||
+               runSettings.CustomStartingCards.Count > 0 ||
+               runSettings.CustomStartingRelics.Count > 0 ||
+               runSettings.DraftModeEnabled;
+    }
+
+    public static bool IsCustomRunPending()
+    {
+        return IsCustomRun(ConfigManager.Current.PreRunTweaks, ConfigManager.ActiveRunSettings);
+    }
+
+    public static bool AreMapTweaksModified()
+    {
+        return IsMapTweakModified(GetEffectivePreRunTweaks(), GetEffectiveRunSettings());
+    }
+}
 
 /// <summary>
 /// Intercepts map node generation weights (Elites, Shops, Unknowns, Rest Sites, Combats),
@@ -54,35 +399,14 @@ public static class MapGenerationHooks
     /// </summary>
     public static bool AreMapTweaksModified()
     {
-        var preRun = ConfigManager.Current.PreRunTweaks;
-        var dist = preRun.MapNodeDistribution;
-        var runSettings = ConfigManager.ActiveRunSettings;
-
-        bool modified = Math.Abs(dist.EliteWeightMultiplier - 1.0f) > 0.001f ||
-                        Math.Abs(dist.ShopWeightMultiplier - 1.0f) > 0.001f ||
-                        Math.Abs(dist.EventWeightMultiplier - 1.0f) > 0.001f ||
-                        Math.Abs(dist.RestSiteWeightMultiplier - 1.0f) > 0.001f ||
-                        Math.Abs(dist.CombatWeightMultiplier - 1.0f) > 0.001f ||
-                        Math.Abs(dist.TreasureRoomMultiplier - 1.0f) > 0.001f ||
-                        Math.Abs(runSettings.EliteSpawnMultiplier - 1.0f) > 0.001f ||
-                        Math.Abs(runSettings.ShopSpawnMultiplier - 1.0f) > 0.001f ||
-                        Math.Abs(runSettings.EventSpawnMultiplier - 1.0f) > 0.001f ||
-                        preRun.MapRoomCount != 15 ||
-                        preRun.FreeMapNavigation ||
-                        RuntimeStateManager.FreeMapNavigationEnabled ||
-                        Math.Abs(preRun.EnemyHealthMultiplier - 1.0f) > 0.001f ||
-                        Math.Abs(preRun.EnemyDamageMultiplier - 1.0f) > 0.001f ||
-                        Math.Abs(preRun.EnemyDefendMultiplier - 1.0f) > 0.001f ||
-                        preRun.EndlessMode.Enabled;
-
-        ModLogger.Verbose("MapGenerationHooks", $"AreMapTweaksModified check: {modified} (RoomCount={preRun.MapRoomCount}, FreeNav={preRun.FreeMapNavigation}, Endless={preRun.EndlessMode.Enabled})");
-        return modified;
+        return RunTweaksSaveManager.AreMapTweaksModified();
     }
 
     /// <summary>
     /// Enforces fair play on singleplayer/new run embarkation:
     /// If tweaks are customized, switch GameMode to Custom (Seeded/Fair mode)
     /// to disable achievements and epoch unlocks.
+    /// If defaults are used, preserves GameMode.Standard.
     /// </summary>
     [HarmonyPatch(typeof(RunState), nameof(RunState.CreateForNewRun))]
     public static class RunStateCreateForNewRunPatch
@@ -93,7 +417,7 @@ public static class MapGenerationHooks
             try
             {
                 ModLogger.Verbose("MapGenerationHooks", $"RunState.CreateForNewRun prefix evaluating GameMode: incoming={gameMode}");
-                if (AreMapTweaksModified())
+                if (RunTweaksSaveManager.IsCustomRunPending())
                 {
                     if (gameMode == GameMode.Standard)
                     {
@@ -103,7 +427,7 @@ public static class MapGenerationHooks
                 }
                 else
                 {
-                    ModLogger.Info("Map generation tweaks are at game default: Proceeding with standard run.");
+                    ModLogger.Info("Map generation tweaks are at game default: Proceeding with standard run (GameMode.Standard).");
                 }
             }
             catch (Exception ex)
@@ -125,13 +449,17 @@ public static class MapGenerationHooks
             try
             {
                 ModLogger.Verbose("MapGenerationHooks", $"RunState.CreateShared prefix evaluating GameMode: incoming={gameMode}");
-                if (AreMapTweaksModified())
+                if (RunTweaksSaveManager.IsCustomRunPending())
                 {
                     if (gameMode == GameMode.Standard)
                     {
                         gameMode = GameMode.Custom;
                         ModLogger.Info("Pre-run tweaks are modified: Automatically set shared GameMode to Custom (Seeded/Fair Mode).");
                     }
+                }
+                else
+                {
+                    ModLogger.Info("Shared map generation tweaks at game default: Proceeding with standard run.");
                 }
             }
             catch (Exception ex)
@@ -140,6 +468,193 @@ public static class MapGenerationHooks
             }
         }
     }
+
+    #region Run Lifecycle & Persistence Patches
+
+    [HarmonyPatch(typeof(RunManager), nameof(RunManager.SetUpNewSingleplayer))]
+    public static class RunManagerSetUpNewSingleplayerPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(RunState state)
+        {
+            try
+            {
+                RunTweaksSaveManager.StartNewRun(state);
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error("Error in RunManagerSetUpNewSingleplayerPatch snapshotting active run tweaks", ex);
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(RunManager), nameof(RunManager.SetUpNewMultiplayer))]
+    public static class RunManagerSetUpNewMultiplayerPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(RunState state)
+        {
+            try
+            {
+                RunTweaksSaveManager.StartNewRun(state);
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error("Error in RunManagerSetUpNewMultiplayerPatch snapshotting active run tweaks", ex);
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(RunManager), nameof(RunManager.SetUpSavedSingleplayer))]
+    public static class RunManagerSetUpSavedSingleplayerPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(RunState state, MegaCrit.Sts2.Core.Saves.SerializableRun save)
+        {
+            try
+            {
+                RunTweaksSaveManager.LoadSavedRun(state, save);
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error("Error in RunManagerSetUpSavedSingleplayerPatch loading active run tweaks snapshot", ex);
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(RunManager), nameof(RunManager.SetUpSavedMultiplayer))]
+    public static class RunManagerSetUpSavedMultiplayerPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(RunState state, MegaCrit.Sts2.Core.Multiplayer.Game.Lobby.LoadRunLobby lobby)
+        {
+            try
+            {
+                RunTweaksSaveManager.LoadSavedRun(state, lobby?.Run);
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error("Error in RunManagerSetUpSavedMultiplayerPatch loading active run tweaks snapshot", ex);
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(RunManager), "AbandonInternal")]
+    public static class RunManagerAbandonPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix()
+        {
+            try
+            {
+                RunTweaksSaveManager.ClearActiveRun("Abandon");
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error("Error in RunManagerAbandonPatch clearing active run snapshot", ex);
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(RunManager), "GuaranteeKillAllPlayers")]
+    public static class RunManagerGuaranteeKillAllPlayersPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix()
+        {
+            try
+            {
+                RunTweaksSaveManager.ClearActiveRun("PlayerDeath");
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error("Error in RunManagerGuaranteeKillAllPlayersPatch clearing active run snapshot", ex);
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(RunManager), nameof(RunManager.WinRun))]
+    public static class RunManagerWinRunPatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix(RunManager __instance, ref Task __result)
+        {
+            try
+            {
+                var tweaks = RunTweaksSaveManager.GetEffectivePreRunTweaks();
+                if (tweaks.EndlessMode.Enabled)
+                {
+                    ModLogger.Info("Endless Mode active upon Act completion! Looping back to Act 0 and scaling enemies...");
+                    RunTweaksSaveManager.IncrementEndlessLoop();
+                    __result = LoopEndlessRunAsync(__instance);
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error("Error evaluating Endless Mode in RunManager.WinRun", ex);
+            }
+            return true;
+        }
+
+        [HarmonyPostfix]
+        public static void Postfix()
+        {
+            try
+            {
+                var tweaks = RunTweaksSaveManager.GetEffectivePreRunTweaks();
+                if (!tweaks.EndlessMode.Enabled)
+                {
+                    RunTweaksSaveManager.ClearActiveRun("WinRun");
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error("Error in RunManagerWinRunPatch clearing active run snapshot", ex);
+            }
+        }
+
+        private static async Task LoopEndlessRunAsync(RunManager runManager)
+        {
+            await runManager.EnterAct(0, true);
+        }
+    }
+
+    [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Saves.SaveManager), nameof(MegaCrit.Sts2.Core.Saves.SaveManager.DeleteCurrentRun))]
+    public static class SaveManagerDeleteCurrentRunPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix()
+        {
+            try
+            {
+                RunTweaksSaveManager.ClearActiveRun("DeleteCurrentRun");
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error("Error in SaveManagerDeleteCurrentRunPatch clearing active run snapshot", ex);
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Saves.SaveManager), nameof(MegaCrit.Sts2.Core.Saves.SaveManager.DeleteCurrentMultiplayerRun))]
+    public static class SaveManagerDeleteCurrentMultiplayerRunPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix()
+        {
+            try
+            {
+                RunTweaksSaveManager.ClearActiveRun("DeleteCurrentMultiplayerRun");
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error("Error in SaveManagerDeleteCurrentMultiplayerRunPatch clearing active run snapshot", ex);
+            }
+        }
+    }
+
+    #endregion
 
     /// <summary>
     /// Adjusts generated map length (room/floor count) during ActModel room count calculation across all acts.
@@ -153,7 +668,7 @@ public static class MapGenerationHooks
         {
             try
             {
-                int desiredRooms = Math.Max(15, ConfigManager.Current.PreRunTweaks.MapRoomCount);
+                int desiredRooms = Math.Max(15, RunTweaksSaveManager.GetEffectivePreRunTweaks().MapRoomCount);
                 if (desiredRooms > 15)
                 {
                     __result = isMultiplayer ? Math.Max(1, desiredRooms - 1) : desiredRooms;
@@ -180,9 +695,9 @@ public static class MapGenerationHooks
             {
                 if (!AreMapTweaksModified()) return;
 
-                var dist = ConfigManager.Current.PreRunTweaks.MapNodeDistribution;
-                var runSettings = ConfigManager.ActiveRunSettings;
-                int desiredRooms = Math.Max(15, ConfigManager.Current.PreRunTweaks.MapRoomCount);
+                var dist = RunTweaksSaveManager.GetEffectivePreRunTweaks().MapNodeDistribution;
+                var runSettings = RunTweaksSaveManager.GetEffectiveRunSettings();
+                int desiredRooms = Math.Max(15, RunTweaksSaveManager.GetEffectivePreRunTweaks().MapRoomCount);
                 float roomScale = desiredRooms > 15 ? (float)desiredRooms / 15.0f : 1.0f;
 
                 float combatMult = dist.CombatWeightMultiplier;
@@ -311,7 +826,7 @@ public static class MapGenerationHooks
                     p.CanBeModified = false;
                 });
 
-                float treasureMult = ConfigManager.Current.PreRunTweaks.MapNodeDistribution.TreasureRoomMultiplier;
+                float treasureMult = RunTweaksSaveManager.GetEffectivePreRunTweaks().MapNodeDistribution.TreasureRoomMultiplier;
                 var treasureRows = CalculateTreasureRows(rowCount, treasureMult);
                 var treasureType = __instance.ShouldReplaceTreasureWithElites ? MapPointType.Elite : MapPointType.Treasure;
 
@@ -663,7 +1178,7 @@ public static class MapGenerationHooks
         [HarmonyPostfix]
         public static void Postfix(ref bool __result)
         {
-            if (RuntimeStateManager.FreeMapNavigationEnabled || ConfigManager.Current.PreRunTweaks.FreeMapNavigation)
+            if (RuntimeStateManager.FreeMapNavigationEnabled || RunTweaksSaveManager.GetEffectivePreRunTweaks().FreeMapNavigation)
             {
                 __result = true;
             }
@@ -679,7 +1194,7 @@ public static class MapGenerationHooks
         [HarmonyPostfix]
         public static void Postfix(ref bool __result)
         {
-            if (RuntimeStateManager.FreeMapNavigationEnabled || ConfigManager.Current.PreRunTweaks.FreeMapNavigation)
+            if (RuntimeStateManager.FreeMapNavigationEnabled || RunTweaksSaveManager.GetEffectivePreRunTweaks().FreeMapNavigation)
             {
                 __result = true;
             }
@@ -695,7 +1210,7 @@ public static class MapGenerationHooks
         [HarmonyPrefix]
         public static void Prefix()
         {
-            if (RuntimeStateManager.FreeMapNavigationEnabled || ConfigManager.Current.PreRunTweaks.FreeMapNavigation)
+            if (RuntimeStateManager.FreeMapNavigationEnabled || RunTweaksSaveManager.GetEffectivePreRunTweaks().FreeMapNavigation)
             {
                 GameHelper.EnsureCustomRunMode();
             }
@@ -704,7 +1219,7 @@ public static class MapGenerationHooks
         [HarmonyPostfix]
         public static void Postfix(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen __instance)
         {
-            if (RuntimeStateManager.FreeMapNavigationEnabled || ConfigManager.Current.PreRunTweaks.FreeMapNavigation)
+            if (RuntimeStateManager.FreeMapNavigationEnabled || RunTweaksSaveManager.GetEffectivePreRunTweaks().FreeMapNavigation)
             {
                 __instance.IsTraveling = false;
                 __instance.RefreshAllPointVisuals();
@@ -721,7 +1236,7 @@ public static class MapGenerationHooks
         [HarmonyPostfix]
         public static void Postfix(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen __instance)
         {
-            if (RuntimeStateManager.FreeMapNavigationEnabled || ConfigManager.Current.PreRunTweaks.FreeMapNavigation)
+            if (RuntimeStateManager.FreeMapNavigationEnabled || RunTweaksSaveManager.GetEffectivePreRunTweaks().FreeMapNavigation)
             {
                 __instance.IsTraveling = false;
                 __instance.RefreshAllPointVisuals();
@@ -1103,7 +1618,7 @@ public static class MapGenerationHooks
                     RefreshAllPointVisualsMethod.Invoke(__instance, null);
                 }
 
-                if (RuntimeStateManager.FreeMapNavigationEnabled || ConfigManager.Current.PreRunTweaks.FreeMapNavigation)
+                if (RuntimeStateManager.FreeMapNavigationEnabled || RunTweaksSaveManager.GetEffectivePreRunTweaks().FreeMapNavigation)
                 {
                     __instance.IsTraveling = false;
                     __instance.RefreshAllPointVisuals();
@@ -1276,7 +1791,7 @@ public static class MapGenerationHooks
                 var state = GetRunState(__instance);
                 if (state?.ExtraFields != null)
                 {
-                    bool forceNeow = ConfigManager.Current.PreRunTweaks.ForceNeowBonus;
+                    bool forceNeow = RunTweaksSaveManager.GetEffectivePreRunTweaks().ForceNeowBonus;
                     state.ExtraFields.StartedWithNeow = forceNeow;
                     ModLogger.Info($"MapGenerationHooks: SetStartedWithNeowFlag override applied -> StartedWithNeow = {forceNeow}");
                 }
@@ -1299,7 +1814,7 @@ public static class MapGenerationHooks
                 var state = GetRunState(__instance);
                 if (state?.ExtraFields != null)
                 {
-                    bool forceNeow = ConfigManager.Current.PreRunTweaks.ForceNeowBonus;
+                    bool forceNeow = RunTweaksSaveManager.GetEffectivePreRunTweaks().ForceNeowBonus;
                     state.ExtraFields.StartedWithNeow = forceNeow;
                     ModLogger.Verbose("MapGenerationHooks", $"InitializeNewRun -> StartedWithNeow ensured to {forceNeow}");
                 }
@@ -1323,7 +1838,7 @@ public static class MapGenerationHooks
         {
             try
             {
-                if (ConfigManager.Current.PreRunTweaks.ForceNeowBonus || !__result.Any())
+                if (RunTweaksSaveManager.GetEffectivePreRunTweaks().ForceNeowBonus || !__result.Any())
                 {
                     __result = new AncientEventModel[] { ModelDb.AncientEvent<Neow>() };
                     ModLogger.Verbose("MapGenerationHooks", "Overgrowth.GetUnlockedAncients: Injected Neow into unlocked ancients list.");

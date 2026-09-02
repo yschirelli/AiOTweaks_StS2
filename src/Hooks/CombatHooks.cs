@@ -247,7 +247,7 @@ public static class CombatHooks
         {
             try
             {
-                int maxEnergy = ConfigManager.Current.PreRunTweaks.MaxEnergy;
+                int maxEnergy = RunTweaksSaveManager.GetEffectivePreRunTweaks().MaxEnergy;
                 var player = GameHelper.GetActivePlayer();
                 if (player != null && maxEnergy > 0 && player.MaxEnergy != maxEnergy)
                 {

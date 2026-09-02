@@ -49,22 +49,22 @@ public static class EconomyHooks
         {
             try
             {
-                int maxEnergy = ConfigManager.Current.PreRunTweaks.MaxEnergy;
+                int maxEnergy = RunTweaksSaveManager.GetEffectivePreRunTweaks().MaxEnergy;
                 if (maxEnergy > 0)
                 {
                     __instance.MaxEnergy = maxEnergy;
                     ModLogger.Info($"Configured starting player MaxEnergy: {maxEnergy}");
                 }
 
-                int goldBonus = ConfigManager.Current.PreRunTweaks.StartingGoldBonus;
-                ModLogger.Verbose("EconomyHooks", $"PopulateStartingInventory Postfix: checking goldBonus={goldBonus}, hpBonus={ConfigManager.Current.PreRunTweaks.StartingMaxHpBonus}, maxEnergy={maxEnergy}...");
+                int goldBonus = RunTweaksSaveManager.GetEffectivePreRunTweaks().StartingGoldBonus;
+                ModLogger.Verbose("EconomyHooks", $"PopulateStartingInventory Postfix: checking goldBonus={goldBonus}, hpBonus={RunTweaksSaveManager.GetEffectivePreRunTweaks().StartingMaxHpBonus}, maxEnergy={maxEnergy}...");
                 if (goldBonus > 0)
                 {
                     __instance.Gold += goldBonus;
                     ModLogger.Info($"Granted starting gold bonus: +{goldBonus} (Total: {__instance.Gold})");
                 }
 
-                int hpBonus = ConfigManager.Current.PreRunTweaks.StartingMaxHpBonus;
+                int hpBonus = RunTweaksSaveManager.GetEffectivePreRunTweaks().StartingMaxHpBonus;
                 if (hpBonus > 0 && __instance.Creature != null)
                 {
                     GameHelper.ModifyCreatureHealth(__instance.Creature, hpBonus, hpBonus);
@@ -86,7 +86,7 @@ public static class EconomyHooks
         {
             try
             {
-                int customCount = ConfigManager.Current.PreRunTweaks.CardRewardCount;
+                int customCount = RunTweaksSaveManager.GetEffectivePreRunTweaks().CardRewardCount;
                 if (customCount > 0 && customCount != 3)
                 {
                     ModLogger.Verbose("EconomyHooks", $"CardReward constructor: overriding default card count {cardCount} -> {customCount}");
@@ -200,10 +200,10 @@ public static class EconomyHooks
             return forced;
         }
 
-        float multiplier = ConfigManager.Current.PreRunTweaks.GoldRewardMultiplier;
-        if (ConfigManager.ActiveRunSettings.GoldMultiplier > 0f)
+        float multiplier = RunTweaksSaveManager.GetEffectivePreRunTweaks().GoldRewardMultiplier;
+        if (RunTweaksSaveManager.GetEffectiveRunSettings().GoldMultiplier > 0f)
         {
-            multiplier *= ConfigManager.ActiveRunSettings.GoldMultiplier;
+            multiplier *= RunTweaksSaveManager.GetEffectiveRunSettings().GoldMultiplier;
         }
 
         if (Math.Abs(multiplier - 1.0f) > 0.001f)
@@ -221,7 +221,7 @@ public static class EconomyHooks
     /// </summary>
     public static int ProcessShopPrice(int basePrice)
     {
-        float discountMult = ConfigManager.Current.PreRunTweaks.ShopDiscountMultiplier;
+        float discountMult = RunTweaksSaveManager.GetEffectivePreRunTweaks().ShopDiscountMultiplier;
         if (Math.Abs(discountMult - 1.0f) > 0.001f)
         {
             int modified = Math.Max(1, (int)Math.Round(basePrice * discountMult));

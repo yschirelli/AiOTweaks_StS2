@@ -18,11 +18,16 @@ using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Entities.Merchant;
+using MegaCrit.Sts2.Core.Entities.Potions;
+using MegaCrit.Sts2.Core.Entities.Cards;
+using MegaCrit.Sts2.Core.Entities.Powers;
+using MegaCrit.Sts2.Core.Models.Powers;
 using MegaCrit.Sts2.Core.Nodes.Screens.Shops;
 using MegaCrit.Sts2.Core.Nodes.Rooms;
 using MegaCrit.Sts2.Core.Nodes.CommonUi;
 using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
 using MegaCrit.Sts2.Core.Assets;
+using MegaCrit.Sts2.Core.HoverTips;
 using AIOTweaks.Core.Config;
 
 namespace AIOTweaks.Core;
@@ -1030,29 +1035,60 @@ public static class GameHelper
         return null;
     }
 
-    public static List<string> GetAllPotionIds(bool forceRefresh = false)
+    private static List<PotionInfo>? _cachedPotionInfos;
+    private static List<PowerInfo>? _cachedPowerInfos;
+
+    public sealed class PotionInfo
     {
-        if (!forceRefresh && _cachedPotionIds != null && _cachedPotionIds.Count > 0)
+        public string Id { get; }
+        public string Title { get; }
+        public string Description { get; }
+        public PotionRarity Rarity { get; }
+        public PotionUsage Usage { get; }
+        public TargetType TargetType { get; }
+        public string TypeName { get; }
+        public PotionModel? CanonicalInstance { get; }
+
+        public PotionInfo(string id, string title, string description, PotionRarity rarity, PotionUsage usage, TargetType targetType, string typeName, PotionModel? canonicalInstance)
         {
-            ModLogger.Verbose("GameHelper", $"GetAllPotionIds: returning {_cachedPotionIds.Count} cached potion IDs.");
-            return _cachedPotionIds;
+            Id = id;
+            Title = title;
+            Description = description;
+            Rarity = rarity;
+            Usage = usage;
+            TargetType = targetType;
+            TypeName = typeName;
+            CanonicalInstance = canonicalInstance;
+        }
+    }
+
+    public static List<PotionInfo> GetAllPotionInfos(bool forceRefresh = false)
+    {
+        if (!forceRefresh && _cachedPotionInfos != null && _cachedPotionInfos.Count > 0)
+        {
+            return _cachedPotionInfos;
         }
 
-        ModLogger.Verbose("GameHelper", "GetAllPotionIds: scanning ModelDb and assemblies for potions...");
-        var results = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        ModLogger.Verbose("GameHelper", "GetAllPotionInfos: scanning ModelDb and assemblies for potions...");
+        var dict = new Dictionary<string, PotionInfo>(StringComparer.OrdinalIgnoreCase);
 
+        // 1. From ModelDb
         try
         {
             if (ModelDb.AllPotions != null)
             {
                 foreach (var potion in ModelDb.AllPotions)
                 {
-                    if (potion != null)
-                    {
-                        results.Add(potion.GetType().Name);
-                    }
+                    if (potion == null) continue;
+                    string typeName = potion.GetType().Name;
+                    string entryId = potion.Id.Entry ?? ConvertPascalToScreamingSnake(typeName);
+                    string rawTitle = potion.Title?.GetFormattedText() ?? "";
+                    string title = !string.IsNullOrWhiteSpace(rawTitle) ? CleanBbCode(rawTitle) : FormatPascalOrSnakeToWords(typeName);
+                    string desc = GetPotionDescription(potion);
+
+                    dict[typeName] = new PotionInfo(entryId, title, desc, potion.Rarity, potion.Usage, potion.TargetType, typeName, potion);
                 }
-                ModLogger.Verbose("GameHelper", $"Discovered {results.Count} potions from ModelDb.AllPotions.");
+                ModLogger.Verbose("GameHelper", $"Discovered {dict.Count} potions from ModelDb.AllPotions.");
             }
         }
         catch (Exception ex)
@@ -1060,6 +1096,7 @@ public static class GameHelper
             ModLogger.Debug($"ModelDb potion scan notice: {ex.Message}");
         }
 
+        // 2. From Assemblies
         try
         {
             var assemblies = AppDomain.CurrentDomain.GetAssemblies();
@@ -1079,19 +1116,515 @@ public static class GameHelper
                 {
                     if (t != null && !t.IsAbstract && typeof(PotionModel).IsAssignableFrom(t))
                     {
-                        results.Add(t.Name);
+                        if (!dict.ContainsKey(t.Name))
+                        {
+                            PotionModel? instance = null;
+                            try { instance = Activator.CreateInstance(t) as PotionModel; } catch { }
+                            string entryId = instance?.Id.Entry ?? ConvertPascalToScreamingSnake(t.Name);
+                            string rawTitle = instance?.Title?.GetFormattedText() ?? "";
+                            string title = !string.IsNullOrWhiteSpace(rawTitle) ? CleanBbCode(rawTitle) : FormatPascalOrSnakeToWords(t.Name);
+                            string desc = instance != null ? GetPotionDescription(instance) : "";
+                            PotionRarity rarity = instance?.Rarity ?? PotionRarity.Common;
+                            PotionUsage usage = instance?.Usage ?? PotionUsage.CombatOnly;
+                            TargetType targetType = instance?.TargetType ?? TargetType.None;
+
+                            dict[t.Name] = new PotionInfo(entryId, title, desc, rarity, usage, targetType, t.Name, instance);
+                        }
                     }
                 }
             }
-            ModLogger.Verbose("GameHelper", $"Total unique potion types found: {results.Count}");
+            ModLogger.Verbose("GameHelper", $"Total unique potion infos found: {dict.Count}");
         }
         catch (Exception ex)
         {
             ModLogger.Error("Failed to scan assemblies for PotionModel types.", ex);
         }
 
-        _cachedPotionIds = results.OrderBy(x => x).ToList();
-        return _cachedPotionIds;
+        _cachedPotionInfos = dict.Values.OrderBy(x => x.Title).ToList();
+        _cachedPotionIds = _cachedPotionInfos.Select(p => p.TypeName).ToList();
+        return _cachedPotionInfos;
+    }
+
+    public static List<string> GetAllPotionIds(bool forceRefresh = false)
+    {
+        if (!forceRefresh && _cachedPotionIds != null && _cachedPotionIds.Count > 0)
+        {
+            return _cachedPotionIds;
+        }
+        GetAllPotionInfos(forceRefresh);
+        return _cachedPotionIds ?? new List<string>();
+    }
+
+    public static PotionModel? FindCanonicalPotionModel(string idOrName)
+    {
+        if (string.IsNullOrWhiteSpace(idOrName)) return null;
+
+        var infos = GetAllPotionInfos();
+        var match = infos.FirstOrDefault(p => 
+            p.TypeName.Equals(idOrName, StringComparison.OrdinalIgnoreCase) ||
+            p.Id.Equals(idOrName, StringComparison.OrdinalIgnoreCase) ||
+            p.Title.Equals(idOrName, StringComparison.OrdinalIgnoreCase));
+
+        if (match?.CanonicalInstance != null) return match.CanonicalInstance;
+
+        try
+        {
+            if (ModelDb.AllPotions != null)
+            {
+                var fromDb = ModelDb.AllPotions.FirstOrDefault(p => 
+                    p != null && (
+                        p.GetType().Name.Equals(idOrName, StringComparison.OrdinalIgnoreCase) ||
+                        p.Id.Entry.Equals(idOrName, StringComparison.OrdinalIgnoreCase) ||
+                        p.Title.GetFormattedText().Equals(idOrName, StringComparison.OrdinalIgnoreCase)));
+                if (fromDb != null) return fromDb;
+            }
+        }
+        catch { }
+
+        try
+        {
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                var type = asm.GetType(idOrName, false, true) ?? 
+                           asm.GetType($"MegaCrit.Sts2.Core.Models.Potions.{idOrName}", false, true);
+                if (type != null && typeof(PotionModel).IsAssignableFrom(type) && !type.IsAbstract)
+                {
+                    return Activator.CreateInstance(type) as PotionModel;
+                }
+            }
+        }
+        catch { }
+
+        return null;
+    }
+
+    public static string GetPotionDescription(PotionModel? potion)
+    {
+        if (potion == null) return "";
+        try
+        {
+            string desc = "";
+            try { desc = potion.DynamicDescription?.GetFormattedText() ?? ""; } catch { }
+            if (string.IsNullOrWhiteSpace(desc) && potion.CanonicalInstance != null)
+            {
+                try { desc = potion.CanonicalInstance.DynamicDescription?.GetFormattedText() ?? ""; } catch { }
+            }
+            return CleanBbCode(desc);
+        }
+        catch
+        {
+            return "";
+        }
+    }
+
+    public static string GetPotionFullTooltip(PotionModel? potion)
+    {
+        if (potion == null) return "";
+        try
+        {
+            string title = !string.IsNullOrWhiteSpace(potion.Title?.GetFormattedText()) 
+                ? CleanBbCode(potion.Title.GetFormattedText()) 
+                : FormatPascalOrSnakeToWords(potion.GetType().Name);
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine(title);
+            sb.AppendLine($"Rarity: {potion.Rarity} | Usage: {potion.Usage}");
+
+            string desc = GetPotionDescription(potion);
+            if (!string.IsNullOrWhiteSpace(desc))
+            {
+                sb.AppendLine();
+                sb.AppendLine(desc);
+            }
+
+            try
+            {
+                var hoverTips = potion.HoverTips;
+                if (hoverTips != null)
+                {
+                    foreach (var tip in hoverTips)
+                    {
+                        if (tip is HoverTip ht)
+                        {
+                            string tipTitle = CleanBbCode(ht.Title ?? "").Trim();
+                            string tipDesc = CleanBbCode(ht.Description ?? "").Trim();
+                            if (!string.IsNullOrWhiteSpace(tipTitle) && !string.IsNullOrWhiteSpace(tipDesc) &&
+                                !tipTitle.Equals(title, StringComparison.OrdinalIgnoreCase))
+                            {
+                                sb.AppendLine();
+                                sb.AppendLine($"[{tipTitle}]");
+                                sb.AppendLine(tipDesc);
+                            }
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            return sb.ToString().TrimEnd();
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Debug($"GetPotionFullTooltip error: {ex.Message}");
+            return potion.GetType().Name;
+        }
+    }
+
+    public static Texture2D? GetPotionIcon(PotionModel? potion)
+    {
+        if (potion == null) return null;
+        try
+        {
+            if (potion.Image != null) return potion.Image;
+            if (potion.LargeImage != null) return potion.LargeImage;
+            if (potion.Outline != null) return potion.Outline;
+
+            if (!string.IsNullOrEmpty(potion.ImagePath))
+            {
+                try { var t = GD.Load<Texture2D>(potion.ImagePath); if (t != null) return t; } catch { }
+            }
+            if (!string.IsNullOrEmpty(potion.LargeImagePath))
+            {
+                try { var t = GD.Load<Texture2D>(potion.LargeImagePath); if (t != null) return t; } catch { }
+            }
+        }
+        catch { }
+        return null;
+    }
+
+    public static Color GetPotionRarityColor(PotionRarity rarity)
+    {
+        return rarity switch
+        {
+            PotionRarity.Common => new Color(0.85f, 0.85f, 0.9f),
+            PotionRarity.Uncommon => new Color(0.35f, 0.75f, 1f),
+            PotionRarity.Rare => new Color(1f, 0.85f, 0.25f),
+            _ => new Color(0.85f, 0.55f, 1f)
+        };
+    }
+
+    public static int GetPlayerMaxPotionSlots()
+    {
+        try
+        {
+            var player = GetActivePlayer();
+            if (player != null)
+            {
+                return player.MaxPotionCount;
+            }
+        }
+        catch { }
+
+        return ConfigManager.Current.PreRunTweaks.PotionSlots;
+    }
+
+    public static void SetPlayerMaxPotionSlots(int slots)
+    {
+        slots = Math.Clamp(slots, 1, 10);
+        ConfigManager.Current.PreRunTweaks.PotionSlots = slots;
+
+        try
+        {
+            var player = GetActivePlayer();
+            if (player != null)
+            {
+                int oldSlots = player.MaxPotionCount;
+                var method = typeof(Player).GetMethod("SetMaxPotionCountInternal", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                if (method != null)
+                {
+                    method.Invoke(player, new object[] { slots });
+                }
+                else
+                {
+                    int diff = slots - oldSlots;
+                    if (diff > 0) player.AddToMaxPotionCount(diff);
+                    else if (diff < 0) player.SubtractFromMaxPotionCount(-diff);
+                }
+                ModLogger.Info($"GameHelper: Set player MaxPotionCount to {slots} (was {oldSlots}).");
+            }
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Error($"SetPlayerMaxPotionSlots failed for {slots}", ex);
+        }
+    }
+
+    public static IReadOnlyList<PotionModel?>? GetActivePlayerPotionSlots()
+    {
+        try
+        {
+            var player = GetActivePlayer();
+            if (player != null)
+            {
+                return player.PotionSlots;
+            }
+        }
+        catch { }
+        return null;
+    }
+
+    public sealed class PowerInfo
+    {
+        public string Id { get; }
+        public string DisplayName { get; }
+        public string Description { get; }
+        public string TypeName { get; }
+        public PowerType Type { get; }
+        public PowerStackType StackType { get; }
+        public PowerModel? CanonicalInstance { get; }
+
+        public PowerInfo(string id, string displayName, string description, string typeName, PowerType type, PowerStackType stackType, PowerModel? canonicalInstance)
+        {
+            Id = id;
+            DisplayName = displayName;
+            Description = description;
+            TypeName = typeName;
+            Type = type;
+            StackType = stackType;
+            CanonicalInstance = canonicalInstance;
+        }
+    }
+
+    public static List<PowerInfo> GetAllPowerInfos(bool forceRefresh = false)
+    {
+        if (!forceRefresh && _cachedPowerInfos != null && _cachedPowerInfos.Count > 0)
+        {
+            return _cachedPowerInfos;
+        }
+
+        ModLogger.Verbose("GameHelper", "GetAllPowerInfos: scanning ModelDb and assemblies for powers/statuses...");
+        var dict = new Dictionary<string, PowerInfo>(StringComparer.OrdinalIgnoreCase);
+
+        // 1. From ModelDb
+        try
+        {
+            if (ModelDb.AllPowers != null)
+            {
+                foreach (var power in ModelDb.AllPowers)
+                {
+                    if (power == null) continue;
+                    string typeName = power.GetType().Name;
+                    string entryId = power.Id.Entry ?? ConvertPascalToScreamingSnake(typeName);
+                    string rawTitle = power.Title?.GetFormattedText() ?? "";
+                    string title = !string.IsNullOrWhiteSpace(rawTitle) ? CleanBbCode(rawTitle) : FormatPascalOrSnakeToWords(typeName);
+                    string desc = GetPowerDescription(power);
+
+                    dict[typeName] = new PowerInfo(entryId, title, desc, typeName, power.Type, power.StackType, power);
+                }
+                ModLogger.Verbose("GameHelper", $"Discovered {dict.Count} powers from ModelDb.AllPowers.");
+            }
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Debug($"ModelDb power scan notice: {ex.Message}");
+        }
+
+        // 2. From Assemblies
+        try
+        {
+            var assemblies = AppDomain.CurrentDomain.GetAssemblies();
+            foreach (var asm in assemblies)
+            {
+                Type[] types;
+                try
+                {
+                    types = asm.GetTypes();
+                }
+                catch (ReflectionTypeLoadException ex)
+                {
+                    types = ex.Types.Where(t => t != null).ToArray()!;
+                }
+
+                foreach (var t in types)
+                {
+                    if (t != null && !t.IsAbstract && typeof(PowerModel).IsAssignableFrom(t))
+                    {
+                        if (!dict.ContainsKey(t.Name))
+                        {
+                            PowerModel? instance = null;
+                            try { instance = Activator.CreateInstance(t) as PowerModel; } catch { }
+                            string entryId = instance?.Id.Entry ?? ConvertPascalToScreamingSnake(t.Name);
+                            string rawTitle = instance?.Title?.GetFormattedText() ?? "";
+                            string title = !string.IsNullOrWhiteSpace(rawTitle) ? CleanBbCode(rawTitle) : FormatPascalOrSnakeToWords(t.Name);
+                            string desc = instance != null ? GetPowerDescription(instance) : "";
+                            PowerType powerType = instance?.Type ?? PowerType.Buff;
+                            PowerStackType stackType = instance?.StackType ?? PowerStackType.Counter;
+
+                            dict[t.Name] = new PowerInfo(entryId, title, desc, t.Name, powerType, stackType, instance);
+                        }
+                    }
+                }
+            }
+            ModLogger.Verbose("GameHelper", $"Total unique power infos found: {dict.Count}");
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Error("Failed to scan assemblies for PowerModel types.", ex);
+        }
+
+        _cachedPowerInfos = dict.Values.OrderBy(x => x.DisplayName).ToList();
+        return _cachedPowerInfos;
+    }
+
+    public static PowerModel? FindCanonicalPowerModel(string idOrName)
+    {
+        if (string.IsNullOrWhiteSpace(idOrName)) return null;
+
+        var infos = GetAllPowerInfos();
+        var match = infos.FirstOrDefault(p => 
+            p.TypeName.Equals(idOrName, StringComparison.OrdinalIgnoreCase) ||
+            p.Id.Equals(idOrName, StringComparison.OrdinalIgnoreCase) ||
+            p.DisplayName.Equals(idOrName, StringComparison.OrdinalIgnoreCase));
+
+        if (match?.CanonicalInstance != null) return match.CanonicalInstance;
+
+        try
+        {
+            if (ModelDb.AllPowers != null)
+            {
+                var fromDb = ModelDb.AllPowers.FirstOrDefault(p => 
+                    p != null && (
+                        p.GetType().Name.Equals(idOrName, StringComparison.OrdinalIgnoreCase) ||
+                        p.Id.Entry.Equals(idOrName, StringComparison.OrdinalIgnoreCase) ||
+                        p.Title.GetFormattedText().Equals(idOrName, StringComparison.OrdinalIgnoreCase)));
+                if (fromDb != null) return fromDb;
+            }
+        }
+        catch { }
+
+        try
+        {
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                var type = asm.GetType(idOrName, false, true) ?? 
+                           asm.GetType($"MegaCrit.Sts2.Core.Models.Powers.{idOrName}", false, true);
+                if (type != null && typeof(PowerModel).IsAssignableFrom(type) && !type.IsAbstract)
+                {
+                    return Activator.CreateInstance(type) as PowerModel;
+                }
+            }
+        }
+        catch { }
+
+        return null;
+    }
+
+    public static string GetPowerDescription(PowerModel? power)
+    {
+        if (power == null) return "";
+        try
+        {
+            string desc = "";
+            try { desc = power.SmartDescription?.GetFormattedText() ?? ""; } catch { }
+            if (string.IsNullOrWhiteSpace(desc))
+            {
+                try { desc = power.Description?.GetFormattedText() ?? ""; } catch { }
+            }
+            return CleanBbCode(desc);
+        }
+        catch
+        {
+            return "";
+        }
+    }
+
+    public static string GetPowerFullTooltip(PowerModel? power)
+    {
+        if (power == null) return "";
+        try
+        {
+            string title = !string.IsNullOrWhiteSpace(power.Title?.GetFormattedText()) 
+                ? CleanBbCode(power.Title.GetFormattedText()) 
+                : FormatPascalOrSnakeToWords(power.GetType().Name);
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine(title);
+            sb.AppendLine($"Type: {power.Type} | Stack: {power.StackType}");
+
+            string desc = GetPowerDescription(power);
+            if (!string.IsNullOrWhiteSpace(desc))
+            {
+                sb.AppendLine();
+                sb.AppendLine(desc);
+            }
+
+            try
+            {
+                var hoverTips = power.HoverTips;
+                if (hoverTips != null)
+                {
+                    foreach (var tip in hoverTips)
+                    {
+                        if (tip is HoverTip ht)
+                        {
+                            string tipTitle = CleanBbCode(ht.Title ?? "").Trim();
+                            string tipDesc = CleanBbCode(ht.Description ?? "").Trim();
+                            if (!string.IsNullOrWhiteSpace(tipTitle) && !string.IsNullOrWhiteSpace(tipDesc) &&
+                                !tipTitle.Equals(title, StringComparison.OrdinalIgnoreCase))
+                            {
+                                sb.AppendLine();
+                                sb.AppendLine($"[{tipTitle}]");
+                                sb.AppendLine(tipDesc);
+                            }
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            return sb.ToString().TrimEnd();
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Debug($"GetPowerFullTooltip error: {ex.Message}");
+            return power.GetType().Name;
+        }
+    }
+
+    public static Texture2D? GetPowerIcon(PowerModel? power)
+    {
+        if (power == null) return null;
+        try
+        {
+            if (power.Icon != null) return power.Icon;
+            if (power.BigIcon != null) return power.BigIcon;
+
+            if (!string.IsNullOrEmpty(power.IconPath))
+            {
+                try { var t = GD.Load<Texture2D>(power.IconPath); if (t != null) return t; } catch { }
+            }
+            if (!string.IsNullOrEmpty(power.PackedIconPath))
+            {
+                try { var t = GD.Load<Texture2D>(power.PackedIconPath); if (t != null) return t; } catch { }
+            }
+            if (!string.IsNullOrEmpty(power.ResolvedBigIconPath))
+            {
+                try { var t = GD.Load<Texture2D>(power.ResolvedBigIconPath); if (t != null) return t; } catch { }
+            }
+        }
+        catch { }
+        return null;
+    }
+
+    public static Color GetPowerTypeColor(PowerType type)
+    {
+        return type switch
+        {
+            PowerType.Buff => new Color(0.4f, 0.95f, 0.55f),
+            PowerType.Debuff => new Color(1f, 0.45f, 0.45f),
+            _ => new Color(0.85f, 0.85f, 0.85f)
+        };
+    }
+
+    public static IReadOnlyList<PowerModel> GetCreatureActivePowers(Creature? creature)
+    {
+        if (creature == null) return Array.Empty<PowerModel>();
+        try
+        {
+            return creature.Powers ?? (IReadOnlyList<PowerModel>)Array.Empty<PowerModel>();
+        }
+        catch
+        {
+            return Array.Empty<PowerModel>();
+        }
     }
 
     public sealed class EventInfo

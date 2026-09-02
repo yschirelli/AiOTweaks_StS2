@@ -75,14 +75,15 @@ public static class RuntimeStateManager
 
     public static float GetEffectivePlayerDamageMultiplier()
     {
-        float baseDmg = ConfigManager.Current.PreRunTweaks.PlayerDamageMultiplier;
+        float baseDmg = AIOTweaks.Hooks.RunTweaksSaveManager.GetEffectivePreRunTweaks().PlayerDamageMultiplier;
         return Math.Max(0.0f, baseDmg);
     }
 
     public static float GetEffectiveEnemyHealthMultiplier()
     {
-        float baseHp = ConfigManager.Current.PreRunTweaks.EnemyHealthMultiplier;
-        var endless = ConfigManager.Current.PreRunTweaks.EndlessMode;
+        var tweaks = AIOTweaks.Hooks.RunTweaksSaveManager.GetEffectivePreRunTweaks();
+        float baseHp = tweaks.EnemyHealthMultiplier;
+        var endless = tweaks.EndlessMode;
         if (endless.Enabled && CurrentEndlessLoopCount > 0)
         {
             baseHp *= (float)Math.Pow(endless.EnemyScalingMultiplier, CurrentEndlessLoopCount);
@@ -92,8 +93,9 @@ public static class RuntimeStateManager
 
     public static float GetEffectiveEnemyDamageMultiplier()
     {
-        float baseDmg = ConfigManager.Current.PreRunTweaks.EnemyDamageMultiplier;
-        var endless = ConfigManager.Current.PreRunTweaks.EndlessMode;
+        var tweaks = AIOTweaks.Hooks.RunTweaksSaveManager.GetEffectivePreRunTweaks();
+        float baseDmg = tweaks.EnemyDamageMultiplier;
+        var endless = tweaks.EndlessMode;
         if (endless.Enabled && CurrentEndlessLoopCount > 0)
         {
             baseDmg *= (float)Math.Pow(endless.EnemyScalingMultiplier, CurrentEndlessLoopCount);
@@ -103,8 +105,9 @@ public static class RuntimeStateManager
 
     public static float GetEffectiveEnemyDefendMultiplier()
     {
-        float baseDef = ConfigManager.Current.PreRunTweaks.EnemyDefendMultiplier;
-        var endless = ConfigManager.Current.PreRunTweaks.EndlessMode;
+        var tweaks = AIOTweaks.Hooks.RunTweaksSaveManager.GetEffectivePreRunTweaks();
+        float baseDef = tweaks.EnemyDefendMultiplier;
+        var endless = tweaks.EndlessMode;
         if (endless.Enabled && CurrentEndlessLoopCount > 0)
         {
             baseDef *= (float)Math.Pow(endless.EnemyScalingMultiplier, CurrentEndlessLoopCount);
@@ -126,7 +129,7 @@ public static class RuntimeStateManager
             InfinitePotionsEnabled = false;
             NoCardExhaustEnabled = false;
             FreeMapNavigationEnabled = false;
-            CurrentEndlessLoopCount = 0;
+            CurrentEndlessLoopCount = AIOTweaks.Hooks.RunTweaksSaveManager.ActiveSnapshot?.EndlessLoopCount ?? 0;
 
             ForcedNextEventId = null;
             ForcedGoldDropAmount = null;

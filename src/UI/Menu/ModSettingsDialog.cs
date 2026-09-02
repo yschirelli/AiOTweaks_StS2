@@ -7,6 +7,7 @@ using AIOTweaks.Core.Config;
 using AIOTweaks.Core.Logging;
 using AIOTweaks.Core.State;
 using AIOTweaks.Cheats;
+using AIOTweaks.Hooks;
 using MegaCrit.Sts2.Core.Nodes;
 using MegaCrit.Sts2.Core.Nodes.CommonUi;
 
@@ -74,6 +75,8 @@ public partial class ModSettingsDialog : CanvasLayer
     private CheckBox? _endlessModeCheck;
     private SpinBox? _endlessMultiplierSpin;
     private CheckBox? _freeMapNavCheck;
+    private CheckBox? _allowMultipleRelicsCheck;
+    private SpinBox? _potionSlotsPreRunSpin;
 
     private CheckBox? _godModeCheck;
     private CheckBox? _infEnergyCheck;
@@ -97,6 +100,20 @@ public partial class ModSettingsDialog : CanvasLayer
     private GridContainer? _activeRelicsGrid;
     private System.Collections.Generic.List<ItemEntry> _availableRelicEntries = new();
 
+    private GridContainer? _activePotionsGrid;
+    private System.Collections.Generic.List<ItemEntry> _availablePotionEntries = new();
+    private SpinBox? _potionSlotsSpin;
+
+    private GridContainer? _playerActiveStatusesGrid;
+    private System.Collections.Generic.List<ItemEntry> _availablePlayerStatusEntries = new();
+    private SpinBox? _playerStatusAmountSpin;
+
+    private OptionButton? _enemyOptionButton;
+    private GridContainer? _enemyActiveStatusesGrid;
+    private System.Collections.Generic.List<ItemEntry> _availableEnemyStatusEntries = new();
+    private SpinBox? _enemyStatusAmountSpin;
+    private Label? _enemyStatusNoticeLabel;
+
     private LineEdit? _relicInput;
     private LineEdit? _cardInput;
     private SpinBox? _goldAmountSpin;
@@ -117,6 +134,9 @@ public partial class ModSettingsDialog : CanvasLayer
         ModLogger.OnLogged += OnLogReceived;
         CardDirector.OnDeckChanged += OnDeckModified;
         RelicDirector.OnRelicsChanged += OnRelicsModified;
+        PotionDirector.OnPotionsChanged += OnPotionsModified;
+        PotionDirector.OnPotionSlotsChanged += OnPotionSlotsModified;
+        StatusDirector.OnStatusesChanged += OnStatusesModified;
         LoadSettingsValues();
         HideDialog();
 
@@ -125,6 +145,8 @@ public partial class ModSettingsDialog : CanvasLayer
         {
             RefreshRealTimeCardTabs();
             RefreshRealTimeRelicTabs();
+            RefreshRealTimePotionTabs();
+            RefreshRealTimeStatusTabs();
         };
         AddChild(refreshTimer);
     }
@@ -139,12 +161,30 @@ public partial class ModSettingsDialog : CanvasLayer
         CallDeferred(nameof(RefreshRealTimeRelicTabs));
     }
 
+    private void OnPotionsModified()
+    {
+        CallDeferred(nameof(RefreshRealTimePotionTabs));
+    }
+
+    private void OnPotionSlotsModified(int slots)
+    {
+        CallDeferred(nameof(RefreshRealTimePotionTabs));
+    }
+
+    private void OnStatusesModified()
+    {
+        CallDeferred(nameof(RefreshRealTimeStatusTabs));
+    }
+
     public override void _ExitTree()
     {
         UpdateBlockingState(false);
         ModLogger.OnLogged -= OnLogReceived;
         CardDirector.OnDeckChanged -= OnDeckModified;
         RelicDirector.OnRelicsChanged -= OnRelicsModified;
+        PotionDirector.OnPotionsChanged -= OnPotionsModified;
+        PotionDirector.OnPotionSlotsChanged -= OnPotionSlotsModified;
+        StatusDirector.OnStatusesChanged -= OnStatusesModified;
         if (_instance == this) _instance = null;
     }
 
@@ -268,7 +308,7 @@ public partial class ModSettingsDialog : CanvasLayer
             ModLogger.Verbose("ModSettingsDialog", $"Player inRun status: {inRun}");
             if (_tabs != null)
             {
-                int tweaksIdx = 4;
+                int tweaksIdx = 5;
                 _tabs.SetTabDisabled(tweaksIdx, false);
             }
             UpdateTweaksRunLockState(inRun);
@@ -278,6 +318,8 @@ public partial class ModSettingsDialog : CanvasLayer
             UpdateBlockingState(true);
             RefreshRealTimeCardTabs();
             RefreshRealTimeRelicTabs();
+            RefreshRealTimePotionTabs();
+            RefreshRealTimeStatusTabs();
         }
     }
 
@@ -488,6 +530,8 @@ public partial class ModSettingsDialog : CanvasLayer
 
         _tabs.AddChild(BuildCardsTab());
 
+        _tabs.AddChild(BuildPotionsTab());
+
         _tabs.AddChild(BuildPlayerTab());
 
         _tabs.AddChild(BuildCombatSandboxTab());
@@ -503,6 +547,14 @@ public partial class ModSettingsDialog : CanvasLayer
             else if (tabIdx == 1)
             {
                 RefreshRealTimeCardTabs();
+            }
+            else if (tabIdx == 2)
+            {
+                RefreshRealTimePotionTabs();
+            }
+            else if (tabIdx == 4)
+            {
+                RefreshRealTimeStatusTabs();
             }
         };
 
@@ -827,6 +879,21 @@ public partial class ModSettingsDialog : CanvasLayer
         startHpRow.AddChild(_bonusHpSpin);
         preRunBox.AddChild(startHpRow);
 
+        var startPotionSlotsRow = new HBoxContainer();
+        startPotionSlotsRow.AddChild(new Label { Text = "Starting Potion Slots: ", CustomMinimumSize = new Vector2(230, 0) });
+        _potionSlotsPreRunSpin = new SpinBox { MinValue = 1, MaxValue = 10, Step = 1, Value = 3, TooltipText = "Sets baseline starting potion slots (1-10)." }.MakeNumericOnly();
+        _potionSlotsPreRunSpin.ValueChanged += _ => MarkTweaksModified();
+        startPotionSlotsRow.AddChild(_potionSlotsPreRunSpin);
+        preRunBox.AddChild(startPotionSlotsRow);
+
+        _allowMultipleRelicsCheck = new CheckBox 
+        { 
+            Text = " Allow Multiple Relics (Equipped relics can reappear in chests, shops, and drops)", 
+            TooltipText = "When enabled, relics in your inventory will not be removed from reward/shop/chest grab bags." 
+        };
+        _allowMultipleRelicsCheck.Toggled += _ => MarkTweaksModified();
+        preRunBox.AddChild(_allowMultipleRelicsCheck);
+
         _forceNeowCheck = new CheckBox { Text = " Spawn Neow at start? (Uncheck to skip Neow and start on map)", TooltipText = "Guarantees Neow blessing when checked. When unchecked, skips Neow and starts directly on the map." };
         _forceNeowCheck.Toggled += _ => MarkTweaksModified();
         preRunBox.AddChild(_forceNeowCheck);
@@ -969,6 +1036,8 @@ public partial class ModSettingsDialog : CanvasLayer
         if (_cardRewardSpin != null) _cardRewardSpin.Editable = allowPreRunEdits;
         if (_bonusGoldSpin != null) _bonusGoldSpin.Editable = allowPreRunEdits;
         if (_bonusHpSpin != null) _bonusHpSpin.Editable = allowPreRunEdits;
+        if (_potionSlotsPreRunSpin != null) _potionSlotsPreRunSpin.Editable = allowPreRunEdits;
+        if (_allowMultipleRelicsCheck != null) _allowMultipleRelicsCheck.Disabled = !allowPreRunEdits;
         if (_forceNeowCheck != null) _forceNeowCheck.Disabled = !allowPreRunEdits;
         if (_eliteSlider != null) _eliteSlider.Editable = allowPreRunEdits;
         if (_shopSlider != null) _shopSlider.Editable = allowPreRunEdits;
@@ -980,9 +1049,25 @@ public partial class ModSettingsDialog : CanvasLayer
 
     private Control BuildCombatSandboxTab()
     {
+        var combatRoot = new VBoxContainer { Name = "Combat Sandbox", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, SizeFlagsVertical = Control.SizeFlags.ExpandFill };
+
+        var subTabs = new TabContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, SizeFlagsVertical = Control.SizeFlags.ExpandFill };
+        combatRoot.AddChild(subTabs);
+
+        subTabs.AddChild(BuildCombatCheatsSubTab());
+        subTabs.AddChild(BuildPlayerStatusSubTab());
+        subTabs.AddChild(BuildEnemyStatusSubTab());
+
+        subTabs.TabChanged += (subTabIdx) => RefreshRealTimeStatusTabs();
+
+        return combatRoot;
+    }
+
+    private Control BuildCombatCheatsSubTab()
+    {
         var scroll = new ScrollContainer 
         { 
-            Name = "Combat Sandbox",
+            Name = "Cheats & Actions",
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
             SizeFlagsVertical = Control.SizeFlags.ExpandFill
         };
@@ -1083,6 +1168,1201 @@ public partial class ModSettingsDialog : CanvasLayer
         rootVbox.AddChild(CreateSectionCard("Immediate Combat Actions", actionsBox, new Color(1f, 0.75f, 0.3f)));
 
         return scroll;
+    }
+
+    private Control BuildPlayerStatusSubTab()
+    {
+        var scroll = new ScrollContainer 
+        { 
+            Name = "Player Status Effects", 
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, 
+            SizeFlagsVertical = Control.SizeFlags.ExpandFill 
+        };
+        var vbox = new VBoxContainer 
+        { 
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, 
+            SizeFlagsVertical = Control.SizeFlags.ExpandFill 
+        };
+        vbox.AddThemeConstantOverride("separation", 14);
+        scroll.AddChild(vbox);
+
+        // Section 1: Active Player Status Effects
+        var activeBox = new VBoxContainer();
+        activeBox.AddThemeConstantOverride("separation", 8);
+
+        var activeTopBar = new HBoxContainer();
+        var activeTitle = new Label { Text = "Current Active Buffs & Debuffs on Player:", Modulate = new Color(0.4f, 0.95f, 0.6f), SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        activeTopBar.AddChild(activeTitle);
+
+        var clearAllPlayerPowersBtn = new Button { Text = " Clear All Player Statuses " };
+        clearAllPlayerPowersBtn.Pressed += () =>
+        {
+            var player = GameHelper.GetActivePlayer();
+            if (player?.Creature != null)
+            {
+                StatusDirector.ClearAllStatuses(player.Creature);
+                RefreshRealTimeStatusTabs();
+            }
+        };
+        activeTopBar.AddChild(clearAllPlayerPowersBtn);
+        activeBox.AddChild(activeTopBar);
+
+        _playerActiveStatusesGrid = new GridContainer
+        {
+            Columns = 2,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+        };
+        _playerActiveStatusesGrid.AddThemeConstantOverride("h_separation", 10);
+        _playerActiveStatusesGrid.AddThemeConstantOverride("v_separation", 8);
+        activeBox.AddChild(_playerActiveStatusesGrid);
+
+        vbox.AddChild(CreateSectionCard("Active Player Powers", activeBox, new Color(0.4f, 0.85f, 1f)));
+
+        // Section 2: Apply Status Effects Compendium
+        var applyBox = new VBoxContainer();
+        applyBox.AddThemeConstantOverride("separation", 8);
+
+        var filterRow = new HBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        filterRow.AddThemeConstantOverride("separation", 8);
+
+        var searchInput = new LineEdit
+        {
+            PlaceholderText = "Search status effects (e.g. 'Weak', 'Frail', 'Vulnerable', 'Strength', 'Dexterity', 'Poison')...",
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+        };
+        filterRow.AddChild(searchInput);
+
+        var typeOption = new OptionButton { CustomMinimumSize = new Vector2(130, 0) };
+        typeOption.AddItem("All Types", 0);
+        typeOption.AddItem("Buffs Only", 1);
+        typeOption.AddItem("Debuffs Only", 2);
+        filterRow.AddChild(typeOption);
+
+        var amountRow = new HBoxContainer();
+        amountRow.AddChild(new Label { Text = "Amount: " });
+        _playerStatusAmountSpin = new SpinBox { MinValue = 1, MaxValue = 999, Step = 1, Value = 1, CustomMinimumSize = new Vector2(85, 0) }.MakeNumericOnly();
+        amountRow.AddChild(_playerStatusAmountSpin);
+        filterRow.AddChild(amountRow);
+
+        applyBox.AddChild(filterRow);
+
+        var grid = new GridContainer
+        {
+            Columns = 3,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+        };
+        grid.AddThemeConstantOverride("h_separation", 10);
+        grid.AddThemeConstantOverride("v_separation", 10);
+        applyBox.AddChild(grid);
+
+        _availablePlayerStatusEntries.Clear();
+        var allPowers = GameHelper.GetAllPowerInfos();
+
+        foreach (var power in allPowers)
+        {
+            var card = new PanelContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+            var cardStyle = new StyleBoxFlat
+            {
+                BgColor = new Color(0.11f, 0.13f, 0.17f, 0.95f),
+                BorderColor = GameHelper.GetPowerTypeColor(power.Type) * 0.65f,
+                BorderWidthLeft = 1,
+                BorderWidthRight = 1,
+                BorderWidthTop = 1,
+                BorderWidthBottom = 1,
+                CornerRadiusTopLeft = 4,
+                CornerRadiusTopRight = 4,
+                CornerRadiusBottomLeft = 4,
+                CornerRadiusBottomRight = 4,
+                ContentMarginLeft = 8,
+                ContentMarginRight = 8,
+                ContentMarginTop = 6,
+                ContentMarginBottom = 6
+            };
+            card.AddThemeStyleboxOverride("panel", cardStyle);
+
+            var hCardBox = new HBoxContainer();
+            hCardBox.AddThemeConstantOverride("separation", 8);
+
+            var iconTex = GameHelper.GetPowerIcon(power.CanonicalInstance);
+            if (iconTex != null)
+            {
+                var iconRect = new TextureRect
+                {
+                    Texture = iconTex,
+                    CustomMinimumSize = new Vector2(30, 30),
+                    ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+                    StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered
+                };
+                hCardBox.AddChild(iconRect);
+            }
+
+            var textVBox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+            string fullTooltip = GameHelper.GetPowerFullTooltip(power.CanonicalInstance);
+            card.TooltipText = fullTooltip;
+
+            var titleLbl = new Label
+            {
+                Text = power.DisplayName,
+                Modulate = GameHelper.GetPowerTypeColor(power.Type)
+            };
+            titleLbl.TooltipText = fullTooltip;
+            textVBox.AddChild(titleLbl);
+
+            var metaLbl = new Label
+            {
+                Text = $"{power.Type} • {power.StackType}",
+                Modulate = new Color(0.6f, 0.65f, 0.72f, 0.8f)
+            };
+            textVBox.AddChild(metaLbl);
+
+            if (!string.IsNullOrWhiteSpace(power.Description))
+            {
+                var descLbl = new Label
+                {
+                    Text = power.Description,
+                    AutowrapMode = TextServer.AutowrapMode.WordSmart,
+                    Modulate = new Color(0.85f, 0.85f, 0.85f, 0.9f)
+                };
+                textVBox.AddChild(descLbl);
+            }
+
+            hCardBox.AddChild(textVBox);
+
+            var applyBtn = new Button
+            {
+                Text = " Apply ",
+                TooltipText = $"Apply to player",
+                CustomMinimumSize = new Vector2(60, 32)
+            };
+            string capturedId = power.TypeName;
+            applyBtn.Pressed += () =>
+            {
+                var player = GameHelper.GetActivePlayer();
+                if (player?.Creature != null)
+                {
+                    int amt = _playerStatusAmountSpin != null ? (int)_playerStatusAmountSpin.Value : 1;
+                    StatusDirector.ApplyStatus(player.Creature, capturedId, amt);
+                    RefreshRealTimeStatusTabs();
+                }
+                else
+                {
+                    int amt = _playerStatusAmountSpin != null ? (int)_playerStatusAmountSpin.Value : 1;
+                    GameHelper.ExecuteConsoleCommand($"power {capturedId} {amt}");
+                    RefreshRealTimeStatusTabs();
+                }
+            };
+            hCardBox.AddChild(applyBtn);
+
+            card.AddChild(hCardBox);
+            grid.AddChild(card);
+
+            _availablePlayerStatusEntries.Add(new ItemEntry(power.TypeName, power.DisplayName, card, titleLbl, power.Type.ToString(), power.Description));
+        }
+
+        void ApplyFilter()
+        {
+            string query = searchInput.Text.Trim();
+            int typeIdx = typeOption.Selected;
+
+            foreach (var entry in _availablePlayerStatusEntries)
+            {
+                bool matchesQuery = string.IsNullOrEmpty(query) ||
+                    entry.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                    entry.Id.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                    (!string.IsNullOrEmpty(entry.Description) && entry.Description.Contains(query, StringComparison.OrdinalIgnoreCase));
+
+                bool matchesType = typeIdx == 0 ||
+                    (typeIdx == 1 && entry.Rarity.Equals("Buff", StringComparison.OrdinalIgnoreCase)) ||
+                    (typeIdx == 2 && entry.Rarity.Equals("Debuff", StringComparison.OrdinalIgnoreCase));
+
+                entry.Card.Visible = matchesQuery && matchesType;
+            }
+        }
+
+        searchInput.TextChanged += _ => ApplyFilter();
+        typeOption.ItemSelected += _ => ApplyFilter();
+
+        vbox.AddChild(CreateSectionCard("Apply Status Effects (Buffs & Debuffs)", applyBox, new Color(0.45f, 0.95f, 0.65f)));
+
+        return scroll;
+    }
+
+    private Control BuildEnemyStatusSubTab()
+    {
+        var scroll = new ScrollContainer 
+        { 
+            Name = "Enemy Status Effects", 
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, 
+            SizeFlagsVertical = Control.SizeFlags.ExpandFill 
+        };
+        var vbox = new VBoxContainer 
+        { 
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, 
+            SizeFlagsVertical = Control.SizeFlags.ExpandFill 
+        };
+        vbox.AddThemeConstantOverride("separation", 14);
+        scroll.AddChild(vbox);
+
+        // Section 1: Active Enemy Selector and Status Effects
+        var activeBox = new VBoxContainer();
+        activeBox.AddThemeConstantOverride("separation", 8);
+
+        var topBar = new HBoxContainer();
+        topBar.AddThemeConstantOverride("separation", 10);
+
+        topBar.AddChild(new Label { Text = "Target Enemy: ", CustomMinimumSize = new Vector2(105, 0) });
+        _enemyOptionButton = new OptionButton { CustomMinimumSize = new Vector2(250, 0), SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        _enemyOptionButton.AddItem("All Active Enemies", 0);
+        _enemyOptionButton.ItemSelected += _ => RefreshRealTimeStatusTabs();
+        topBar.AddChild(_enemyOptionButton);
+
+        var clearAllEnemyPowersBtn = new Button { Text = " Clear Enemy Statuses " };
+        clearAllEnemyPowersBtn.Pressed += () =>
+        {
+            var enemies = GameHelper.GetActiveCombatEnemies();
+            if (enemies != null)
+            {
+                int selected = _enemyOptionButton?.Selected ?? 0;
+                if (selected == 0)
+                {
+                    foreach (var e in enemies)
+                    {
+                        if (e != null && !e.IsDead) StatusDirector.ClearAllStatuses(e);
+                    }
+                }
+                else
+                {
+                    int enemyIdx = selected - 1;
+                    if (enemyIdx >= 0 && enemyIdx < enemies.Count)
+                    {
+                        StatusDirector.ClearAllStatuses(enemies[enemyIdx]);
+                    }
+                }
+                RefreshRealTimeStatusTabs();
+            }
+        };
+        topBar.AddChild(clearAllEnemyPowersBtn);
+        activeBox.AddChild(topBar);
+
+        _enemyStatusNoticeLabel = new Label
+        {
+            Text = "Note: Active combat enemies will be listed here during battle encounters.",
+            Modulate = new Color(0.7f, 0.75f, 0.85f, 0.8f),
+            Visible = false
+        };
+        activeBox.AddChild(_enemyStatusNoticeLabel);
+
+        _enemyActiveStatusesGrid = new GridContainer
+        {
+            Columns = 2,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+        };
+        _enemyActiveStatusesGrid.AddThemeConstantOverride("h_separation", 10);
+        _enemyActiveStatusesGrid.AddThemeConstantOverride("v_separation", 8);
+        activeBox.AddChild(_enemyActiveStatusesGrid);
+
+        vbox.AddChild(CreateSectionCard("Target Enemy Status Effects", activeBox, new Color(1f, 0.55f, 0.45f)));
+
+        // Section 2: Apply Status Effects to Enemy
+        var applyBox = new VBoxContainer();
+        applyBox.AddThemeConstantOverride("separation", 8);
+
+        var filterRow = new HBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        filterRow.AddThemeConstantOverride("separation", 8);
+
+        var searchInput = new LineEdit
+        {
+            PlaceholderText = "Search status effects to inflict on enemy (e.g. 'Weak', 'Vulnerable', 'Poison', 'Frail')...",
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+        };
+        filterRow.AddChild(searchInput);
+
+        var typeOption = new OptionButton { CustomMinimumSize = new Vector2(130, 0) };
+        typeOption.AddItem("All Types", 0);
+        typeOption.AddItem("Debuffs Only", 1);
+        typeOption.AddItem("Buffs Only", 2);
+        filterRow.AddChild(typeOption);
+
+        var amountRow = new HBoxContainer();
+        amountRow.AddChild(new Label { Text = "Amount: " });
+        _enemyStatusAmountSpin = new SpinBox { MinValue = 1, MaxValue = 999, Step = 1, Value = 1, CustomMinimumSize = new Vector2(85, 0) }.MakeNumericOnly();
+        amountRow.AddChild(_enemyStatusAmountSpin);
+        filterRow.AddChild(amountRow);
+
+        applyBox.AddChild(filterRow);
+
+        var grid = new GridContainer
+        {
+            Columns = 3,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+        };
+        grid.AddThemeConstantOverride("h_separation", 10);
+        grid.AddThemeConstantOverride("v_separation", 10);
+        applyBox.AddChild(grid);
+
+        _availableEnemyStatusEntries.Clear();
+        var allPowers = GameHelper.GetAllPowerInfos();
+
+        foreach (var power in allPowers)
+        {
+            var card = new PanelContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+            var cardStyle = new StyleBoxFlat
+            {
+                BgColor = new Color(0.11f, 0.13f, 0.17f, 0.95f),
+                BorderColor = GameHelper.GetPowerTypeColor(power.Type) * 0.65f,
+                BorderWidthLeft = 1,
+                BorderWidthRight = 1,
+                BorderWidthTop = 1,
+                BorderWidthBottom = 1,
+                CornerRadiusTopLeft = 4,
+                CornerRadiusTopRight = 4,
+                CornerRadiusBottomLeft = 4,
+                CornerRadiusBottomRight = 4,
+                ContentMarginLeft = 8,
+                ContentMarginRight = 8,
+                ContentMarginTop = 6,
+                ContentMarginBottom = 6
+            };
+            card.AddThemeStyleboxOverride("panel", cardStyle);
+
+            var hCardBox = new HBoxContainer();
+            hCardBox.AddThemeConstantOverride("separation", 8);
+
+            var iconTex = GameHelper.GetPowerIcon(power.CanonicalInstance);
+            if (iconTex != null)
+            {
+                var iconRect = new TextureRect
+                {
+                    Texture = iconTex,
+                    CustomMinimumSize = new Vector2(30, 30),
+                    ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+                    StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered
+                };
+                hCardBox.AddChild(iconRect);
+            }
+
+            var textVBox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+            string fullTooltip = GameHelper.GetPowerFullTooltip(power.CanonicalInstance);
+            card.TooltipText = fullTooltip;
+
+            var titleLbl = new Label
+            {
+                Text = power.DisplayName,
+                Modulate = GameHelper.GetPowerTypeColor(power.Type)
+            };
+            titleLbl.TooltipText = fullTooltip;
+            textVBox.AddChild(titleLbl);
+
+            var metaLbl = new Label
+            {
+                Text = $"{power.Type} • {power.StackType}",
+                Modulate = new Color(0.6f, 0.65f, 0.72f, 0.8f)
+            };
+            textVBox.AddChild(metaLbl);
+
+            if (!string.IsNullOrWhiteSpace(power.Description))
+            {
+                var descLbl = new Label
+                {
+                    Text = power.Description,
+                    AutowrapMode = TextServer.AutowrapMode.WordSmart,
+                    Modulate = new Color(0.85f, 0.85f, 0.85f, 0.9f)
+                };
+                textVBox.AddChild(descLbl);
+            }
+
+            hCardBox.AddChild(textVBox);
+
+            var applyBtn = new Button
+            {
+                Text = " Inflict ",
+                TooltipText = $"Apply to target enemy",
+                CustomMinimumSize = new Vector2(60, 32)
+            };
+            string capturedId = power.TypeName;
+            applyBtn.Pressed += () =>
+            {
+                var enemies = GameHelper.GetActiveCombatEnemies();
+                int amt = _enemyStatusAmountSpin != null ? (int)_enemyStatusAmountSpin.Value : 1;
+
+                if (enemies != null && enemies.Count > 0)
+                {
+                    int selected = _enemyOptionButton?.Selected ?? 0;
+                    if (selected == 0)
+                    {
+                        foreach (var enemy in enemies)
+                        {
+                            if (enemy != null && !enemy.IsDead)
+                            {
+                                StatusDirector.ApplyStatus(enemy, capturedId, amt);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        int enemyIdx = selected - 1;
+                        if (enemyIdx >= 0 && enemyIdx < enemies.Count)
+                        {
+                            StatusDirector.ApplyStatus(enemies[enemyIdx], capturedId, amt);
+                        }
+                    }
+                    RefreshRealTimeStatusTabs();
+                }
+                else
+                {
+                    ModLogger.Warn("Cannot apply enemy status effect: no active combat enemies.");
+                }
+            };
+            hCardBox.AddChild(applyBtn);
+
+            card.AddChild(hCardBox);
+            grid.AddChild(card);
+
+            _availableEnemyStatusEntries.Add(new ItemEntry(power.TypeName, power.DisplayName, card, titleLbl, power.Type.ToString(), power.Description));
+        }
+
+        void ApplyFilter()
+        {
+            string query = searchInput.Text.Trim();
+            int typeIdx = typeOption.Selected;
+
+            foreach (var entry in _availableEnemyStatusEntries)
+            {
+                bool matchesQuery = string.IsNullOrEmpty(query) ||
+                    entry.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                    entry.Id.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                    (!string.IsNullOrEmpty(entry.Description) && entry.Description.Contains(query, StringComparison.OrdinalIgnoreCase));
+
+                bool matchesType = typeIdx == 0 ||
+                    (typeIdx == 1 && entry.Rarity.Equals("Debuff", StringComparison.OrdinalIgnoreCase)) ||
+                    (typeIdx == 2 && entry.Rarity.Equals("Buff", StringComparison.OrdinalIgnoreCase));
+
+                entry.Card.Visible = matchesQuery && matchesType;
+            }
+        }
+
+        searchInput.TextChanged += _ => ApplyFilter();
+        typeOption.ItemSelected += _ => ApplyFilter();
+
+        vbox.AddChild(CreateSectionCard("Apply Status Effects to Enemy", applyBox, new Color(1f, 0.45f, 0.45f)));
+
+        return scroll;
+    }
+
+    private Control BuildPotionsTab()
+    {
+        var potionsRoot = new VBoxContainer { Name = "Potions", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, SizeFlagsVertical = Control.SizeFlags.ExpandFill };
+        
+        var subTabs = new TabContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, SizeFlagsVertical = Control.SizeFlags.ExpandFill };
+        potionsRoot.AddChild(subTabs);
+
+        subTabs.AddChild(BuildAvailablePotionsSubTab());
+        subTabs.AddChild(BuildActivePotionsSubTab());
+
+        subTabs.TabChanged += (subTabIdx) => RefreshRealTimePotionTabs();
+
+        return potionsRoot;
+    }
+
+    private Control BuildAvailablePotionsSubTab()
+    {
+        var scroll = new ScrollContainer 
+        { 
+            Name = "Available Potions", 
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, 
+            SizeFlagsVertical = Control.SizeFlags.ExpandFill 
+        };
+        var vbox = new VBoxContainer 
+        { 
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, 
+            SizeFlagsVertical = Control.SizeFlags.ExpandFill 
+        };
+        scroll.AddChild(vbox);
+
+        var titleBox = new HBoxContainer();
+        titleBox.AddChild(new Label { Text = "Available Potions Catalog:", Modulate = new Color(0.4f, 0.8f, 1f), SizeFlagsHorizontal = Control.SizeFlags.ExpandFill });
+        
+        var addAllBtn = new Button { Text = " Fill Inventory with Potions " };
+        addAllBtn.Pressed += () => 
+        {
+            PotionDirector.AddPotion("all");
+            RefreshRealTimePotionTabs();
+        };
+        titleBox.AddChild(addAllBtn);
+        vbox.AddChild(titleBox);
+
+        var filterRow = new HBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        var searchInput = new LineEdit
+        {
+            PlaceholderText = "Search potions by name, ID, or description (e.g. 'Fire', 'Block', 'Strength')...",
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+        };
+        filterRow.AddChild(searchInput);
+
+        var rarityOption = new OptionButton { CustomMinimumSize = new Vector2(160, 0) };
+        rarityOption.AddItem("All Rarities", 0);
+        rarityOption.AddItem("Common", 1);
+        rarityOption.AddItem("Uncommon", 2);
+        rarityOption.AddItem("Rare", 3);
+        filterRow.AddChild(rarityOption);
+
+        vbox.AddChild(filterRow);
+        vbox.AddChild(new HSeparator());
+
+        var grid = new GridContainer
+        {
+            Columns = 3,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+        };
+        grid.AddThemeConstantOverride("h_separation", 10);
+        grid.AddThemeConstantOverride("v_separation", 10);
+        vbox.AddChild(grid);
+
+        _availablePotionEntries.Clear();
+        var allPotions = GameHelper.GetAllPotionInfos();
+
+        foreach (var potion in allPotions)
+        {
+            var card = new PanelContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+            var cardStyle = new StyleBoxFlat
+            {
+                BgColor = new Color(0.12f, 0.14f, 0.18f, 0.95f),
+                BorderColor = GameHelper.GetPotionRarityColor(potion.Rarity) * 0.7f,
+                BorderWidthLeft = 1,
+                BorderWidthRight = 1,
+                BorderWidthTop = 1,
+                BorderWidthBottom = 1,
+                CornerRadiusTopLeft = 4,
+                CornerRadiusTopRight = 4,
+                CornerRadiusBottomLeft = 4,
+                CornerRadiusBottomRight = 4,
+                ContentMarginLeft = 8,
+                ContentMarginRight = 8,
+                ContentMarginTop = 6,
+                ContentMarginBottom = 6
+            };
+            card.AddThemeStyleboxOverride("panel", cardStyle);
+
+            var hCardBox = new HBoxContainer();
+            hCardBox.AddThemeConstantOverride("separation", 8);
+
+            var iconTex = GameHelper.GetPotionIcon(potion.CanonicalInstance);
+            if (iconTex != null)
+            {
+                var iconRect = new TextureRect
+                {
+                    Texture = iconTex,
+                    CustomMinimumSize = new Vector2(32, 32),
+                    ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+                    StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered
+                };
+                hCardBox.AddChild(iconRect);
+            }
+
+            var textVBox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+            string fullTooltip = GameHelper.GetPotionFullTooltip(potion.CanonicalInstance);
+            card.TooltipText = fullTooltip;
+
+            var titleLbl = new Label
+            {
+                Text = potion.Title,
+                Modulate = GameHelper.GetPotionRarityColor(potion.Rarity)
+            };
+            titleLbl.TooltipText = fullTooltip;
+            textVBox.AddChild(titleLbl);
+
+            var metaLbl = new Label
+            {
+                Text = $"{potion.Rarity} • {potion.Usage}",
+                Modulate = new Color(0.6f, 0.65f, 0.75f, 0.8f)
+            };
+            textVBox.AddChild(metaLbl);
+
+            if (!string.IsNullOrWhiteSpace(potion.Description))
+            {
+                var descLbl = new Label
+                {
+                    Text = potion.Description,
+                    AutowrapMode = TextServer.AutowrapMode.WordSmart,
+                    Modulate = new Color(0.85f, 0.85f, 0.85f, 0.9f)
+                };
+                textVBox.AddChild(descLbl);
+            }
+
+            hCardBox.AddChild(textVBox);
+
+            var addBtn = new Button
+            {
+                Text = " + ",
+                TooltipText = $"Add '{potion.Title}' to player inventory",
+                CustomMinimumSize = new Vector2(36, 32)
+            };
+            string capturedId = potion.TypeName;
+            addBtn.Pressed += () =>
+            {
+                PotionDirector.AddPotion(capturedId);
+                RefreshRealTimePotionTabs();
+            };
+            hCardBox.AddChild(addBtn);
+
+            card.AddChild(hCardBox);
+            grid.AddChild(card);
+
+            _availablePotionEntries.Add(new ItemEntry(potion.TypeName, potion.Title, card, titleLbl, potion.Rarity.ToString(), potion.Description));
+        }
+
+        void ApplyFilter()
+        {
+            string query = searchInput.Text.Trim();
+            int rarityIdx = rarityOption.Selected;
+
+            foreach (var entry in _availablePotionEntries)
+            {
+                bool matchesQuery = string.IsNullOrEmpty(query) ||
+                    entry.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                    entry.Id.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                    (!string.IsNullOrEmpty(entry.Description) && entry.Description.Contains(query, StringComparison.OrdinalIgnoreCase));
+
+                bool matchesRarity = rarityIdx == 0 ||
+                    (rarityIdx == 1 && entry.Rarity.Equals("Common", StringComparison.OrdinalIgnoreCase)) ||
+                    (rarityIdx == 2 && entry.Rarity.Equals("Uncommon", StringComparison.OrdinalIgnoreCase)) ||
+                    (rarityIdx == 3 && entry.Rarity.Equals("Rare", StringComparison.OrdinalIgnoreCase));
+
+                entry.Card.Visible = matchesQuery && matchesRarity;
+            }
+        }
+
+        searchInput.TextChanged += _ => ApplyFilter();
+        rarityOption.ItemSelected += _ => ApplyFilter();
+
+        return scroll;
+    }
+
+    private Control BuildActivePotionsSubTab()
+    {
+        var scroll = new ScrollContainer 
+        { 
+            Name = "Current Potions", 
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, 
+            SizeFlagsVertical = Control.SizeFlags.ExpandFill 
+        };
+        var vbox = new VBoxContainer 
+        { 
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, 
+            SizeFlagsVertical = Control.SizeFlags.ExpandFill 
+        };
+        scroll.AddChild(vbox);
+
+        var topBarBox = new HBoxContainer();
+        topBarBox.AddThemeConstantOverride("separation", 12);
+        
+        var titleLabel = new Label { Text = "Equipped Potion Slots & Inventory:", Modulate = new Color(0.4f, 0.95f, 0.6f), SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        topBarBox.AddChild(titleLabel);
+
+        var slotLabel = new Label { Text = "Max Potion Slots: " };
+        topBarBox.AddChild(slotLabel);
+
+        _potionSlotsSpin = new SpinBox 
+        { 
+            MinValue = 1, 
+            MaxValue = 10, 
+            Step = 1, 
+            Value = PotionDirector.GetMaxPotionSlots(), 
+            TooltipText = "Real-time maximum potion slots. Changes update dynamically in real time and shift top-bar room/floor/boss icons." 
+        }.MakeNumericOnly();
+        _potionSlotsSpin.ValueChanged += val =>
+        {
+            PotionDirector.SetMaxPotionSlots((int)val);
+            RefreshRealTimePotionTabs();
+        };
+        topBarBox.AddChild(_potionSlotsSpin);
+
+        var clearAllBtn = new Button { Text = " Discard All Potions " };
+        clearAllBtn.Pressed += () =>
+        {
+            PotionDirector.ClearAllPotions();
+            RefreshRealTimePotionTabs();
+        };
+        topBarBox.AddChild(clearAllBtn);
+
+        var refreshBtn = new Button { Text = " Refresh " };
+        refreshBtn.Pressed += RefreshRealTimePotionTabs;
+        topBarBox.AddChild(refreshBtn);
+
+        vbox.AddChild(topBarBox);
+        vbox.AddChild(new HSeparator());
+
+        _activePotionsGrid = new GridContainer
+        {
+            Columns = 2,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+        };
+        _activePotionsGrid.AddThemeConstantOverride("h_separation", 14);
+        _activePotionsGrid.AddThemeConstantOverride("v_separation", 12);
+        vbox.AddChild(_activePotionsGrid);
+
+        return scroll;
+    }
+
+    private void RefreshRealTimePotionTabs()
+    {
+        if (_potionSlotsSpin != null)
+        {
+            int currentMaxSlots = PotionDirector.GetMaxPotionSlots();
+            if ((int)_potionSlotsSpin.Value != currentMaxSlots)
+            {
+                _potionSlotsSpin.SetValueNoSignal(currentMaxSlots);
+            }
+        }
+
+        if (_activePotionsGrid == null || !GodotObject.IsInstanceValid(_activePotionsGrid)) return;
+
+        foreach (var child in _activePotionsGrid.GetChildren())
+        {
+            child.QueueFree();
+        }
+
+        var player = GameHelper.GetActivePlayer();
+        if (player == null)
+        {
+            var noRunCard = new PanelContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+            var noRunLbl = new Label { Text = "No active run in progress. Potion inventory will display equipped slots when in-run.", Modulate = new Color(0.7f, 0.7f, 0.75f) };
+            noRunCard.AddChild(noRunLbl);
+            _activePotionsGrid.AddChild(noRunCard);
+            return;
+        }
+
+        int maxSlots = player.MaxPotionCount;
+        var potionSlots = player.PotionSlots;
+
+        for (int i = 0; i < maxSlots; i++)
+        {
+            int slotIndex = i;
+            var potion = (potionSlots != null && i < potionSlots.Count) ? potionSlots[i] : null;
+
+            var slotCard = new PanelContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+            var cardStyle = new StyleBoxFlat
+            {
+                BgColor = potion != null ? new Color(0.12f, 0.15f, 0.20f, 0.95f) : new Color(0.08f, 0.09f, 0.12f, 0.85f),
+                BorderColor = potion != null ? GameHelper.GetPotionRarityColor(potion.Rarity) * 0.8f : new Color(0.25f, 0.28f, 0.35f, 0.6f),
+                BorderWidthLeft = 2,
+                BorderWidthRight = 1,
+                BorderWidthTop = 1,
+                BorderWidthBottom = 1,
+                CornerRadiusTopLeft = 6,
+                CornerRadiusTopRight = 6,
+                CornerRadiusBottomLeft = 6,
+                CornerRadiusBottomRight = 6,
+                ContentMarginLeft = 10,
+                ContentMarginRight = 10,
+                ContentMarginTop = 8,
+                ContentMarginBottom = 8
+            };
+            slotCard.AddThemeStyleboxOverride("panel", cardStyle);
+
+            var slotHBox = new HBoxContainer();
+            slotHBox.AddThemeConstantOverride("separation", 10);
+
+            var slotBadge = new Label
+            {
+                Text = $"Slot #{i + 1}:",
+                Modulate = new Color(0.6f, 0.85f, 1f),
+                CustomMinimumSize = new Vector2(65, 0)
+            };
+            slotHBox.AddChild(slotBadge);
+
+            if (potion != null)
+            {
+                var iconTex = GameHelper.GetPotionIcon(potion);
+                if (iconTex != null)
+                {
+                    var iconRect = new TextureRect
+                    {
+                        Texture = iconTex,
+                        CustomMinimumSize = new Vector2(36, 36),
+                        ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+                        StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered
+                    };
+                    slotHBox.AddChild(iconRect);
+                }
+
+                var textVBox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+                string fullTooltip = GameHelper.GetPotionFullTooltip(potion);
+                slotCard.TooltipText = fullTooltip;
+
+                string rawTitle = potion.Title?.GetFormattedText() ?? "";
+                string title = !string.IsNullOrWhiteSpace(rawTitle) ? GameHelper.CleanBbCode(rawTitle) : potion.GetType().Name;
+
+                var titleLbl = new Label
+                {
+                    Text = title,
+                    Modulate = GameHelper.GetPotionRarityColor(potion.Rarity)
+                };
+                titleLbl.TooltipText = fullTooltip;
+                textVBox.AddChild(titleLbl);
+
+                var metaLbl = new Label
+                {
+                    Text = $"{potion.Rarity} • {potion.Usage}",
+                    Modulate = new Color(0.65f, 0.7f, 0.8f, 0.85f)
+                };
+                textVBox.AddChild(metaLbl);
+
+                string desc = GameHelper.GetPotionDescription(potion);
+                if (!string.IsNullOrWhiteSpace(desc))
+                {
+                    var descLbl = new Label
+                    {
+                        Text = desc,
+                        AutowrapMode = TextServer.AutowrapMode.WordSmart,
+                        Modulate = new Color(0.9f, 0.9f, 0.9f, 0.95f)
+                    };
+                    textVBox.AddChild(descLbl);
+                }
+
+                slotHBox.AddChild(textVBox);
+
+                var discardBtn = new Button
+                {
+                    Text = " Discard ",
+                    TooltipText = $"Discard {title}",
+                    CustomMinimumSize = new Vector2(80, 32)
+                };
+                var capturedPotion = potion;
+                discardBtn.Pressed += () =>
+                {
+                    PotionDirector.RemovePotion(capturedPotion);
+                    RefreshRealTimePotionTabs();
+                };
+                slotHBox.AddChild(discardBtn);
+            }
+            else
+            {
+                var emptyLabel = new Label
+                {
+                    Text = "[ Empty Slot ]",
+                    Modulate = new Color(0.5f, 0.55f, 0.65f, 0.75f),
+                    SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+                };
+                slotHBox.AddChild(emptyLabel);
+            }
+
+            slotCard.AddChild(slotHBox);
+            _activePotionsGrid.AddChild(slotCard);
+        }
+    }
+
+    private void RefreshRealTimeStatusTabs()
+    {
+        // 1. Refresh Player active powers
+        if (_playerActiveStatusesGrid != null && GodotObject.IsInstanceValid(_playerActiveStatusesGrid))
+        {
+            foreach (var child in _playerActiveStatusesGrid.GetChildren())
+            {
+                child.QueueFree();
+            }
+
+            var player = GameHelper.GetActivePlayer();
+            var powers = StatusDirector.GetActiveStatuses(player?.Creature);
+
+            if (powers != null && powers.Count > 0)
+            {
+                foreach (var power in powers)
+                {
+                    if (power == null) continue;
+
+                    var card = new PanelContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+                    var cardStyle = new StyleBoxFlat
+                    {
+                        BgColor = new Color(0.12f, 0.15f, 0.20f, 0.95f),
+                        BorderColor = GameHelper.GetPowerTypeColor(power.Type) * 0.8f,
+                        BorderWidthLeft = 2,
+                        BorderWidthRight = 1,
+                        BorderWidthTop = 1,
+                        BorderWidthBottom = 1,
+                        CornerRadiusTopLeft = 4,
+                        CornerRadiusTopRight = 4,
+                        CornerRadiusBottomLeft = 4,
+                        CornerRadiusBottomRight = 4,
+                        ContentMarginLeft = 8,
+                        ContentMarginRight = 8,
+                        ContentMarginTop = 6,
+                        ContentMarginBottom = 6
+                    };
+                    card.AddThemeStyleboxOverride("panel", cardStyle);
+
+                    var hBox = new HBoxContainer();
+                    hBox.AddThemeConstantOverride("separation", 8);
+
+                    var iconTex = GameHelper.GetPowerIcon(power);
+                    if (iconTex != null)
+                    {
+                        var iconRect = new TextureRect
+                        {
+                            Texture = iconTex,
+                            CustomMinimumSize = new Vector2(28, 28),
+                            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+                            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered
+                        };
+                        hBox.AddChild(iconRect);
+                    }
+
+                    var textVBox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+                    string fullTooltip = GameHelper.GetPowerFullTooltip(power);
+                    card.TooltipText = fullTooltip;
+
+                    string rawTitle = power.Title?.GetFormattedText() ?? "";
+                    string title = !string.IsNullOrWhiteSpace(rawTitle) ? GameHelper.CleanBbCode(rawTitle) : power.GetType().Name;
+
+                    var titleLbl = new Label
+                    {
+                        Text = $"{title} (Amount: {power.Amount})",
+                        Modulate = GameHelper.GetPowerTypeColor(power.Type)
+                    };
+                    titleLbl.TooltipText = fullTooltip;
+                    textVBox.AddChild(titleLbl);
+
+                    string desc = GameHelper.GetPowerDescription(power);
+                    if (!string.IsNullOrWhiteSpace(desc))
+                    {
+                        var descLbl = new Label
+                        {
+                            Text = desc,
+                            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+                            Modulate = new Color(0.85f, 0.85f, 0.85f, 0.9f)
+                        };
+                        textVBox.AddChild(descLbl);
+                    }
+
+                    hBox.AddChild(textVBox);
+
+                    var minusBtn = new Button { Text = " -1 ", CustomMinimumSize = new Vector2(32, 28) };
+                    var capturedPower = power;
+                    minusBtn.Pressed += () =>
+                    {
+                        if (player?.Creature != null)
+                        {
+                            StatusDirector.ModifyStatusAmount(player.Creature, capturedPower, -1);
+                            RefreshRealTimeStatusTabs();
+                        }
+                    };
+                    hBox.AddChild(minusBtn);
+
+                    var plusBtn = new Button { Text = " +1 ", CustomMinimumSize = new Vector2(32, 28) };
+                    plusBtn.Pressed += () =>
+                    {
+                        if (player?.Creature != null)
+                        {
+                            StatusDirector.ModifyStatusAmount(player.Creature, capturedPower, +1);
+                            RefreshRealTimeStatusTabs();
+                        }
+                    };
+                    hBox.AddChild(plusBtn);
+
+                    var removeBtn = new Button { Text = " X ", TooltipText = "Remove power", CustomMinimumSize = new Vector2(30, 28) };
+                    removeBtn.Pressed += () =>
+                    {
+                        if (player?.Creature != null)
+                        {
+                            StatusDirector.RemoveStatus(player.Creature, capturedPower);
+                            RefreshRealTimeStatusTabs();
+                        }
+                    };
+                    hBox.AddChild(removeBtn);
+
+                    card.AddChild(hBox);
+                    _playerActiveStatusesGrid.AddChild(card);
+                }
+            }
+            else
+            {
+                var emptyCard = new PanelContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+                var emptyLbl = new Label { Text = "[ No active buffs or debuffs on player ]", Modulate = new Color(0.55f, 0.6f, 0.7f) };
+                emptyCard.AddChild(emptyLbl);
+                _playerActiveStatusesGrid.AddChild(emptyCard);
+            }
+        }
+
+        // 2. Refresh Enemy active powers
+        var enemies = GameHelper.GetActiveCombatEnemies();
+        bool inCombat = enemies != null && enemies.Count > 0;
+
+        if (_enemyStatusNoticeLabel != null)
+        {
+            _enemyStatusNoticeLabel.Visible = !inCombat;
+        }
+
+        if (_enemyOptionButton != null)
+        {
+            int previousSelected = _enemyOptionButton.Selected;
+            _enemyOptionButton.Clear();
+            _enemyOptionButton.AddItem("All Active Enemies", 0);
+
+            if (inCombat && enemies != null)
+            {
+                for (int e = 0; e < enemies.Count; e++)
+                {
+                    var enemy = enemies[e];
+                    string monsterName = enemy?.Monster?.Id.Entry ?? enemy?.GetType().Name ?? $"Enemy #{e + 1}";
+                    string cleanName = GameHelper.FormatPascalOrSnakeToWords(monsterName);
+                    int hp = enemy != null ? (int)enemy.CurrentHp : 0;
+                    int maxHp = enemy != null ? (int)enemy.MaxHp : 0;
+                    _enemyOptionButton.AddItem($"Enemy #{e + 1}: {cleanName} (HP: {hp}/{maxHp})", e + 1);
+                }
+
+                if (previousSelected < _enemyOptionButton.ItemCount && previousSelected >= 0)
+                {
+                    _enemyOptionButton.Select(previousSelected);
+                }
+            }
+        }
+
+        if (_enemyActiveStatusesGrid != null && GodotObject.IsInstanceValid(_enemyActiveStatusesGrid))
+        {
+            foreach (var child in _enemyActiveStatusesGrid.GetChildren())
+            {
+                child.QueueFree();
+            }
+
+            if (!inCombat || enemies == null)
+            {
+                var noCombatCard = new PanelContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+                var noCombatLbl = new Label { Text = "[ Not in active battle — Enemy statuses appear during combat encounters ]", Modulate = new Color(0.55f, 0.6f, 0.7f) };
+                noCombatCard.AddChild(noCombatLbl);
+                _enemyActiveStatusesGrid.AddChild(noCombatCard);
+                return;
+            }
+
+            int selected = _enemyOptionButton?.Selected ?? 0;
+            var targetEnemies = new List<MegaCrit.Sts2.Core.Entities.Creatures.Creature>();
+            if (selected == 0)
+            {
+                targetEnemies.AddRange(enemies.Where(e => e != null && !e.IsDead));
+            }
+            else if (selected - 1 < enemies.Count && enemies[selected - 1] != null)
+            {
+                targetEnemies.Add(enemies[selected - 1]);
+            }
+
+            int totalDisplayed = 0;
+            foreach (var enemy in targetEnemies)
+            {
+                if (enemy == null) continue;
+                var ePowers = StatusDirector.GetActiveStatuses(enemy);
+                if (ePowers == null || ePowers.Count == 0) continue;
+
+                string monsterName = enemy.Monster?.Id.Entry ?? enemy.GetType().Name;
+                string cleanName = GameHelper.FormatPascalOrSnakeToWords(monsterName);
+
+                foreach (var power in ePowers)
+                {
+                    if (power == null) continue;
+                    totalDisplayed++;
+
+                    var card = new PanelContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+                    var cardStyle = new StyleBoxFlat
+                    {
+                        BgColor = new Color(0.12f, 0.15f, 0.20f, 0.95f),
+                        BorderColor = GameHelper.GetPowerTypeColor(power.Type) * 0.8f,
+                        BorderWidthLeft = 2,
+                        BorderWidthRight = 1,
+                        BorderWidthTop = 1,
+                        BorderWidthBottom = 1,
+                        CornerRadiusTopLeft = 4,
+                        CornerRadiusTopRight = 4,
+                        CornerRadiusBottomLeft = 4,
+                        CornerRadiusBottomRight = 4,
+                        ContentMarginLeft = 8,
+                        ContentMarginRight = 8,
+                        ContentMarginTop = 6,
+                        ContentMarginBottom = 6
+                    };
+                    card.AddThemeStyleboxOverride("panel", cardStyle);
+
+                    var hBox = new HBoxContainer();
+                    hBox.AddThemeConstantOverride("separation", 8);
+
+                    var iconTex = GameHelper.GetPowerIcon(power);
+                    if (iconTex != null)
+                    {
+                        var iconRect = new TextureRect
+                        {
+                            Texture = iconTex,
+                            CustomMinimumSize = new Vector2(28, 28),
+                            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+                            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered
+                        };
+                        hBox.AddChild(iconRect);
+                    }
+
+                    var textVBox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+                    string fullTooltip = GameHelper.GetPowerFullTooltip(power);
+                    card.TooltipText = fullTooltip;
+
+                    string rawTitle = power.Title?.GetFormattedText() ?? "";
+                    string title = !string.IsNullOrWhiteSpace(rawTitle) ? GameHelper.CleanBbCode(rawTitle) : power.GetType().Name;
+
+                    var titleLbl = new Label
+                    {
+                        Text = $"{cleanName} • {title} (Amount: {power.Amount})",
+                        Modulate = GameHelper.GetPowerTypeColor(power.Type)
+                    };
+                    titleLbl.TooltipText = fullTooltip;
+                    textVBox.AddChild(titleLbl);
+
+                    string desc = GameHelper.GetPowerDescription(power);
+                    if (!string.IsNullOrWhiteSpace(desc))
+                    {
+                        var descLbl = new Label
+                        {
+                            Text = desc,
+                            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+                            Modulate = new Color(0.85f, 0.85f, 0.85f, 0.9f)
+                        };
+                        textVBox.AddChild(descLbl);
+                    }
+
+                    hBox.AddChild(textVBox);
+
+                    var minusBtn = new Button { Text = " -1 ", CustomMinimumSize = new Vector2(32, 28) };
+                    var capturedEnemy = enemy;
+                    var capturedPower = power;
+                    minusBtn.Pressed += () =>
+                    {
+                        StatusDirector.ModifyStatusAmount(capturedEnemy, capturedPower, -1);
+                        RefreshRealTimeStatusTabs();
+                    };
+                    hBox.AddChild(minusBtn);
+
+                    var plusBtn = new Button { Text = " +1 ", CustomMinimumSize = new Vector2(32, 28) };
+                    plusBtn.Pressed += () =>
+                    {
+                        StatusDirector.ModifyStatusAmount(capturedEnemy, capturedPower, +1);
+                        RefreshRealTimeStatusTabs();
+                    };
+                    hBox.AddChild(plusBtn);
+
+                    var removeBtn = new Button { Text = " X ", TooltipText = "Remove power from enemy", CustomMinimumSize = new Vector2(30, 28) };
+                    removeBtn.Pressed += () =>
+                    {
+                        StatusDirector.RemoveStatus(capturedEnemy, capturedPower);
+                        RefreshRealTimeStatusTabs();
+                    };
+                    hBox.AddChild(removeBtn);
+
+                    card.AddChild(hBox);
+                    _enemyActiveStatusesGrid.AddChild(card);
+                }
+            }
+
+            if (totalDisplayed == 0)
+            {
+                var emptyCard = new PanelContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+                var emptyLbl = new Label { Text = "[ No active buffs or debuffs on selected enemy target ]", Modulate = new Color(0.55f, 0.6f, 0.7f) };
+                emptyCard.AddChild(emptyLbl);
+                _enemyActiveStatusesGrid.AddChild(emptyCard);
+            }
+        }
     }
 
     private Control BuildRelicsTab()
@@ -2636,20 +3916,55 @@ public partial class ModSettingsDialog : CanvasLayer
     private sealed class ItemEntry
     {
         public string Id { get; }
-        public Control Container { get; }
+        public string DisplayName { get; }
+        public Control Card { get; }
+        public Control Container => Card;
         public Label? Label { get; }
+        public string Rarity { get; }
+        public string Description { get; }
         public string PoolId { get; }
         public MegaCrit.Sts2.Core.Entities.Cards.CardType CardType { get; }
         public MegaCrit.Sts2.Core.Entities.Cards.CardRarity CardRarity { get; }
 
-        public ItemEntry(string id, Control container, Label? label = null, string poolId = "", MegaCrit.Sts2.Core.Entities.Cards.CardType type = MegaCrit.Sts2.Core.Entities.Cards.CardType.Attack, MegaCrit.Sts2.Core.Entities.Cards.CardRarity rarity = MegaCrit.Sts2.Core.Entities.Cards.CardRarity.Common)
+        public ItemEntry(
+            string id, 
+            string displayName, 
+            Control card, 
+            Label? label = null, 
+            string rarity = "", 
+            string description = "",
+            string poolId = "",
+            MegaCrit.Sts2.Core.Entities.Cards.CardType type = MegaCrit.Sts2.Core.Entities.Cards.CardType.Attack,
+            MegaCrit.Sts2.Core.Entities.Cards.CardRarity cardRarity = MegaCrit.Sts2.Core.Entities.Cards.CardRarity.Common)
         {
             Id = id;
-            Container = container;
+            DisplayName = displayName;
+            Card = card;
+            Label = label;
+            Rarity = rarity;
+            Description = description;
+            PoolId = poolId;
+            CardType = type;
+            CardRarity = cardRarity;
+        }
+
+        public ItemEntry(
+            string id, 
+            Control container, 
+            Label? label = null, 
+            string poolId = "", 
+            MegaCrit.Sts2.Core.Entities.Cards.CardType type = MegaCrit.Sts2.Core.Entities.Cards.CardType.Attack, 
+            MegaCrit.Sts2.Core.Entities.Cards.CardRarity rarity = MegaCrit.Sts2.Core.Entities.Cards.CardRarity.Common)
+        {
+            Id = id;
+            DisplayName = label?.Text ?? id;
+            Card = container;
             Label = label;
             PoolId = poolId;
             CardType = type;
             CardRarity = rarity;
+            Rarity = rarity.ToString();
+            Description = "";
         }
     }
 
@@ -2721,6 +4036,21 @@ public partial class ModSettingsDialog : CanvasLayer
         maxHpRow.AddChild(_maxHpAmountSpin);
         maxHpRow.AddChild(maxHpBtn);
         vitalsBox.AddChild(maxHpRow);
+
+        var potionSlotRow = new HBoxContainer();
+        potionSlotRow.AddThemeConstantOverride("separation", 8);
+        potionSlotRow.AddChild(new Label { Text = "Potion Slots: ", CustomMinimumSize = new Vector2(140, 0) });
+        var playerPotionSlotSpin = new SpinBox { MinValue = 1, MaxValue = 10, Step = 1, Value = PotionDirector.GetMaxPotionSlots(), CustomMinimumSize = new Vector2(120, 0), TooltipText = "Real-time maximum potion slots." }.MakeNumericOnly();
+        playerPotionSlotSpin.ValueChanged += val =>
+        {
+            PotionDirector.SetMaxPotionSlots((int)val);
+            RefreshRealTimePotionTabs();
+        };
+        var clearPotionsBtn = new Button { Text = " Discard All Potions ", CustomMinimumSize = new Vector2(160, 32) };
+        clearPotionsBtn.Pressed += () => { PotionDirector.ClearAllPotions(); RefreshRealTimePotionTabs(); };
+        potionSlotRow.AddChild(playerPotionSlotSpin);
+        potionSlotRow.AddChild(clearPotionsBtn);
+        vitalsBox.AddChild(potionSlotRow);
 
         rootVbox.AddChild(CreateSectionCard("Gold & Health Manipulation", vitalsBox, new Color(0.4f, 0.95f, 0.65f)));
 
@@ -2941,6 +4271,25 @@ public partial class ModSettingsDialog : CanvasLayer
         if (_quickKillEnemiesBtn != null) UpdateHotkeyButtonText(_quickKillEnemiesBtn, _quickKillEnemiesVal);
         if (_quickOpenShopBtn != null) UpdateHotkeyButtonText(_quickOpenShopBtn, _quickOpenShopVal);
 
+        if (_tweaksRunLockNoticeContainer != null && _tweaksRunLockNoticeLabel != null)
+        {
+            if (RunTweaksSaveManager.HasActiveRunSnapshot)
+            {
+                _tweaksRunLockNoticeContainer.Visible = true;
+                var snap = RunTweaksSaveManager.ActiveSnapshot;
+                string modeText = (snap?.IsCustom ?? false) ? "Custom (Seeded/Fair Mode)" : "Standard (Non-Custom)";
+                string endlessText = (RuntimeStateManager.CurrentEndlessLoopCount > 0) ? $", Endless Loop #{RuntimeStateManager.CurrentEndlessLoopCount}" : "";
+                _tweaksRunLockNoticeLabel.Text = $"[Active Run In Progress - {modeText}{endlessText}]\nMap generation & starting modifiers are locked to this run's snapshot. Any changes saved below will apply when you start your NEXT run.";
+                _tweaksRunLockNoticeLabel.Modulate = new Color(1f, 0.85f, 0.4f);
+            }
+            else
+            {
+                _tweaksRunLockNoticeContainer.Visible = true;
+                _tweaksRunLockNoticeLabel.Text = "[Ready for Next Run]\nPre-run tweaks and map generation settings configured below will be snapshotted when you embark on your next run.";
+                _tweaksRunLockNoticeLabel.Modulate = new Color(0.4f, 0.9f, 1f);
+            }
+        }
+
         if (_mapRoomCountSpin != null)
         {
             _mapRoomCountSpin.Value = tweaks.MapRoomCount;
@@ -2954,6 +4303,8 @@ public partial class ModSettingsDialog : CanvasLayer
         if (_cardRewardSpin != null) _cardRewardSpin.Value = tweaks.CardRewardCount;
         if (_bonusGoldSpin != null) _bonusGoldSpin.Value = tweaks.StartingGoldBonus;
         if (_bonusHpSpin != null) _bonusHpSpin.Value = tweaks.StartingMaxHpBonus;
+        if (_potionSlotsPreRunSpin != null) _potionSlotsPreRunSpin.Value = tweaks.PotionSlots;
+        if (_allowMultipleRelicsCheck != null) _allowMultipleRelicsCheck.ButtonPressed = tweaks.AllowMultipleRelics;
         if (_forceNeowCheck != null) _forceNeowCheck.ButtonPressed = tweaks.ForceNeowBonus;
 
         if (_eliteSlider != null) _eliteSlider.Value = tweaks.MapNodeDistribution.EliteWeightMultiplier;
@@ -3024,6 +4375,8 @@ public partial class ModSettingsDialog : CanvasLayer
         if (_cardRewardSpin != null) tweaks.CardRewardCount = (int)_cardRewardSpin.Value;
         if (_bonusGoldSpin != null) tweaks.StartingGoldBonus = (int)_bonusGoldSpin.Value;
         if (_bonusHpSpin != null) tweaks.StartingMaxHpBonus = (int)_bonusHpSpin.Value;
+        if (_potionSlotsPreRunSpin != null) tweaks.PotionSlots = (int)_potionSlotsPreRunSpin.Value;
+        if (_allowMultipleRelicsCheck != null) tweaks.AllowMultipleRelics = _allowMultipleRelicsCheck.ButtonPressed;
         if (_forceNeowCheck != null) tweaks.ForceNeowBonus = _forceNeowCheck.ButtonPressed;
 
         if (_eliteSlider != null) tweaks.MapNodeDistribution.EliteWeightMultiplier = (float)_eliteSlider.Value;
