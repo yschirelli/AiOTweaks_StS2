@@ -155,13 +155,11 @@ AiOTweaks_StS2/
     │   └── State/
     │       └── RuntimeStateManager.cs # Transient cheat tracking & lifecycle resets
     ├── Hooks/                   # Harmony patching modules
-    │   ├── CharacterSelectHooks.cs # Character select screen config button injection
     │   ├── CombatHooks.cs       # Invulnerability, energy, damage, def & draw hooks
     │   ├── EconomyHooks.cs      # Gold reward & shop price patches
     │   ├── EventHooks.cs        # Event manipulation & forcing
-    │   ├── MapGenerationHooks.cs# Node weight, map length & free navigation patches
-    │   ├── ModdingScreenHooks.cs# In-game Modding screen config button injection
-    │   └── NeowHooks.cs         # Neow / blessing manipulation & Ancient fallbacks
+    │   ├── MapGenerationHooks.cs# Map weights, room length, free navigation, Neow & Ancient fallbacks
+    │   └── ModdingScreenHooks.cs# Modding screen, Mod Info container & Character select button injections
     ├── Cheats/                  # Domain-specific cheat managers
     │   ├── CardDirector.cs      # Deck, hand, pile, attribute & enchantment spawning
     │   ├── CombatDirector.cs    # Combat sandbox & turn management

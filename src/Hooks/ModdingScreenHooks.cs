@@ -6,19 +6,22 @@ using HarmonyLib;
 using AIOTweaks.Core.Logging;
 using AIOTweaks.UI.Menu;
 using MegaCrit.Sts2.Core.Modding;
+using MegaCrit.Sts2.Core.Nodes.Screens.CharacterSelect;
 using MegaCrit.Sts2.Core.Nodes.Screens.ModdingScreen;
 
 namespace AIOTweaks.Hooks;
 
 /// <summary>
-/// Intercepts the in-game Modding Screen and Mod Info container to inject configuration buttons.
+/// Intercepts in-game screens and containers (Modding Screen, Mod Info container, Character Select Screen)
+/// to inject AIOTweaks configuration and settings buttons.
 /// </summary>
 public static class ModdingScreenHooks
 {
     private const string ModConfigButtonName = "AIOTweaksModdingScreenConfigBtn";
     private const string InfoConfigButtonName = "AIOTweaksModInfoConfigBtn";
+    private const string CharSelectConfigButtonName = "AIOTweaksCharSelectConfigButton";
 
-
+    #region Modding Screen Patches
 
     [HarmonyPatch(typeof(NModdingScreen), nameof(NModdingScreen.OnSubmenuOpened))]
     public static class NModdingScreenOnSubmenuOpenedPatch
@@ -133,4 +136,108 @@ public static class ModdingScreenHooks
             }
         }
     }
+
+    #endregion
+
+    #region Character Select Screen Patches
+
+    [HarmonyPatch(typeof(NCharacterSelectScreen), nameof(NCharacterSelectScreen._Ready))]
+    public static class NCharacterSelectScreenReadyPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(NCharacterSelectScreen __instance)
+        {
+            ModLogger.Verbose("ModdingScreenHooks", "NCharacterSelectScreen._Ready Postfix triggered.");
+            InjectCharacterSelectButton(__instance);
+        }
+    }
+
+    [HarmonyPatch(typeof(NCharacterSelectScreen), nameof(NCharacterSelectScreen.OnSubmenuOpened))]
+    public static class NCharacterSelectScreenOnSubmenuOpenedPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(NCharacterSelectScreen __instance)
+        {
+            ModLogger.Verbose("ModdingScreenHooks", "NCharacterSelectScreen.OnSubmenuOpened Postfix triggered.");
+            InjectCharacterSelectButton(__instance);
+        }
+    }
+
+    [HarmonyPatch(typeof(NCharacterSelectScreen), nameof(NCharacterSelectScreen.InitializeSingleplayer))]
+    public static class NCharacterSelectScreenInitializeSingleplayerPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(NCharacterSelectScreen __instance)
+        {
+            ModLogger.Verbose("ModdingScreenHooks", "NCharacterSelectScreen.InitializeSingleplayer Postfix triggered.");
+            InjectCharacterSelectButton(__instance);
+        }
+    }
+
+    public static void InjectCharacterSelectButton(NCharacterSelectScreen charSelectNode)
+    {
+        if (charSelectNode == null || !GodotObject.IsInstanceValid(charSelectNode)) return;
+
+        try
+        {
+            if (charSelectNode.FindChild(CharSelectConfigButtonName, true, false) != null)
+            {
+                ModLogger.Verbose("ModdingScreenHooks", "InjectCharacterSelectButton: ModConfigButton already present in tree.");
+                return;
+            }
+
+            var buttonContainer = new PanelContainer
+            {
+                Name = CharSelectConfigButtonName,
+                ZIndex = 100,
+                MouseFilter = Control.MouseFilterEnum.Pass
+            };
+
+            var style = new StyleBoxFlat
+            {
+                BgColor = new Color(0.08f, 0.12f, 0.20f, 0.90f),
+                BorderColor = new Color(0.35f, 0.85f, 1f, 0.8f),
+                BorderWidthBottom = 2,
+                BorderWidthTop = 2,
+                BorderWidthLeft = 2,
+                BorderWidthRight = 2,
+                CornerRadiusBottomLeft = 6,
+                CornerRadiusBottomRight = 6,
+                CornerRadiusTopLeft = 6,
+                CornerRadiusTopRight = 6
+            };
+            buttonContainer.AddThemeStyleboxOverride("panel", style);
+
+            var configBtn = new Button
+            {
+                Name = "AIOTweaksBtn",
+                Text = "AIOTweaks",
+                TooltipText = "Open AIOTweaks Mod Settings & Pre-Run Tweaks",
+                Modulate = new Color(0.35f, 0.85f, 1f),
+                CustomMinimumSize = new Vector2(180, 46)
+            };
+
+            configBtn.Pressed += () =>
+            {
+                ModLogger.Verbose("ModdingScreenHooks", "Character Select 'AIOTweaks' button clicked. Opening ModSettingsDialog...");
+                ModLogger.Info("Character Select: 'AIOTweaks' clicked.");
+                ModSettingsDialog.ShowDialog();
+            };
+
+            buttonContainer.AddChild(configBtn);
+            charSelectNode.AddChild(buttonContainer);
+
+            // Anchor to top right
+            buttonContainer.SetAnchorsPreset(Control.LayoutPreset.TopRight);
+            buttonContainer.Position = new Vector2(-220, 24);
+
+            ModLogger.Info("Injected 'AIOTweaks' button into NCharacterSelectScreen.");
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Error("Failed to inject AIOTweaks button into Character Select Screen.", ex);
+        }
+    }
+
+    #endregion
 }

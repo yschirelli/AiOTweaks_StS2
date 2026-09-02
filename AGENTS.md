@@ -36,7 +36,7 @@ The goal is to maintain and extend a sandbox, cheat director, and quality-of-lif
 - `src/Core/Config/`: Strongly typed JSON config (`ModConfig.cs`, `RunSettings.cs`), profile management (`ConfigManager.cs`), and BaseLib config provider (`AIOTweaksBaseLibConfig.cs`).
 - `src/Core/Logging/`: Centralized logging wrapper (`ModLogger.cs`) with `[AIOTweaks]` tagging and debug verbosity filtering (supports forced file output in Debug builds).
 - `src/Core/State/`: Transient runtime state tracker (`RuntimeStateManager.cs`).
-- `src/Hooks/`: Interception points for game systems (Combat, Character Select, Economy, Events, Map Generation, Modding Screen, Neow).
+- `src/Hooks/`: Interception points for game systems (Combat, Economy, Events, Map Generation & Neow, Modding & Character Select Screens).
 - `src/Cheats/`: Atomic command directors for runtime manipulation (`CardDirector.cs`, `CombatDirector.cs`, `EventDirector.cs`, `InventoryDirector.cs`, `RelicDirector.cs`).
 - `src/UI/`: Godot UI components for the draggable/resizable tabbed Mod Settings Dialog (`ModSettingsDialog.cs`), pre-run panel (`PreRunSettingsMenu.cs`), numeric validation (`UIHelper.cs`), and In-Run Debug Console (`DebugConsole.cs`).
 
@@ -78,13 +78,11 @@ AiOTweaks_StS2/
     │   └── State/
     │       └── RuntimeStateManager.cs # Transient state & lifecycle cleanup
     ├── Hooks/
-    │   ├── CharacterSelectHooks.cs
     │   ├── CombatHooks.cs
     │   ├── EconomyHooks.cs
     │   ├── EventHooks.cs
     │   ├── MapGenerationHooks.cs
-    │   ├── ModdingScreenHooks.cs
-    │   └── NeowHooks.cs
+    │   └── ModdingScreenHooks.cs
     ├── Cheats/
     │   ├── CardDirector.cs
     │   ├── CombatDirector.cs

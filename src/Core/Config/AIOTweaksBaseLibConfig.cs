@@ -222,6 +222,27 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
         }
     }
 
+    [ConfigSlider(1, 10, 1)]
+    public int PotionSlots
+    {
+        get => ConfigManager.Current.PreRunTweaks.PotionSlots;
+        set
+        {
+            ConfigManager.Current.PreRunTweaks.PotionSlots = value;
+            ConfigManager.SaveConfig();
+        }
+    }
+
+    public bool AllowMultipleRelics
+    {
+        get => ConfigManager.Current.PreRunTweaks.AllowMultipleRelics;
+        set
+        {
+            ConfigManager.Current.PreRunTweaks.AllowMultipleRelics = value;
+            ConfigManager.SaveConfig();
+        }
+    }
+
     [ConfigSection("Map & Spire Utilities")]
     [ConfigSlider(1.0, 5.0, 0.5)]
     public double EliteNodeEncounterRate

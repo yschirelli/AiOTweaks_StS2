@@ -19,6 +19,8 @@
     "enemyHealthMultiplier": 1.0,
     "enemyDamageMultiplier": 1.0,
     "enemyDefendMultiplier": 1.0,
+    "allowMultipleRelics": false,
+    "potionSlots": 3,
     "freeMapNavigation": false,
     "endlessMode": {
       "enabled": false,

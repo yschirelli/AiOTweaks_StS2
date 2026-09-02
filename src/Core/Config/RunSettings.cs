@@ -45,6 +45,12 @@ public sealed class RunSettings
     [JsonPropertyName("draftModeEnabled")]
     public bool DraftModeEnabled { get; set; } = false;
 
+    [JsonPropertyName("allowMultipleRelics")]
+    public bool AllowMultipleRelics { get; set; } = false;
+
+    [JsonPropertyName("potionSlots")]
+    public int PotionSlots { get; set; } = 3;
+
     public RunSettings Clone()
     {
         return new RunSettings
@@ -60,7 +66,9 @@ public sealed class RunSettings
             ShopSpawnMultiplier = ShopSpawnMultiplier,
             EventSpawnMultiplier = EventSpawnMultiplier,
             CardRewardCount = CardRewardCount,
-            DraftModeEnabled = DraftModeEnabled
+            DraftModeEnabled = DraftModeEnabled,
+            AllowMultipleRelics = AllowMultipleRelics,
+            PotionSlots = PotionSlots
         };
     }
 }

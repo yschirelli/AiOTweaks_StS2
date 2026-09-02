@@ -105,6 +105,12 @@ public sealed class PreRunTweaksConfig
     [JsonPropertyName("enemyDefendMultiplier")]
     public float EnemyDefendMultiplier { get; set; } = 1.0f;
 
+    [JsonPropertyName("allowMultipleRelics")]
+    public bool AllowMultipleRelics { get; set; } = false;
+
+    [JsonPropertyName("potionSlots")]
+    public int PotionSlots { get; set; } = 3;
+
     [JsonPropertyName("freeMapNavigation")]
     public bool FreeMapNavigation { get; set; } = false;
 
