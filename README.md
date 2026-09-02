@@ -18,7 +18,25 @@
 
 ---
 
+## Screenshots
+
+<p align="center">
+  <img src="assets/screenshots/tweaks_multipliers_tab.png" alt="Tweaks, Multipliers & Hotkey Bindings" width="48%">
+  <img src="assets/screenshots/player_sandbox_tab.png" alt="Player Sandbox & Event Director" width="48%">
+</p>
+<p align="center">
+  <img src="assets/screenshots/relics_tab.png" alt="Relics Compendium" width="48%">
+  <img src="assets/screenshots/available_cards_tab.png" alt="Available Cards & Spawning" width="48%">
+</p>
+<p align="center">
+  <img src="assets/screenshots/deck_management_tab.png" alt="Live Deck & Pile Manipulation" width="48%">
+  <img src="assets/screenshots/potions_tab.png" alt="Potion Inventory & Real-Time Slots" width="48%">
+</p>
+
+---
+
 ## Table of Contents
+- [Screenshots](#screenshots)
 - [Features](#features)
 - [Keybindings & Controls](#keybindings--controls)
 - [Console Commands](#console-commands)

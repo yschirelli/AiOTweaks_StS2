@@ -799,6 +799,43 @@ public static class GameHelper
         }
     }
 
+    public static void RescaleActiveMonstersHp()
+    {
+        try
+        {
+            float hpMult = State.RuntimeStateManager.GetEffectiveEnemyHealthMultiplier();
+            var enemies = GetActiveCombatEnemies();
+            if (enemies != null)
+            {
+                foreach (var enemy in enemies)
+                {
+                    if (enemy != null && !enemy.IsPlayer && !enemy.IsDead)
+                    {
+                        if (!AIOTweaks.Hooks.CombatHooks.MonsterBaseHpTable.TryGetValue(enemy, out var box))
+                        {
+                            box = new System.Runtime.CompilerServices.StrongBox<int>(enemy.MaxHp);
+                            AIOTweaks.Hooks.CombatHooks.MonsterBaseHpTable.Add(enemy, box);
+                        }
+
+                        int baseMax = box.Value;
+                        int newMax = Math.Max(1, (int)Math.Round(baseMax * hpMult));
+                        float currentRatio = enemy.MaxHp > 0 ? (float)enemy.CurrentHp / enemy.MaxHp : 1.0f;
+                        int newCurrent = Math.Max(1, (int)Math.Round(newMax * currentRatio));
+
+                        enemy.SetMaxHpInternal(newMax);
+                        enemy.SetCurrentHpInternal(newCurrent);
+                        ModLogger.Info($"RescaleActiveMonstersHp: updated '{enemy.GetType().Name}' HP -> {newCurrent}/{newMax} (x{hpMult:F2})");
+                    }
+                }
+            }
+            RefreshCombatIntents();
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Debug($"RescaleActiveMonstersHp error: {ex.Message}");
+        }
+    }
+
     public static List<string> GetAllRelicIds(bool forceRefresh = false)
     {
         if (!forceRefresh && _cachedRelicIds != null && _cachedRelicIds.Count > 0)
@@ -1340,6 +1377,18 @@ public static class GameHelper
                     else if (diff < 0) player.SubtractFromMaxPotionCount(-diff);
                 }
                 ModLogger.Info($"GameHelper: Set player MaxPotionCount to {slots} (was {oldSlots}).");
+            }
+
+            // Directly trigger TopBar & PotionContainer synchronization if active
+            var topBar = MegaCrit.Sts2.Core.Nodes.NRun.Instance?.GlobalUi?.TopBar;
+            if (topBar != null && GodotObject.IsInstanceValid(topBar))
+            {
+                AIOTweaks.Hooks.RelicHooks.AdjustTopBarLayout(topBar, slots);
+                if (topBar.PotionContainer != null && GodotObject.IsInstanceValid(topBar.PotionContainer))
+                {
+                    var growMethod = typeof(MegaCrit.Sts2.Core.Nodes.Potions.NPotionContainer).GetMethod("GrowPotionHolders", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                    growMethod?.Invoke(topBar.PotionContainer, new object[] { slots });
+                }
             }
         }
         catch (Exception ex)

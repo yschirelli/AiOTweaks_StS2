@@ -75,13 +75,13 @@ public static class RuntimeStateManager
 
     public static float GetEffectivePlayerDamageMultiplier()
     {
-        float baseDmg = AIOTweaks.Hooks.RunTweaksSaveManager.GetEffectivePreRunTweaks().PlayerDamageMultiplier;
+        float baseDmg = ConfigManager.Current.PreRunTweaks.PlayerDamageMultiplier;
         return Math.Max(0.0f, baseDmg);
     }
 
     public static float GetEffectiveEnemyHealthMultiplier()
     {
-        var tweaks = AIOTweaks.Hooks.RunTweaksSaveManager.GetEffectivePreRunTweaks();
+        var tweaks = ConfigManager.Current.PreRunTweaks;
         float baseHp = tweaks.EnemyHealthMultiplier;
         var endless = tweaks.EndlessMode;
         if (endless.Enabled && CurrentEndlessLoopCount > 0)
@@ -93,7 +93,7 @@ public static class RuntimeStateManager
 
     public static float GetEffectiveEnemyDamageMultiplier()
     {
-        var tweaks = AIOTweaks.Hooks.RunTweaksSaveManager.GetEffectivePreRunTweaks();
+        var tweaks = ConfigManager.Current.PreRunTweaks;
         float baseDmg = tweaks.EnemyDamageMultiplier;
         var endless = tweaks.EndlessMode;
         if (endless.Enabled && CurrentEndlessLoopCount > 0)
@@ -105,7 +105,7 @@ public static class RuntimeStateManager
 
     public static float GetEffectiveEnemyDefendMultiplier()
     {
-        var tweaks = AIOTweaks.Hooks.RunTweaksSaveManager.GetEffectivePreRunTweaks();
+        var tweaks = ConfigManager.Current.PreRunTweaks;
         float baseDef = tweaks.EnemyDefendMultiplier;
         var endless = tweaks.EndlessMode;
         if (endless.Enabled && CurrentEndlessLoopCount > 0)

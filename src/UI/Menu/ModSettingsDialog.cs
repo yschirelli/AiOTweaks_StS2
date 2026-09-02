@@ -139,41 +139,63 @@ public partial class ModSettingsDialog : CanvasLayer
         StatusDirector.OnStatusesChanged += OnStatusesModified;
         LoadSettingsValues();
         HideDialog();
+    }
 
-        var refreshTimer = new Timer { WaitTime = 1.0f, Autostart = true };
-        refreshTimer.Timeout += () =>
-        {
-            RefreshRealTimeCardTabs();
-            RefreshRealTimeRelicTabs();
-            RefreshRealTimePotionTabs();
-            RefreshRealTimeStatusTabs();
-        };
-        AddChild(refreshTimer);
+    public void RefreshTab(long tabIdx)
+    {
+        if (_dialogPanel == null || !_dialogPanel.Visible) return;
+        if (tabIdx == 0) RefreshRealTimeRelicTabs();
+        else if (tabIdx == 1) RefreshRealTimeCardTabs();
+        else if (tabIdx == 2) RefreshRealTimePotionTabs();
+        else if (tabIdx == 4) RefreshRealTimeStatusTabs();
     }
 
     private void OnDeckModified()
     {
-        CallDeferred(nameof(RefreshRealTimeCardTabs));
+        if (_dialogPanel != null && _dialogPanel.Visible && _tabs?.CurrentTab == 1)
+        {
+            CallDeferred(nameof(RefreshRealTimeCardTabs));
+        }
     }
 
     private void OnRelicsModified()
     {
-        CallDeferred(nameof(RefreshRealTimeRelicTabs));
+        if (_dialogPanel != null && _dialogPanel.Visible && _tabs?.CurrentTab == 0)
+        {
+            CallDeferred(nameof(RefreshRealTimeRelicTabs));
+        }
     }
 
     private void OnPotionsModified()
     {
-        CallDeferred(nameof(RefreshRealTimePotionTabs));
+        if (_dialogPanel != null && _dialogPanel.Visible && _tabs?.CurrentTab == 2)
+        {
+            CallDeferred(nameof(RefreshRealTimePotionTabs));
+        }
     }
 
     private void OnPotionSlotsModified(int slots)
     {
-        CallDeferred(nameof(RefreshRealTimePotionTabs));
+        if (_potionSlotsSpin != null && (int)_potionSlotsSpin.Value != slots)
+        {
+            _potionSlotsSpin.SetValueNoSignal(slots);
+        }
+        if (_potionSlotsPreRunSpin != null && (int)_potionSlotsPreRunSpin.Value != slots)
+        {
+            _potionSlotsPreRunSpin.SetValueNoSignal(slots);
+        }
+        if (_dialogPanel != null && _dialogPanel.Visible && _tabs?.CurrentTab == 2)
+        {
+            CallDeferred(nameof(RefreshRealTimePotionTabs));
+        }
     }
 
     private void OnStatusesModified()
     {
-        CallDeferred(nameof(RefreshRealTimeStatusTabs));
+        if (_dialogPanel != null && _dialogPanel.Visible && _tabs?.CurrentTab == 4)
+        {
+            CallDeferred(nameof(RefreshRealTimeStatusTabs));
+        }
     }
 
     public override void _ExitTree()
@@ -316,10 +338,7 @@ public partial class ModSettingsDialog : CanvasLayer
             if (_backdrop != null) _backdrop.Visible = true;
             _dialogPanel.Visible = true;
             UpdateBlockingState(true);
-            RefreshRealTimeCardTabs();
-            RefreshRealTimeRelicTabs();
-            RefreshRealTimePotionTabs();
-            RefreshRealTimeStatusTabs();
+            RefreshTab(_tabs?.CurrentTab ?? 0);
         }
     }
 
@@ -540,22 +559,7 @@ public partial class ModSettingsDialog : CanvasLayer
 
         _tabs.TabChanged += (tabIdx) =>
         {
-            if (tabIdx == 0)
-            {
-                RefreshRealTimeRelicTabs();
-            }
-            else if (tabIdx == 1)
-            {
-                RefreshRealTimeCardTabs();
-            }
-            else if (tabIdx == 2)
-            {
-                RefreshRealTimePotionTabs();
-            }
-            else if (tabIdx == 4)
-            {
-                RefreshRealTimeStatusTabs();
-            }
+            RefreshTab(tabIdx);
         };
 
         var footer = new HBoxContainer();
@@ -968,7 +972,12 @@ public partial class ModSettingsDialog : CanvasLayer
         {
             MarkTweaksModified();
             ConfigManager.Current.PreRunTweaks.EnemyHealthMultiplier = (float)val;
-            GameHelper.RefreshCombatIntents();
+            if (RunTweaksSaveManager.ActiveSnapshot != null)
+            {
+                RunTweaksSaveManager.ActiveSnapshot.PreRunTweaks.EnemyHealthMultiplier = (float)val;
+                RunTweaksSaveManager.SaveActiveSnapshot();
+            }
+            GameHelper.RescaleActiveMonstersHp();
         };
 
         _enemyDmgSlider = AddSliderControl(enemyBox, "Enemy Damage Multiplier:", 0.0f, 10.0f, 0.1f, 1.0f);
@@ -976,6 +985,11 @@ public partial class ModSettingsDialog : CanvasLayer
         {
             MarkTweaksModified();
             ConfigManager.Current.PreRunTweaks.EnemyDamageMultiplier = (float)val;
+            if (RunTweaksSaveManager.ActiveSnapshot != null)
+            {
+                RunTweaksSaveManager.ActiveSnapshot.PreRunTweaks.EnemyDamageMultiplier = (float)val;
+                RunTweaksSaveManager.SaveActiveSnapshot();
+            }
             GameHelper.RefreshCombatIntents();
         };
 
@@ -984,6 +998,11 @@ public partial class ModSettingsDialog : CanvasLayer
         {
             MarkTweaksModified();
             ConfigManager.Current.PreRunTweaks.EnemyDefendMultiplier = (float)val;
+            if (RunTweaksSaveManager.ActiveSnapshot != null)
+            {
+                RunTweaksSaveManager.ActiveSnapshot.PreRunTweaks.EnemyDefendMultiplier = (float)val;
+                RunTweaksSaveManager.SaveActiveSnapshot();
+            }
             GameHelper.RefreshCombatIntents();
         };
 
@@ -997,6 +1016,11 @@ public partial class ModSettingsDialog : CanvasLayer
         {
             MarkTweaksModified();
             ConfigManager.Current.PreRunTweaks.PlayerDamageMultiplier = (float)val;
+            if (RunTweaksSaveManager.ActiveSnapshot != null)
+            {
+                RunTweaksSaveManager.ActiveSnapshot.PreRunTweaks.PlayerDamageMultiplier = (float)val;
+                RunTweaksSaveManager.SaveActiveSnapshot();
+            }
             GameHelper.RefreshAllVisibleCards();
         };
 
@@ -1209,10 +1233,10 @@ public partial class ModSettingsDialog : CanvasLayer
 
         _playerActiveStatusesGrid = new GridContainer
         {
-            Columns = 2,
+            Columns = 3,
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
         };
-        _playerActiveStatusesGrid.AddThemeConstantOverride("h_separation", 10);
+        _playerActiveStatusesGrid.AddThemeConstantOverride("h_separation", 8);
         _playerActiveStatusesGrid.AddThemeConstantOverride("v_separation", 8);
         activeBox.AddChild(_playerActiveStatusesGrid);
 
@@ -1248,11 +1272,11 @@ public partial class ModSettingsDialog : CanvasLayer
 
         var grid = new GridContainer
         {
-            Columns = 3,
+            Columns = 4,
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
         };
-        grid.AddThemeConstantOverride("h_separation", 10);
-        grid.AddThemeConstantOverride("v_separation", 10);
+        grid.AddThemeConstantOverride("h_separation", 8);
+        grid.AddThemeConstantOverride("v_separation", 8);
         applyBox.AddChild(grid);
 
         _availablePlayerStatusEntries.Clear();
@@ -1273,15 +1297,15 @@ public partial class ModSettingsDialog : CanvasLayer
                 CornerRadiusTopRight = 4,
                 CornerRadiusBottomLeft = 4,
                 CornerRadiusBottomRight = 4,
-                ContentMarginLeft = 8,
-                ContentMarginRight = 8,
+                ContentMarginLeft = 6,
+                ContentMarginRight = 6,
                 ContentMarginTop = 6,
                 ContentMarginBottom = 6
             };
             card.AddThemeStyleboxOverride("panel", cardStyle);
 
-            var hCardBox = new HBoxContainer();
-            hCardBox.AddThemeConstantOverride("separation", 8);
+            var hCardBox = new HBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+            hCardBox.AddThemeConstantOverride("separation", 6);
 
             var iconTex = GameHelper.GetPowerIcon(power.CanonicalInstance);
             if (iconTex != null)
@@ -1289,7 +1313,7 @@ public partial class ModSettingsDialog : CanvasLayer
                 var iconRect = new TextureRect
                 {
                     Texture = iconTex,
-                    CustomMinimumSize = new Vector2(30, 30),
+                    CustomMinimumSize = new Vector2(28, 28),
                     ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
                     StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered
                 };
@@ -1303,7 +1327,9 @@ public partial class ModSettingsDialog : CanvasLayer
             var titleLbl = new Label
             {
                 Text = power.DisplayName,
-                Modulate = GameHelper.GetPowerTypeColor(power.Type)
+                Modulate = GameHelper.GetPowerTypeColor(power.Type),
+                ClipText = true,
+                CustomMinimumSize = new Vector2(90, 0)
             };
             titleLbl.TooltipText = fullTooltip;
             textVBox.AddChild(titleLbl);
@@ -1311,28 +1337,18 @@ public partial class ModSettingsDialog : CanvasLayer
             var metaLbl = new Label
             {
                 Text = $"{power.Type} • {power.StackType}",
-                Modulate = new Color(0.6f, 0.65f, 0.72f, 0.8f)
+                Modulate = new Color(0.6f, 0.65f, 0.72f, 0.8f),
+                ClipText = true
             };
             textVBox.AddChild(metaLbl);
-
-            if (!string.IsNullOrWhiteSpace(power.Description))
-            {
-                var descLbl = new Label
-                {
-                    Text = power.Description,
-                    AutowrapMode = TextServer.AutowrapMode.WordSmart,
-                    Modulate = new Color(0.85f, 0.85f, 0.85f, 0.9f)
-                };
-                textVBox.AddChild(descLbl);
-            }
 
             hCardBox.AddChild(textVBox);
 
             var applyBtn = new Button
             {
-                Text = " Apply ",
-                TooltipText = $"Apply to player",
-                CustomMinimumSize = new Vector2(60, 32)
+                Text = " + ",
+                TooltipText = $"Apply '{power.DisplayName}' to player",
+                CustomMinimumSize = new Vector2(34, 28)
             };
             string capturedId = power.TypeName;
             applyBtn.Pressed += () =>
@@ -1454,10 +1470,10 @@ public partial class ModSettingsDialog : CanvasLayer
 
         _enemyActiveStatusesGrid = new GridContainer
         {
-            Columns = 2,
+            Columns = 3,
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
         };
-        _enemyActiveStatusesGrid.AddThemeConstantOverride("h_separation", 10);
+        _enemyActiveStatusesGrid.AddThemeConstantOverride("h_separation", 8);
         _enemyActiveStatusesGrid.AddThemeConstantOverride("v_separation", 8);
         activeBox.AddChild(_enemyActiveStatusesGrid);
 
@@ -1493,11 +1509,11 @@ public partial class ModSettingsDialog : CanvasLayer
 
         var grid = new GridContainer
         {
-            Columns = 3,
+            Columns = 4,
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
         };
-        grid.AddThemeConstantOverride("h_separation", 10);
-        grid.AddThemeConstantOverride("v_separation", 10);
+        grid.AddThemeConstantOverride("h_separation", 8);
+        grid.AddThemeConstantOverride("v_separation", 8);
         applyBox.AddChild(grid);
 
         _availableEnemyStatusEntries.Clear();
@@ -1518,15 +1534,15 @@ public partial class ModSettingsDialog : CanvasLayer
                 CornerRadiusTopRight = 4,
                 CornerRadiusBottomLeft = 4,
                 CornerRadiusBottomRight = 4,
-                ContentMarginLeft = 8,
-                ContentMarginRight = 8,
+                ContentMarginLeft = 6,
+                ContentMarginRight = 6,
                 ContentMarginTop = 6,
                 ContentMarginBottom = 6
             };
             card.AddThemeStyleboxOverride("panel", cardStyle);
 
-            var hCardBox = new HBoxContainer();
-            hCardBox.AddThemeConstantOverride("separation", 8);
+            var hCardBox = new HBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+            hCardBox.AddThemeConstantOverride("separation", 6);
 
             var iconTex = GameHelper.GetPowerIcon(power.CanonicalInstance);
             if (iconTex != null)
@@ -1534,7 +1550,7 @@ public partial class ModSettingsDialog : CanvasLayer
                 var iconRect = new TextureRect
                 {
                     Texture = iconTex,
-                    CustomMinimumSize = new Vector2(30, 30),
+                    CustomMinimumSize = new Vector2(28, 28),
                     ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
                     StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered
                 };
@@ -1548,7 +1564,9 @@ public partial class ModSettingsDialog : CanvasLayer
             var titleLbl = new Label
             {
                 Text = power.DisplayName,
-                Modulate = GameHelper.GetPowerTypeColor(power.Type)
+                Modulate = GameHelper.GetPowerTypeColor(power.Type),
+                ClipText = true,
+                CustomMinimumSize = new Vector2(90, 0)
             };
             titleLbl.TooltipText = fullTooltip;
             textVBox.AddChild(titleLbl);
@@ -1556,28 +1574,18 @@ public partial class ModSettingsDialog : CanvasLayer
             var metaLbl = new Label
             {
                 Text = $"{power.Type} • {power.StackType}",
-                Modulate = new Color(0.6f, 0.65f, 0.72f, 0.8f)
+                Modulate = new Color(0.6f, 0.65f, 0.72f, 0.8f),
+                ClipText = true
             };
             textVBox.AddChild(metaLbl);
-
-            if (!string.IsNullOrWhiteSpace(power.Description))
-            {
-                var descLbl = new Label
-                {
-                    Text = power.Description,
-                    AutowrapMode = TextServer.AutowrapMode.WordSmart,
-                    Modulate = new Color(0.85f, 0.85f, 0.85f, 0.9f)
-                };
-                textVBox.AddChild(descLbl);
-            }
 
             hCardBox.AddChild(textVBox);
 
             var applyBtn = new Button
             {
-                Text = " Inflict ",
-                TooltipText = $"Apply to target enemy",
-                CustomMinimumSize = new Vector2(60, 32)
+                Text = " + ",
+                TooltipText = $"Apply '{power.DisplayName}' to target enemy",
+                CustomMinimumSize = new Vector2(34, 28)
             };
             string capturedId = power.TypeName;
             applyBtn.Pressed += () =>
@@ -1906,6 +1914,8 @@ public partial class ModSettingsDialog : CanvasLayer
 
     private void RefreshRealTimePotionTabs()
     {
+        if (_dialogPanel == null || !_dialogPanel.Visible) return;
+
         if (_potionSlotsSpin != null)
         {
             int currentMaxSlots = PotionDirector.GetMaxPotionSlots();
@@ -1925,10 +1935,51 @@ public partial class ModSettingsDialog : CanvasLayer
         var player = GameHelper.GetActivePlayer();
         if (player == null)
         {
-            var noRunCard = new PanelContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
-            var noRunLbl = new Label { Text = "No active run in progress. Potion inventory will display equipped slots when in-run.", Modulate = new Color(0.7f, 0.7f, 0.75f) };
-            noRunCard.AddChild(noRunLbl);
-            _activePotionsGrid.AddChild(noRunCard);
+            int configuredSlots = ConfigManager.Current.PreRunTweaks.PotionSlots;
+            for (int i = 0; i < configuredSlots; i++)
+            {
+                var slotCard = new PanelContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+                var cardStyle = new StyleBoxFlat
+                {
+                    BgColor = new Color(0.08f, 0.09f, 0.12f, 0.85f),
+                    BorderColor = new Color(0.25f, 0.28f, 0.35f, 0.6f),
+                    BorderWidthLeft = 2,
+                    BorderWidthRight = 1,
+                    BorderWidthTop = 1,
+                    BorderWidthBottom = 1,
+                    CornerRadiusTopLeft = 6,
+                    CornerRadiusTopRight = 6,
+                    CornerRadiusBottomLeft = 6,
+                    CornerRadiusBottomRight = 6,
+                    ContentMarginLeft = 10,
+                    ContentMarginRight = 10,
+                    ContentMarginTop = 8,
+                    ContentMarginBottom = 8
+                };
+                slotCard.AddThemeStyleboxOverride("panel", cardStyle);
+
+                var slotHBox = new HBoxContainer();
+                slotHBox.AddThemeConstantOverride("separation", 10);
+
+                var slotBadge = new Label
+                {
+                    Text = $"Slot #{i + 1}:",
+                    Modulate = new Color(0.6f, 0.85f, 1f),
+                    CustomMinimumSize = new Vector2(65, 0)
+                };
+                slotHBox.AddChild(slotBadge);
+
+                var emptyLabel = new Label
+                {
+                    Text = "[ Ready for Run • Starting Potion Slot ]",
+                    Modulate = new Color(0.5f, 0.55f, 0.65f, 0.75f),
+                    SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+                };
+                slotHBox.AddChild(emptyLabel);
+
+                slotCard.AddChild(slotHBox);
+                _activePotionsGrid.AddChild(slotCard);
+            }
             return;
         }
 
@@ -2054,6 +2105,8 @@ public partial class ModSettingsDialog : CanvasLayer
 
     private void RefreshRealTimeStatusTabs()
     {
+        if (_dialogPanel == null || !_dialogPanel.Visible) return;
+
         // 1. Refresh Player active powers
         if (_playerActiveStatusesGrid != null && GodotObject.IsInstanceValid(_playerActiveStatusesGrid))
         {
@@ -2117,26 +2170,16 @@ public partial class ModSettingsDialog : CanvasLayer
                     var titleLbl = new Label
                     {
                         Text = $"{title} (Amount: {power.Amount})",
-                        Modulate = GameHelper.GetPowerTypeColor(power.Type)
+                        Modulate = GameHelper.GetPowerTypeColor(power.Type),
+                        ClipText = true,
+                        CustomMinimumSize = new Vector2(90, 0)
                     };
                     titleLbl.TooltipText = fullTooltip;
                     textVBox.AddChild(titleLbl);
 
-                    string desc = GameHelper.GetPowerDescription(power);
-                    if (!string.IsNullOrWhiteSpace(desc))
-                    {
-                        var descLbl = new Label
-                        {
-                            Text = desc,
-                            AutowrapMode = TextServer.AutowrapMode.WordSmart,
-                            Modulate = new Color(0.85f, 0.85f, 0.85f, 0.9f)
-                        };
-                        textVBox.AddChild(descLbl);
-                    }
-
                     hBox.AddChild(textVBox);
 
-                    var minusBtn = new Button { Text = " -1 ", CustomMinimumSize = new Vector2(32, 28) };
+                    var minusBtn = new Button { Text = " -1 ", CustomMinimumSize = new Vector2(30, 26) };
                     var capturedPower = power;
                     minusBtn.Pressed += () =>
                     {
@@ -2148,7 +2191,7 @@ public partial class ModSettingsDialog : CanvasLayer
                     };
                     hBox.AddChild(minusBtn);
 
-                    var plusBtn = new Button { Text = " +1 ", CustomMinimumSize = new Vector2(32, 28) };
+                    var plusBtn = new Button { Text = " +1 ", CustomMinimumSize = new Vector2(30, 26) };
                     plusBtn.Pressed += () =>
                     {
                         if (player?.Creature != null)
@@ -2159,7 +2202,7 @@ public partial class ModSettingsDialog : CanvasLayer
                     };
                     hBox.AddChild(plusBtn);
 
-                    var removeBtn = new Button { Text = " X ", TooltipText = "Remove power", CustomMinimumSize = new Vector2(30, 28) };
+                    var removeBtn = new Button { Text = " X ", TooltipText = "Remove power", CustomMinimumSize = new Vector2(28, 26) };
                     removeBtn.Pressed += () =>
                     {
                         if (player?.Creature != null)
@@ -2305,26 +2348,16 @@ public partial class ModSettingsDialog : CanvasLayer
                     var titleLbl = new Label
                     {
                         Text = $"{cleanName} • {title} (Amount: {power.Amount})",
-                        Modulate = GameHelper.GetPowerTypeColor(power.Type)
+                        Modulate = GameHelper.GetPowerTypeColor(power.Type),
+                        ClipText = true,
+                        CustomMinimumSize = new Vector2(90, 0)
                     };
                     titleLbl.TooltipText = fullTooltip;
                     textVBox.AddChild(titleLbl);
 
-                    string desc = GameHelper.GetPowerDescription(power);
-                    if (!string.IsNullOrWhiteSpace(desc))
-                    {
-                        var descLbl = new Label
-                        {
-                            Text = desc,
-                            AutowrapMode = TextServer.AutowrapMode.WordSmart,
-                            Modulate = new Color(0.85f, 0.85f, 0.85f, 0.9f)
-                        };
-                        textVBox.AddChild(descLbl);
-                    }
-
                     hBox.AddChild(textVBox);
 
-                    var minusBtn = new Button { Text = " -1 ", CustomMinimumSize = new Vector2(32, 28) };
+                    var minusBtn = new Button { Text = " -1 ", CustomMinimumSize = new Vector2(30, 26) };
                     var capturedEnemy = enemy;
                     var capturedPower = power;
                     minusBtn.Pressed += () =>
@@ -2712,8 +2745,7 @@ public partial class ModSettingsDialog : CanvasLayer
             {
                 if (entry.Label != null)
                 {
-                    var canonical = GameHelper.FindCanonicalRelicModel(entry.Id);
-                    string baseTitle = !string.IsNullOrWhiteSpace(canonical?.Title.GetFormattedText()) ? canonical.Title.GetFormattedText() : entry.Id;
+                    string baseTitle = !string.IsNullOrWhiteSpace(entry.DisplayName) ? entry.DisplayName : entry.Id;
                     if (relicCountMap.TryGetValue(entry.Id, out int count) && count > 0)
                     {
                         entry.Label.Text = $"{baseTitle} (x{count})";
@@ -2722,7 +2754,7 @@ public partial class ModSettingsDialog : CanvasLayer
                     else
                     {
                         entry.Label.Text = baseTitle;
-                        entry.Label.Modulate = GameHelper.GetRelicRarityColor(canonical);
+                        entry.Label.Modulate = entry.DefaultColor;
                     }
                 }
             }
@@ -3357,30 +3389,40 @@ public partial class ModSettingsDialog : CanvasLayer
         RefreshGrid(_discardGrid, discardCards, false, "discard");
         RefreshGrid(_exhaustGrid, exhaustCards, false, "exhaust");
 
+        var deckCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        if (deckCards != null)
+        {
+            foreach (var card in deckCards)
+            {
+                if (card != null)
+                {
+                    string name = card.GetType().Name;
+                    deckCounts[name] = deckCounts.TryGetValue(name, out int c) ? c + 1 : 1;
+                }
+            }
+        }
+
+        var handCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        if (inCombat && handCards != null)
+        {
+            foreach (var card in handCards)
+            {
+                if (card != null)
+                {
+                    string name = card.GetType().Name;
+                    handCounts[name] = handCounts.TryGetValue(name, out int c) ? c + 1 : 1;
+                }
+            }
+        }
+
         foreach (var entry in _availableCardEntries)
         {
             if (entry.Label != null)
             {
-                int deckCount = 0;
-                if (deckCards != null)
-                {
-                    foreach (var card in deckCards)
-                    {
-                        if (card != null && card.GetType().Name == entry.Id) deckCount++;
-                    }
-                }
+                deckCounts.TryGetValue(entry.Id, out int deckCount);
+                handCounts.TryGetValue(entry.Id, out int handCount);
 
-                int handCount = 0;
-                if (inCombat && handCards != null)
-                {
-                    foreach (var card in handCards)
-                    {
-                        if (card != null && card.GetType().Name == entry.Id) handCount++;
-                    }
-                }
-
-                var canonical = GameHelper.FindCanonicalCardModel(entry.Id);
-                string baseTitle = !string.IsNullOrWhiteSpace(canonical?.Title) ? canonical.Title : entry.Id;
+                string baseTitle = !string.IsNullOrWhiteSpace(entry.DisplayName) ? entry.DisplayName : entry.Id;
                 string displayText = baseTitle;
 
                 if (deckCount > 0)
@@ -3403,7 +3445,7 @@ public partial class ModSettingsDialog : CanvasLayer
                 }
                 else
                 {
-                    entry.Label.Modulate = new Color(1f, 1f, 1f);
+                    entry.Label.Modulate = entry.DefaultColor;
                 }
             }
         }
@@ -3423,7 +3465,7 @@ public partial class ModSettingsDialog : CanvasLayer
         }
 
         var player = GameHelper.GetActivePlayer();
-        ModLogger.Info($"RefreshGrid for {pileType}: cardsCount={cards?.Count ?? 0}, playerFound={player != null}, inCombat={GameHelper.IsInCombat()}");
+        ModLogger.Verbose("ModSettingsDialog", $"RefreshGrid for {pileType}: cardsCount={cards?.Count ?? 0}, playerFound={player != null}, inCombat={GameHelper.IsInCombat()}");
 
         if (player == null)
         {
@@ -3920,6 +3962,7 @@ public partial class ModSettingsDialog : CanvasLayer
         public Control Card { get; }
         public Control Container => Card;
         public Label? Label { get; }
+        public Color DefaultColor { get; }
         public string Rarity { get; }
         public string Description { get; }
         public string PoolId { get; }
@@ -3941,6 +3984,7 @@ public partial class ModSettingsDialog : CanvasLayer
             DisplayName = displayName;
             Card = card;
             Label = label;
+            DefaultColor = label?.Modulate ?? Colors.White;
             Rarity = rarity;
             Description = description;
             PoolId = poolId;
@@ -3960,6 +4004,7 @@ public partial class ModSettingsDialog : CanvasLayer
             DisplayName = label?.Text ?? id;
             Card = container;
             Label = label;
+            DefaultColor = label?.Modulate ?? Colors.White;
             PoolId = poolId;
             CardType = type;
             CardRarity = rarity;
@@ -4416,6 +4461,15 @@ public partial class ModSettingsDialog : CanvasLayer
         if (_infPotionsCheck != null) sandbox.InfinitePotions = _infPotionsCheck.ButtonPressed;
         if (_noExhaustCheck != null) sandbox.NoCardExhaust = _noExhaustCheck.ButtonPressed;
         if (_bonusDrawSpin != null) sandbox.BonusDrawPerTurn = (int)_bonusDrawSpin.Value;
+
+        if (RunTweaksSaveManager.ActiveSnapshot != null)
+        {
+            RunTweaksSaveManager.ActiveSnapshot.PreRunTweaks.EnemyHealthMultiplier = tweaks.EnemyHealthMultiplier;
+            RunTweaksSaveManager.ActiveSnapshot.PreRunTweaks.EnemyDamageMultiplier = tweaks.EnemyDamageMultiplier;
+            RunTweaksSaveManager.ActiveSnapshot.PreRunTweaks.EnemyDefendMultiplier = tweaks.EnemyDefendMultiplier;
+            RunTweaksSaveManager.ActiveSnapshot.PreRunTweaks.PlayerDamageMultiplier = tweaks.PlayerDamageMultiplier;
+            RunTweaksSaveManager.SaveActiveSnapshot();
+        }
 
         if (_dialogPanel != null)
         {

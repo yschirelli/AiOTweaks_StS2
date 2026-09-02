@@ -105,12 +105,14 @@ if [ -n "$BASELIB_PATH" ] && [ -f "$BASELIB_PATH" ]; then
     MSBUILD_PROPS="$MSBUILD_PROPS -p:BaseLibPath=\"$BASELIB_PATH\""
 fi
 
-# Restore and compile solution
-echo "Restoring packages..."
-eval "\"$DOTNET_BIN\" restore \"$SCRIPT_DIR/aiotweaks.sln\""
+# Restore if needed and compile solution
+if [ ! -f "$SCRIPT_DIR/obj/project.assets.json" ] && [ ! -f "$SCRIPT_DIR/src/.godot/mono/temp/obj/project.assets.json" ]; then
+    echo "Restoring packages..."
+    "$DOTNET_BIN" restore "$SCRIPT_DIR/aiotweaks.sln"
+fi
 
 echo "Compiling project..."
-eval "\"$DOTNET_BIN\" build \"$SCRIPT_DIR/aiotweaks.sln\" -c \"$CONFIG\" $MSBUILD_PROPS"
+eval "\"$DOTNET_BIN\" build \"$SCRIPT_DIR/aiotweaks.sln\" -c \"$CONFIG\" $MSBUILD_PROPS --no-restore"
 
 # Locate build output directory
 OUTPUT_DIR=""

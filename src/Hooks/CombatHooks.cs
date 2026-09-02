@@ -74,6 +74,8 @@ public static class CombatHooks
         }
     }
 
+    public static readonly System.Runtime.CompilerServices.ConditionalWeakTable<MegaCrit.Sts2.Core.Entities.Creatures.Creature, System.Runtime.CompilerServices.StrongBox<int>> MonsterBaseHpTable = new();
+
     [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Entities.Creatures.Creature), nameof(MegaCrit.Sts2.Core.Entities.Creatures.Creature.SetUniqueMonsterHpValue))]
     public static class CreatureSetUniqueMonsterHpValuePatch
     {
@@ -84,14 +86,20 @@ public static class CombatHooks
             {
                 if (!__instance.IsPlayer && __instance.MaxHp > 0)
                 {
+                    if (!MonsterBaseHpTable.TryGetValue(__instance, out var box))
+                    {
+                        box = new System.Runtime.CompilerServices.StrongBox<int>(__instance.MaxHp);
+                        MonsterBaseHpTable.Add(__instance, box);
+                    }
+
                     float hpMult = RuntimeStateManager.GetEffectiveEnemyHealthMultiplier();
                     if (Math.Abs(hpMult - 1.0f) > 0.001f)
                     {
-                        int original = __instance.MaxHp;
-                        int scaled = Math.Max(1, (int)Math.Round(original * hpMult));
+                        int baseHp = box.Value;
+                        int scaled = Math.Max(1, (int)Math.Round(baseHp * hpMult));
                         __instance.SetMaxHpInternal(scaled);
                         __instance.SetCurrentHpInternal(scaled);
-                        ModLogger.Info($"CombatHook: Scaled monster '{__instance.GetType().Name}' initial HP: {original} -> {scaled} (x{hpMult:F2})");
+                        ModLogger.Info($"CombatHook: Scaled monster '{__instance.GetType().Name}' initial HP: {baseHp} -> {scaled} (x{hpMult:F2})");
                     }
                 }
             }
@@ -132,26 +140,48 @@ public static class CombatHooks
     public static class HookModifyDamagePatch
     {
         [HarmonyPostfix]
-        public static void Postfix(Creature? dealer, ref decimal __result)
+        public static void Postfix(Creature? target, Creature? dealer, ref decimal __result)
         {
             try
             {
-                if (dealer != null && __result > 0)
+                if (__result > 0)
                 {
-                    if (dealer.IsPlayer)
+                    if (dealer != null)
                     {
-                        float mult = RuntimeStateManager.GetEffectivePlayerDamageMultiplier();
-                        if (Math.Abs(mult - 1.0f) > 0.001f)
+                        if (dealer.IsPlayer)
                         {
-                            __result = Math.Max(0, (decimal)Math.Round((double)__result * mult));
+                            float mult = RuntimeStateManager.GetEffectivePlayerDamageMultiplier();
+                            if (Math.Abs(mult - 1.0f) > 0.001f)
+                            {
+                                __result = Math.Max(0, (decimal)Math.Round((double)__result * mult));
+                            }
+                        }
+                        else
+                        {
+                            float mult = RuntimeStateManager.GetEffectiveEnemyDamageMultiplier();
+                            if (Math.Abs(mult - 1.0f) > 0.001f)
+                            {
+                                __result = Math.Max(0, (decimal)Math.Round((double)__result * mult));
+                            }
                         }
                     }
-                    else
+                    else if (target != null)
                     {
-                        float mult = RuntimeStateManager.GetEffectiveEnemyDamageMultiplier();
-                        if (Math.Abs(mult - 1.0f) > 0.001f)
+                        if (target.IsPlayer)
                         {
-                            __result = Math.Max(0, (decimal)Math.Round((double)__result * mult));
+                            float mult = RuntimeStateManager.GetEffectiveEnemyDamageMultiplier();
+                            if (Math.Abs(mult - 1.0f) > 0.001f)
+                            {
+                                __result = Math.Max(0, (decimal)Math.Round((double)__result * mult));
+                            }
+                        }
+                        else
+                        {
+                            float mult = RuntimeStateManager.GetEffectivePlayerDamageMultiplier();
+                            if (Math.Abs(mult - 1.0f) > 0.001f)
+                            {
+                                __result = Math.Max(0, (decimal)Math.Round((double)__result * mult));
+                            }
                         }
                     }
                 }
@@ -159,6 +189,30 @@ public static class CombatHooks
             catch (Exception ex)
             {
                 ModLogger.Debug($"HookModifyDamagePatch error: {ex.Message}");
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Hooks.Hook), nameof(MegaCrit.Sts2.Core.Hooks.Hook.ModifyBlock))]
+    public static class HookModifyBlockPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(Creature? target, ref decimal __result)
+        {
+            try
+            {
+                if (target != null && !target.IsPlayer && __result > 0)
+                {
+                    float defMult = RuntimeStateManager.GetEffectiveEnemyDefendMultiplier();
+                    if (Math.Abs(defMult - 1.0f) > 0.001f)
+                    {
+                        __result = Math.Max(0, (decimal)Math.Round((double)__result * defMult));
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Debug($"HookModifyBlockPatch error: {ex.Message}");
             }
         }
     }
@@ -185,7 +239,7 @@ public static class CombatHooks
         {
             try
             {
-                if (!__instance.IsPlayer)
+                if (!__instance.IsPlayer && amount > 0)
                 {
                     float defMult = RuntimeStateManager.GetEffectiveEnemyDefendMultiplier();
                     if (Math.Abs(defMult - 1.0f) > 0.001f)

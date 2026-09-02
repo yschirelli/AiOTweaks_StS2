@@ -226,20 +226,61 @@ public static class RelicHooks
     [HarmonyPatch(typeof(NPotionContainer), "GrowPotionHolders")]
     public static class NPotionContainer_GrowPotionHolders_Patch
     {
+        private static readonly FieldInfo? HoldersField = typeof(NPotionContainer).GetField("_holders", BindingFlags.NonPublic | BindingFlags.Instance);
+        private static readonly FieldInfo? PotionHoldersField = typeof(NPotionContainer).GetField("_potionHolders", BindingFlags.NonPublic | BindingFlags.Instance);
+        private static readonly MethodInfo? UpdateNavMethod = typeof(NPotionContainer).GetMethod("UpdateNavigation", BindingFlags.NonPublic | BindingFlags.Instance);
+
+        [HarmonyPrefix]
+        public static void Prefix(NPotionContainer __instance, int newMaxPotionSlots)
+        {
+            try
+            {
+                if (HoldersField?.GetValue(__instance) is List<NPotionHolder> holders &&
+                    PotionHoldersField?.GetValue(__instance) is Control potionHoldersCtrl)
+                {
+                    if (newMaxPotionSlots < holders.Count)
+                    {
+                        for (int i = holders.Count - 1; i >= newMaxPotionSlots; i--)
+                        {
+                            var holder = holders[i];
+                            if (holder != null && GodotObject.IsInstanceValid(holder))
+                            {
+                                if (potionHoldersCtrl != null && GodotObject.IsInstanceValid(potionHoldersCtrl) && potionHoldersCtrl.IsAncestorOf(holder))
+                                {
+                                    potionHoldersCtrl.RemoveChild(holder);
+                                }
+                                holder.QueueFree();
+                            }
+                            holders.RemoveAt(i);
+                        }
+                        UpdateNavMethod?.Invoke(__instance, null);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error("Error in NPotionContainer.GrowPotionHolders Prefix", ex);
+            }
+        }
+
         [HarmonyPostfix]
         public static void Postfix(NPotionContainer __instance, int newMaxPotionSlots)
         {
             try
             {
-                var topBar = __instance.GetParent() as NTopBar ?? 
+                var topBar = MegaCrit.Sts2.Core.Nodes.NRun.Instance?.GlobalUi?.TopBar ??
+                             __instance.GetParent() as NTopBar ?? 
                              __instance.GetOwner() as NTopBar ??
-                             GameHelper.FindNodeOfType<NTopBar>(__instance.GetTree()?.Root!);
+                             (__instance.GetTree()?.Root != null ? GameHelper.FindNodeOfType<NTopBar>(__instance.GetTree().Root) : null);
                 if (topBar != null)
                 {
                     AdjustTopBarLayout(topBar, newMaxPotionSlots);
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                ModLogger.Error("Error in NPotionContainer.GrowPotionHolders Postfix", ex);
+            }
         }
     }
 }
