@@ -50,7 +50,7 @@ public static class EconomyHooks
             try
             {
                 int maxEnergy = RunTweaksSaveManager.GetEffectivePreRunTweaks().MaxEnergy;
-                if (maxEnergy > 0)
+                if (maxEnergy > 0 && maxEnergy != 3)
                 {
                     __instance.MaxEnergy = maxEnergy;
                     ModLogger.Info($"Configured starting player MaxEnergy: {maxEnergy}");
@@ -69,6 +69,23 @@ public static class EconomyHooks
                 {
                     GameHelper.ModifyCreatureHealth(__instance.Creature, hpBonus, hpBonus);
                     ModLogger.Info($"Granted starting Max HP bonus: +{hpBonus} (Max HP: {__instance.Creature.MaxHp})");
+                }
+
+                int customPotionSlots = RunTweaksSaveManager.GetEffectivePreRunTweaks().PotionSlots;
+                if (customPotionSlots > 0 && customPotionSlots != 3)
+                {
+                    var method = typeof(Player).GetMethod("SetMaxPotionCountInternal", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                    if (method != null)
+                    {
+                        method.Invoke(__instance, new object[] { customPotionSlots });
+                    }
+                    else
+                    {
+                        int diff = customPotionSlots - __instance.MaxPotionCount;
+                        if (diff > 0) __instance.AddToMaxPotionCount(diff);
+                        else if (diff < 0) __instance.SubtractFromMaxPotionCount(-diff);
+                    }
+                    ModLogger.Info($"Configured custom starting player PotionSlots: {customPotionSlots} (was {__instance.MaxPotionCount})");
                 }
             }
             catch (Exception ex)

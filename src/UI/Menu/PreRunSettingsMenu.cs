@@ -126,7 +126,14 @@ public partial class PreRunSettingsMenu : Control
 
         var potionSlotRow = new HBoxContainer();
         potionSlotRow.AddChild(new Label { Text = "Starting Potion Slots: " });
-        _potionSlotsSpin = new SpinBox { MinValue = 1, MaxValue = 10, Step = 1, Value = 3 }.MakeNumericOnly();
+        _potionSlotsSpin = new SpinBox 
+        { 
+            MinValue = 1, 
+            MaxValue = 10, 
+            Step = 1, 
+            Value = 3,
+            TooltipText = "Default: 3. Leaving at default 3 preserves standard game logic and ascension penalties (e.g. Ascension 4+ Tight Belt starting with 2 slots)."
+        }.MakeNumericOnly();
         potionSlotRow.AddChild(_potionSlotsSpin);
         vbox.AddChild(potionSlotRow);
 

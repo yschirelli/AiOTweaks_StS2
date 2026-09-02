@@ -91,6 +91,8 @@ public sealed class ActiveRunTweaksSnapshot
             EnemyDamageMultiplier = source.EnemyDamageMultiplier,
             EnemyDefendMultiplier = source.EnemyDefendMultiplier,
             FreeMapNavigation = source.FreeMapNavigation,
+            PotionSlots = source.PotionSlots,
+            AllowMultipleRelics = source.AllowMultipleRelics,
             EndlessMode = new EndlessModeConfig
             {
                 Enabled = source.EndlessMode.Enabled,
@@ -352,6 +354,8 @@ public static class RunTweaksSaveManager
                Math.Abs(preRun.EnemyHealthMultiplier - 1.0f) > 0.001f ||
                Math.Abs(preRun.EnemyDamageMultiplier - 1.0f) > 0.001f ||
                Math.Abs(preRun.EnemyDefendMultiplier - 1.0f) > 0.001f ||
+               preRun.PotionSlots != 3 ||
+               preRun.AllowMultipleRelics ||
                Math.Abs(runSettings.GoldMultiplier - 1.0f) > 0.001f ||
                runSettings.ActiveModifiers.Count > 0 ||
                runSettings.CustomStartingCards.Count > 0 ||

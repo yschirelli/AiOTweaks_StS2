@@ -1,14 +1,19 @@
-# AIOTweaks — Slay the Spire 2 Mod & Sandbox Suite
+```text
+    ___    ____ ____  ______                    __        
+   /   |  /  _// __ \/_  __/      _____  ____ _/ /_______ 
+  / /| |  / / / / / / / / | | /| / / _ \/ __ `/ //_/ ___/ 
+ / ___ |_/ / / /_/ / / /  | |/ |/ /  __/ /_/ / ,< (__  )  
+/_/  |_/___/ \____/ /_/   |__/|__/\___/\__,_/_/|_/____/   
+                                                          
+           Slay the Spire 2 Mod & Sandbox Suite
+```
 
 [![Game](https://img.shields.io/badge/Game-Slay%20the%20Spire%202-red.svg)](https://store.steampowered.com/app/2868840/Slay_the_Spire_2/)
-[![Framework](https://img.shields.io/badge/Engine-Godot%204.3%20%28Mono%29-blue.svg)](https://godotengine.org/)
-[![Target](https://img.shields.io/badge/.NET-9.0-purple.svg)](https://dotnet.microsoft.com/)
+[![Engine](https://img.shields.io/badge/Engine-Godot%204.3%20%28Mono%29-blue.svg)](https://godotengine.org/)
+[![Runtime](https://img.shields.io/badge/.NET-9.0-purple.svg)](https://dotnet.microsoft.com/)
 [![Patching](https://img.shields.io/badge/Patching-HarmonyX-orange.svg)](https://github.com/BepInEx/HarmonyX)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
-**AIOTweaks** (All-in-One Tweaks) is an advanced Quality of Life (QoL), modding API sandbox, and real-time debugging suite designed specifically for **Slay the Spire 2** (built on Godot 4.3 Mono / C# .NET 9). 
-
-Whether you are testing new card synergies, prototyping custom balance patches, exploring procedural map generation, or experimenting with sandbox cheats, AIOTweaks gives you full runtime control over game systems through non-destructive Harmony hooks, an in-game HUD console, and a draggable/resizable tabbed configuration GUI.
+**AIOTweaks** is an all-in-one suite of cheats, quality-of-life tweaks, and sandbox tools for **Slay the Spire 2**. Whether you want to test wild card combos, stack duplicate relics, push your deck to its limits with OP builds, craft custom challenges, embark on endless loop runs, or whatever your imagination comes up with, AIOTweaks puts complete control at your fingertips via an in-game GUI overlay.
 
 ---
 
@@ -28,58 +33,37 @@ Whether you are testing new card synergies, prototyping custom balance patches, 
 
 ## Features
 
-### In-Game Debug Console & Cheat Engine
-- Toggleable overlay console (`F1` by default) with auto-scroll, command history (Up/Down navigation), quick-action buttons, and color-coded status output.
-- Instant god mode, infinite energy, one-hit kills, full enemy sweep clears, max energy adjustment, player damage multiplier scaling, and direct turn progression.
-- Live card, relic, potion, and event directors with instant runtime spawning, removal, and query inspection.
-- Safe lifecycle reset: Transient cheats and overrides automatically reset when exiting runs or returning to the main menu.
+### In-Game GUI Overlay (`F3`)
+- **Draggable & Resizable Window**: Freely movable panel with coordinate persistence across game restarts and quick layout reset.
+- **Interactive Hotkey Rebinding**: Click to reassign any hotkey directly inside the UI.
+- **Run-Lock Protection**: Pre-run options (map room count, starting gold/HP, node weights) lock automatically during active runs to prevent map corruption.
 
-### Draggable & Resizable Mod Settings GUI
-- Open the dedicated **Mod Settings Dialog** at any time via `F3` (or custom hotkey), the in-game **Mods** screen, or the **Character Select** screen. Accessible during combat and active runs!
-- **Movable & Resizable Layout**: Drag the window from the header bar, resize freely via the bottom-right grip, or reset anytime to default window layout with persistent window coordinates saved automatically.
-- **Interactive Hotkey Assignment**: Click "Assign Key" on any hotkey row to instantly bind keys (supports Esc cancellation and Backspace/Delete to clear).
-- **Run-Lock Safety**: Pre-run generation parameters (Map Room Count, Starting Bonuses, Node Weights, Neow Bonus) are safely locked while a run is active to prevent illegal mid-run map mutation.
-- Configure run modifiers: starting gold bonus, starting max HP bonus, gold reward multipliers, shop discount percentages, card reward draft counts, and spawn Neow toggle.
-- Standalone **Enemy Health Multiplier**, **Enemy Damage Multiplier**, **Enemy Defend Multiplier** (scales enemy block proportionally), and **Player Damage Multiplier**.
-- **Dynamic Max Energy Control**: Adjust baseline max energy with real-time UI synchronization and combat state tracking.
+### Pre-Run Tweaks & Modifiers
+- **Run Modifiers**: Adjust gold rewards, shop discounts, draft pool sizes, starting gold/max HP, and force Neow encounters.
+- **Combat Multipliers**: Independent sliders for player damage, enemy health, enemy damage, and enemy defend/block.
+- **Max Energy & Potion Slots**: Configure baseline energy and scale maximum potion slots from 1 to 10 with automatic top-bar layout anti-overlap shifting.
+- **Allow Multiple Relics**: Option to keep collected relics in loot pools for multi-relic stacking builds.
+- **Endless Mode**: Compounding loop scaling for enemies over infinite run loops.
+- **Custom Map Generation**: Adjust floor length (15–50 rooms), customize node distribution weights, or toggle Free Navigation ("Flying Boots") to visit any room freely.
 
-### Deck, Hand & Pile Manipulation Suite
-- Real-time tabbed views for **Current Master Deck**, **Combat Hand**, **Draw Pile**, **Discard Pile**, and **Exhaust Pile** with live card counts and keyword badges.
-- Instant card addition/removal, manual draw to hand, force exhaust, upgrade/downgrade toggling.
-- **Keyword & Attribute Editor**: Toggle attributes dynamically on any card (Ethereal, Exhaust, Innate, Eternal, Unplayable, Retain, etc.).
-- **Enchantment Director**: Apply or clear custom card enchantments with configurable multiplier/amount parameters.
-- **Relic Director**: Search, equip, stack, and remove any relic in the game with rarity color coding and live counter display.
+### Card & Deck Director
+- **Live Pile Views**: Inspect Master Deck, Hand, Draw Pile, Discard Pile, and Exhaust Pile with live counters and search filters.
+- **Runtime Modification**: Add, remove, upgrade, downgrade, or force-exhaust cards instantly.
+- **Keyword & Attribute Editor**: Toggle card keywords (Ethereal, Exhaust, Innate, Retain, Unplayable, etc.) at runtime.
+- **Enchantments**: Apply or clear card enchantments with custom scalar amounts.
 
-### Random Merchant Shop Anywhere
-- Open a freshly randomized merchant shop room anywhere during an active run (even during combat!) via dedicated button, `shop` console command, or configurable quick hotkey (`quickOpenShopKey`).
-- Buy cards, relics, potions, or purge cards on the fly without breaking run state. Closeable seamlessly via Proceed button or Escape key.
+### Relics, Potions & Events
+- **Relic Compendium**: Search, equip, stack, and remove any relic in the game.
+- **Potion Manager**: Compendium browser to grant potions, plus active slot controls to drink or discard.
+- **Event Forcing**: Force events anywhere, anytime.
+- **Merchant Anywhere**: Open a randomized shop interface mid-run via hotkey (`quickOpenShopKey`), menu button, or console command (`shop`).
 
-### Endless Mode with Compounding Enemy Scaling
-- Configurable Endless Mode loop reset scaling: $\text{Effective Multiplier} = \text{NormalMultiplier} \times (\text{EndlessMultiplier})^{\text{LoopCount}}$.
-- Dynamically scales enemy HP, incoming damage, and block values across infinite loops.
+### Combat Sandbox & Status Effects
+- **Instant Toggles**: God mode, infinite energy, one-hit kill, clear all enemies, and turn end overrides.
+- **Status Effects Manager**: Browse and apply buffs/debuffs (Strength, Dexterity, Vulnerable, Weak, Poison, Artifact, etc.) to player or active monsters with arbitrary stack counts.
 
-### Map Generation, Node Weights & Free Navigation
-- Customizable map floor/room length (15 to 50 rooms) with auto-scaling background parchment tiling and boss scroll limit recalculation.
-- Customizable node distribution weights: fine-tune the frequency of Elites, Shops, Unknown/Events, Rest Sites, Normal Combats, and Treasure Rooms.
-- **Free Map Navigation ("Flying Boots" mode)**: Click and travel to ANY room freely on the map, omni-directionally without pathing restrictions.
-- **Fair Play Safety**: Non-default map node weights automatically mark runs as Seeded/Custom to safeguard standard achievements and epoch unlocks.
-
-### Potion Management & Real-Time Slot Adjustment
-- **Dedicated Potions Tab**: Split into **Available Potions** (searchable compendium with rarity-colored titles, full game descriptions, and instant inventory add) and **Current Potions** (real-time slot inventory overview, equipped descriptions, and individual discard or use controls).
-- **Dynamic Potion Slots Adjustment**: Tweak maximum potion slots (1 to 10) in real-time with instant synchronization when relics or game events modify capacity.
-- **Top-Bar Anti-Overlap Layout System**: Expanding potion slots beyond the standard 3 smoothly shifts the Floor count, Room indicator, Boss icon, and timer to the right; reducing slots immediately pulls them back adjacent to potion holders without clipping or overlapping.
-
-### Allow Multiple Relics (Pre-Run Setting)
-- New pre-run setting **Allow Multiple Relics**: When enabled, relics in the player's inventory remain in grab bags and drop pools, allowing equipped relics to reappear in chests, shops, and combat rewards for crazy stacking runs.
-
-### Combat Status Effects (Powers / Buffs / Debuffs)
-- **Player Status Effects Subtab**: Inspect active powers on the player, increment/decrement amounts in real-time, remove specific effects, or clear all player statuses. Search and apply any power from the compendium (Weak, Frail, Vulnerable, Strength, Dexterity, Poison, Artifact, Barricade, Buffer, etc.) with custom amounts.
-- **Enemy Status Effects Subtab**: Select individual combat monsters or all active enemies simultaneously to view active status effects, modify stack counts, remove debuffs/buffs, or apply any power to target enemies. Includes out-of-battle safety notices.
-
-### Non-Destructive Hook Architecture & BaseLib Integration
-- Built with **HarmonyX** prefix and postfix patches across core game assemblies.
-- Patches fail open, ensure RoomSet Ancient/Boss fallbacks, and wrap all reflection queries in safe try-catch blocks to prevent game crashes.
-- Seamlessly registers with **BaseLib**'s `ModConfigRegistry` for native menu integration.
+### Debug Console (`F1`)
+- Overlay command-line terminal with command history, quick-action toggle buttons, and real-time color-coded event logging.
 
 ---
 

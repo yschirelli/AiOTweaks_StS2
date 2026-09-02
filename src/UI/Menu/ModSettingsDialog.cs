@@ -881,7 +881,7 @@ public partial class ModSettingsDialog : CanvasLayer
 
         var startPotionSlotsRow = new HBoxContainer();
         startPotionSlotsRow.AddChild(new Label { Text = "Starting Potion Slots: ", CustomMinimumSize = new Vector2(230, 0) });
-        _potionSlotsPreRunSpin = new SpinBox { MinValue = 1, MaxValue = 10, Step = 1, Value = 3, TooltipText = "Sets baseline starting potion slots (1-10)." }.MakeNumericOnly();
+        _potionSlotsPreRunSpin = new SpinBox { MinValue = 1, MaxValue = 10, Step = 1, Value = 3, TooltipText = "Default: 3. Leaving at default 3 preserves standard game logic and ascension penalties (e.g. Ascension 4+ Tight Belt starting with 2 slots)." }.MakeNumericOnly();
         _potionSlotsPreRunSpin.ValueChanged += _ => MarkTweaksModified();
         startPotionSlotsRow.AddChild(_potionSlotsPreRunSpin);
         preRunBox.AddChild(startPotionSlotsRow);
