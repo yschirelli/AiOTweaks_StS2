@@ -525,7 +525,7 @@ public partial class ModSettingsDialog : CanvasLayer
 
         var title = new Label
         {
-            Text = "  AIOTweaks - In-Game Mod Settings & Sandbox Suite  ",
+            Text = $"  AIOTweaks {ModEntry.GetVersionString()} - {ModEntry.BuildConfiguration}  ",
             Modulate = new Color(0.35f, 0.85f, 1f),
             MouseFilter = Control.MouseFilterEnum.Pass
         };
