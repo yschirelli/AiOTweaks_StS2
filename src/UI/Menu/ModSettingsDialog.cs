@@ -4433,7 +4433,7 @@ public partial class ModSettingsDialog : CanvasLayer
             else
             {
                 _tweaksRunLockNoticeContainer.Visible = true;
-                _tweaksRunLockNoticeLabel.Text = "[Ready for Next Run]\nPre-run tweaks and map generation settings configured below will be snapshotted when you embark on your next run.";
+                _tweaksRunLockNoticeLabel.Text = "[Ready for Next Run]\nPre-run tweaks and map generation settings configured below will be applied when you embark on your next run.";
                 _tweaksRunLockNoticeLabel.Modulate = new Color(0.4f, 0.9f, 1f);
             }
         }
