@@ -22,6 +22,39 @@ public partial class ModEntry : Node
     public const string ModName = "AIOTweaks";
     public const string ModVersion = "1.0.0";
 
+#if DEBUG
+    public const string BuildConfiguration = "DEBUG";
+#else
+    public const string BuildConfiguration = "RELEASE";
+#endif
+
+    public static string GetVersionString()
+    {
+        try
+        {
+            var infoVerAttr = (System.Reflection.AssemblyInformationalVersionAttribute?)Attribute.GetCustomAttribute(
+                typeof(ModEntry).Assembly,
+                typeof(System.Reflection.AssemblyInformationalVersionAttribute));
+            if (!string.IsNullOrWhiteSpace(infoVerAttr?.InformationalVersion))
+            {
+                string ver = infoVerAttr.InformationalVersion.Split('+')[0].Trim();
+                if (!string.IsNullOrEmpty(ver))
+                    return ver;
+            }
+
+            var asmVer = typeof(ModEntry).Assembly.GetName().Version;
+            if (asmVer != null && (asmVer.Major > 0 || asmVer.Minor > 0 || asmVer.Build > 0))
+            {
+                return $"{asmVer.Major}.{asmVer.Minor}.{Math.Max(0, asmVer.Build)}";
+            }
+        }
+        catch
+        {
+            // Fallback to static constant
+        }
+        return ModVersion;
+    }
+
     private static ModEntry? _instance;
     public static ModEntry? Instance => _instance;
     private static bool _initialized = false;

@@ -1429,8 +1429,44 @@ public partial class ModSettingsDialog : CanvasLayer
         topBar.AddChild(new Label { Text = "Target Enemy: ", CustomMinimumSize = new Vector2(105, 0) });
         _enemyOptionButton = new OptionButton { CustomMinimumSize = new Vector2(250, 0), SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         _enemyOptionButton.AddItem("All Active Enemies", 0);
-        _enemyOptionButton.ItemSelected += _ => RefreshRealTimeStatusTabs();
+        _enemyOptionButton.ItemSelected += _ => RefreshEnemyActiveStatusesGrid();
         topBar.AddChild(_enemyOptionButton);
+
+        var killEnemyBtn = new Button 
+        { 
+            Text = " Kill Selected Enemy ",
+            TooltipText = "Instantly kill the selected enemy (or all active enemies if 'All' is selected)",
+            CustomMinimumSize = new Vector2(160, 0)
+        };
+        killEnemyBtn.Pressed += () =>
+        {
+            var enemies = GameHelper.GetActiveCombatEnemies();
+            if (enemies == null || enemies.Count == 0)
+            {
+                ModLogger.Warn("Cannot kill enemy: no active combat enemies.");
+                return;
+            }
+
+            int selected = _enemyOptionButton?.Selected ?? 0;
+            if (selected <= 0)
+            {
+                CombatDirector.KillAllEnemies();
+            }
+            else
+            {
+                int enemyIdx = selected - 1;
+                if (enemyIdx >= 0 && enemyIdx < enemies.Count)
+                {
+                    var target = enemies[enemyIdx];
+                    if (target != null && !target.IsDead)
+                    {
+                        CombatDirector.KillEnemy(target);
+                    }
+                }
+            }
+            RefreshRealTimeStatusTabs();
+        };
+        topBar.AddChild(killEnemyBtn);
 
         var clearAllEnemyPowersBtn = new Button { Text = " Clear Enemy Statuses " };
         clearAllEnemyPowersBtn.Pressed += () =>
@@ -1439,7 +1475,7 @@ public partial class ModSettingsDialog : CanvasLayer
             if (enemies != null)
             {
                 int selected = _enemyOptionButton?.Selected ?? 0;
-                if (selected == 0)
+                if (selected <= 0)
                 {
                     foreach (var e in enemies)
                     {
@@ -1451,7 +1487,11 @@ public partial class ModSettingsDialog : CanvasLayer
                     int enemyIdx = selected - 1;
                     if (enemyIdx >= 0 && enemyIdx < enemies.Count)
                     {
-                        StatusDirector.ClearAllStatuses(enemies[enemyIdx]);
+                        var e = enemies[enemyIdx];
+                        if (e != null && !e.IsDead)
+                        {
+                            StatusDirector.ClearAllStatuses(e);
+                        }
                     }
                 }
                 RefreshRealTimeStatusTabs();
@@ -1596,7 +1636,7 @@ public partial class ModSettingsDialog : CanvasLayer
                 if (enemies != null && enemies.Count > 0)
                 {
                     int selected = _enemyOptionButton?.Selected ?? 0;
-                    if (selected == 0)
+                    if (selected <= 0)
                     {
                         foreach (var enemy in enemies)
                         {
@@ -1611,7 +1651,11 @@ public partial class ModSettingsDialog : CanvasLayer
                         int enemyIdx = selected - 1;
                         if (enemyIdx >= 0 && enemyIdx < enemies.Count)
                         {
-                            StatusDirector.ApplyStatus(enemies[enemyIdx], capturedId, amt);
+                            var target = enemies[enemyIdx];
+                            if (target != null && !target.IsDead)
+                            {
+                                StatusDirector.ApplyStatus(target, capturedId, amt);
+                            }
                         }
                     }
                     RefreshRealTimeStatusTabs();
@@ -2235,9 +2279,37 @@ public partial class ModSettingsDialog : CanvasLayer
             _enemyStatusNoticeLabel.Visible = !inCombat;
         }
 
-        if (_enemyOptionButton != null)
+        UpdateEnemyDropdown(enemies, inCombat);
+        RefreshEnemyActiveStatusesGrid();
+    }
+
+    private void UpdateEnemyDropdown(System.Collections.Generic.IReadOnlyList<MegaCrit.Sts2.Core.Entities.Creatures.Creature>? enemies, bool inCombat)
+    {
+        if (_enemyOptionButton == null || !GodotObject.IsInstanceValid(_enemyOptionButton)) return;
+
+        try
         {
-            int previousSelected = _enemyOptionButton.Selected;
+            int currentSelected = _enemyOptionButton.Selected;
+            int expectedItemCount = (inCombat && enemies != null) ? enemies.Count + 1 : 1;
+
+            if (_enemyOptionButton.ItemCount == expectedItemCount)
+            {
+                _enemyOptionButton.SetItemText(0, "All Active Enemies");
+                if (inCombat && enemies != null)
+                {
+                    for (int e = 0; e < enemies.Count; e++)
+                    {
+                        var enemy = enemies[e];
+                        string monsterName = enemy?.Monster?.Id.Entry ?? enemy?.GetType().Name ?? $"Enemy #{e + 1}";
+                        string cleanName = GameHelper.FormatPascalOrSnakeToWords(monsterName);
+                        int hp = enemy != null ? (int)enemy.CurrentHp : 0;
+                        int maxHp = enemy != null ? (int)enemy.MaxHp : 0;
+                        _enemyOptionButton.SetItemText(e + 1, $"Enemy #{e + 1}: {cleanName} (HP: {hp}/{maxHp})");
+                    }
+                }
+                return;
+            }
+
             _enemyOptionButton.Clear();
             _enemyOptionButton.AddItem("All Active Enemies", 0);
 
@@ -2252,20 +2324,37 @@ public partial class ModSettingsDialog : CanvasLayer
                     int maxHp = enemy != null ? (int)enemy.MaxHp : 0;
                     _enemyOptionButton.AddItem($"Enemy #{e + 1}: {cleanName} (HP: {hp}/{maxHp})", e + 1);
                 }
+            }
 
-                if (previousSelected < _enemyOptionButton.ItemCount && previousSelected >= 0)
-                {
-                    _enemyOptionButton.Select(previousSelected);
-                }
+            if (currentSelected >= 0 && currentSelected < _enemyOptionButton.ItemCount)
+            {
+                _enemyOptionButton.Select(currentSelected);
+            }
+            else
+            {
+                _enemyOptionButton.Select(0);
             }
         }
+        catch (Exception ex)
+        {
+            ModLogger.Error("UpdateEnemyDropdown notice", ex);
+        }
+    }
 
-        if (_enemyActiveStatusesGrid != null && GodotObject.IsInstanceValid(_enemyActiveStatusesGrid))
+    private void RefreshEnemyActiveStatusesGrid()
+    {
+        if (_enemyActiveStatusesGrid == null || !GodotObject.IsInstanceValid(_enemyActiveStatusesGrid)) return;
+
+        try
         {
             foreach (var child in _enemyActiveStatusesGrid.GetChildren())
             {
+                _enemyActiveStatusesGrid.RemoveChild(child);
                 child.QueueFree();
             }
+
+            var enemies = GameHelper.GetActiveCombatEnemies();
+            bool inCombat = enemies != null && enemies.Count > 0;
 
             if (!inCombat || enemies == null)
             {
@@ -2278,13 +2367,21 @@ public partial class ModSettingsDialog : CanvasLayer
 
             int selected = _enemyOptionButton?.Selected ?? 0;
             var targetEnemies = new List<MegaCrit.Sts2.Core.Entities.Creatures.Creature>();
-            if (selected == 0)
+            if (selected <= 0)
             {
                 targetEnemies.AddRange(enemies.Where(e => e != null && !e.IsDead));
             }
-            else if (selected - 1 < enemies.Count && enemies[selected - 1] != null)
+            else
             {
-                targetEnemies.Add(enemies[selected - 1]);
+                int enemyIdx = selected - 1;
+                if (enemyIdx >= 0 && enemyIdx < enemies.Count)
+                {
+                    var target = enemies[enemyIdx];
+                    if (target != null && !target.IsDead)
+                    {
+                        targetEnemies.Add(target);
+                    }
+                }
             }
 
             int totalDisplayed = 0;
@@ -2339,10 +2436,12 @@ public partial class ModSettingsDialog : CanvasLayer
                     }
 
                     var textVBox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
-                    string fullTooltip = GameHelper.GetPowerFullTooltip(power);
+                    string fullTooltip = "";
+                    try { fullTooltip = GameHelper.GetPowerFullTooltip(power); } catch { }
                     card.TooltipText = fullTooltip;
 
-                    string rawTitle = power.Title?.GetFormattedText() ?? "";
+                    string rawTitle = "";
+                    try { rawTitle = power.Title?.GetFormattedText() ?? ""; } catch { }
                     string title = !string.IsNullOrWhiteSpace(rawTitle) ? GameHelper.CleanBbCode(rawTitle) : power.GetType().Name;
 
                     var titleLbl = new Label
@@ -2395,6 +2494,10 @@ public partial class ModSettingsDialog : CanvasLayer
                 emptyCard.AddChild(emptyLbl);
                 _enemyActiveStatusesGrid.AddChild(emptyCard);
             }
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Error("RefreshEnemyActiveStatusesGrid error", ex);
         }
     }
 

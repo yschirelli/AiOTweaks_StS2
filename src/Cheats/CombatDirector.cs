@@ -87,6 +87,33 @@ public static class CombatDirector
         }
     }
 
+    public static void KillEnemy(MegaCrit.Sts2.Core.Entities.Creatures.Creature enemy)
+    {
+        if (enemy == null || enemy.IsDead) return;
+        ModLogger.Verbose("CombatDirector", $"KillEnemy: Invoked for {enemy.Monster?.Id.Entry ?? enemy.GetType().Name}...");
+        try
+        {
+            MegaCrit.Sts2.Core.Helpers.TaskHelper.RunSafely(KillSingleEnemyAsync(enemy));
+            ModLogger.Info($"Executed lethal kill on enemy {enemy.Monster?.Id.Entry ?? enemy.GetType().Name} with death animation and win condition check.");
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Error("Failed to execute direct Kill Enemy.", ex);
+        }
+    }
+
+    private static async System.Threading.Tasks.Task KillSingleEnemyAsync(MegaCrit.Sts2.Core.Entities.Creatures.Creature enemy)
+    {
+        if (enemy != null && !enemy.IsDead)
+        {
+            await MegaCrit.Sts2.Core.Commands.CreatureCmd.Kill(enemy);
+        }
+        if (MegaCrit.Sts2.Core.Combat.CombatManager.Instance != null)
+        {
+            await MegaCrit.Sts2.Core.Combat.CombatManager.Instance.CheckWinCondition();
+        }
+    }
+
     public static void AddEnergy(int amount)
     {
         ModLogger.Verbose("CombatDirector", $"AddEnergy: amount={amount}. Dispatching 'energy {amount}' to DevConsole...");
