@@ -26,6 +26,8 @@ using MegaCrit.Sts2.Core.Nodes.Screens.Shops;
 using MegaCrit.Sts2.Core.Nodes.Rooms;
 using MegaCrit.Sts2.Core.Nodes.CommonUi;
 using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
+using MegaCrit.Sts2.Core.Nodes.Combat;
+using MegaCrit.Sts2.Core.Nodes.Screens.ScreenContext;
 using MegaCrit.Sts2.Core.Assets;
 using MegaCrit.Sts2.Core.HoverTips;
 using AIOTweaks.Core.Config;
@@ -381,6 +383,106 @@ public static class GameHelper
         }
     }
 
+    private static Control? _prevScreenShakeTarget = null;
+
+    private static void RestoreScreenShakeTarget()
+    {
+        try
+        {
+            if (_prevScreenShakeTarget != null && GodotObject.IsInstanceValid(_prevScreenShakeTarget) && _prevScreenShakeTarget.IsValid())
+            {
+                NGame.Instance?.SetScreenShakeTarget(_prevScreenShakeTarget);
+                ModLogger.Verbose("GameHelper", "Restored previous ScreenShakeTarget.");
+            }
+            else
+            {
+                // Fallback: If in combat, target combat room's SceneContainer; if in event, event container
+                if (NCombatRoom.Instance != null && GodotObject.IsInstanceValid(NCombatRoom.Instance) && NCombatRoom.Instance.SceneContainer != null)
+                {
+                    NGame.Instance?.SetScreenShakeTarget(NCombatRoom.Instance.SceneContainer);
+                    ModLogger.Verbose("GameHelper", "Restored ScreenShakeTarget to NCombatRoom.Instance.SceneContainer.");
+                }
+                else if (NRun.Instance?.EventRoom != null && GodotObject.IsInstanceValid(NRun.Instance.EventRoom))
+                {
+                    var eventContainer = NRun.Instance.EventRoom.GetNodeOrNull<Control>("EventContainer")
+                                      ?? NRun.Instance.EventRoom.GetNodeOrNull<Control>("%EventContainer")
+                                      ?? NRun.Instance.EventRoom.FindChild("EventContainer", true, false) as Control;
+                    if (eventContainer != null)
+                    {
+                        NGame.Instance?.SetScreenShakeTarget(eventContainer);
+                        ModLogger.Verbose("GameHelper", "Restored ScreenShakeTarget to NRun.Instance.EventRoom.EventContainer.");
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Error("Error in RestoreScreenShakeTarget", ex);
+        }
+        finally
+        {
+            _prevScreenShakeTarget = null;
+        }
+    }
+
+    /// <summary>
+    /// Completely tears down the standalone shop overlay, restores screen shake target,
+    /// releases stale GUI focus, refreshes ActiveScreenContext, and ensures combat UI is enabled.
+    /// </summary>
+    public static void CleanUpShopOverlay(CanvasLayer? canvasLayer, NProceedButton? proceedButton, NMerchantInventory? inventoryNode)
+    {
+        try
+        {
+            if (proceedButton != null && GodotObject.IsInstanceValid(proceedButton))
+            {
+                try { proceedButton.Disable(); } catch { }
+            }
+
+            if (canvasLayer != null && GodotObject.IsInstanceValid(canvasLayer))
+            {
+                if (canvasLayer.GetParent() != null)
+                {
+                    canvasLayer.GetParent().RemoveChild(canvasLayer);
+                }
+                canvasLayer.QueueFree();
+            }
+
+            // Restore screen shake target to prevent screen shake breaking after shop closes
+            RestoreScreenShakeTarget();
+
+            // Release GUI focus from freed controls
+            try
+            {
+                var tree = Engine.GetMainLoop() as SceneTree;
+                tree?.Root?.GetViewport()?.GuiReleaseFocus();
+            }
+            catch { }
+
+            // Refresh active screen context so subsequent screens (like card selection overlays) become current
+            try
+            {
+                ActiveScreenContext.Instance?.Update();
+            }
+            catch { }
+
+            // Ensure combat room UI is re-enabled if in combat
+            try
+            {
+                if (CombatManager.Instance != null && CombatManager.Instance.IsInProgress)
+                {
+                    NCombatRoom.Instance?.Ui?.Enable();
+                }
+            }
+            catch { }
+
+            ModLogger.Verbose("GameHelper", "Standalone shop overlay cleanly disposed, focus released, and combat UI refreshed.");
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Error("Error during CleanUpShopOverlay", ex);
+        }
+    }
+
     /// <summary>
     /// Checks if the standalone shop overlay menu is currently open.
     /// </summary>
@@ -390,7 +492,7 @@ public static class GameHelper
         {
             var tree = (SceneTree)Engine.GetMainLoop();
             var existingLayer = tree?.Root?.GetNodeOrNull<CanvasLayer>("AIOTweaks_ShopCanvasLayer");
-            return existingLayer != null && GodotObject.IsInstanceValid(existingLayer);
+            return existingLayer != null && GodotObject.IsInstanceValid(existingLayer) && !existingLayer.IsQueuedForDeletion();
         }
         catch
         {
@@ -410,12 +512,16 @@ public static class GameHelper
             if (existingLayer != null && GodotObject.IsInstanceValid(existingLayer))
             {
                 NMerchantInventory? inv = null;
+                NProceedButton? proceedBtn = null;
                 foreach (var child in existingLayer.GetChildren())
                 {
                     if (child is NMerchantInventory i)
                     {
                         inv = i;
-                        break;
+                    }
+                    else if (child is NProceedButton pb)
+                    {
+                        proceedBtn = pb;
                     }
                 }
                 if (inv == null)
@@ -424,6 +530,12 @@ public static class GameHelper
                        ?? existingLayer.GetNodeOrNull<NMerchantInventory>("%Inventory")
                        ?? existingLayer.FindChild("Inventory", true, false) as NMerchantInventory;
                 }
+                if (proceedBtn == null)
+                {
+                    proceedBtn = existingLayer.GetNodeOrNull<NProceedButton>("ProceedButton")
+                              ?? existingLayer.GetNodeOrNull<NProceedButton>("%ProceedButton")
+                              ?? existingLayer.FindChild("ProceedButton", true, false) as NProceedButton;
+                }
 
                 if (inv != null && GodotObject.IsInstanceValid(inv) && inv.IsOpen)
                 {
@@ -431,7 +543,7 @@ public static class GameHelper
                 }
                 else
                 {
-                    existingLayer.QueueFree();
+                    CleanUpShopOverlay(existingLayer, proceedBtn, inv);
                 }
                 return true;
             }
@@ -480,6 +592,9 @@ public static class GameHelper
 
         try
         {
+            // Cache screen shake target before opening shop overlay so we can restore it when closed
+            _prevScreenShakeTarget = NGame.Instance?.ScreenshakeTarget;
+
             var tree = (SceneTree)Engine.GetMainLoop();
             if (tree?.Root == null) return false;
 
@@ -487,7 +602,7 @@ public static class GameHelper
             var existingLayer = tree.Root.GetNodeOrNull<CanvasLayer>("AIOTweaks_ShopCanvasLayer");
             if (existingLayer != null && GodotObject.IsInstanceValid(existingLayer))
             {
-                existingLayer.QueueFree();
+                CleanUpShopOverlay(existingLayer, null, null);
             }
 
             // Load merchant room scene
@@ -582,18 +697,7 @@ public static class GameHelper
             // Connect close event to clean up canvasLayer
             inventoryNode.InventoryClosed += () =>
             {
-                if (proceedButton != null && GodotObject.IsInstanceValid(proceedButton))
-                {
-                    proceedButton.Disable();
-                }
-
-                Callable.From(() =>
-                {
-                    if (GodotObject.IsInstanceValid(canvasLayer))
-                    {
-                        canvasLayer.QueueFree();
-                    }
-                }).CallDeferred();
+                CleanUpShopOverlay(canvasLayer, proceedButton, inventoryNode);
             };
 
             inventoryNode.Open();

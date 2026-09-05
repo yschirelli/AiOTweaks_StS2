@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Godot;
 using HarmonyLib;
 using AIOTweaks.Core.Config;
@@ -8,6 +9,7 @@ using AIOTweaks.Hooks;
 using AIOTweaks.UI.Menu;
 using AIOTweaks.UI.Overlay;
 
+using MegaCrit.Sts2.Core.Localization;
 using MegaCrit.Sts2.Core.Modding;
 
 namespace AIOTweaks.Core;
@@ -20,7 +22,7 @@ public partial class ModEntry : Node
 {
     public const string ModId = "AIOTweaks";
     public const string ModName = "AIOTweaks";
-    public const string ModVersion = "1.0.0";
+    public const string ModVersion = "1.0.1";
 
 #if DEBUG
     public const string BuildConfiguration = "DEBUG";
@@ -142,6 +144,16 @@ public partial class ModEntry : Node
 
             InitializeHarmony();
             AttachUIComponents();
+            RegisterLocalizationStrings();
+
+            try
+            {
+                LocManager.Instance?.SubscribeToLocaleChange(RegisterLocalizationStrings);
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Debug($"LocManager.SubscribeToLocaleChange note: {ex.Message}");
+            }
 
             if (GetTree()?.Root != null)
             {
@@ -227,8 +239,14 @@ public partial class ModEntry : Node
 
         try
         {
-            ModLogger.Verbose("ModEntry", $"Unpatching Harmony ID '{ModId}'...");
+            ModLogger.Verbose("ModEntry", "Unpatching Harmony ID '{ModId}'...");
             _harmony?.UnpatchAll(ModId);
+
+            try
+            {
+                LocManager.Instance?.UnsubscribeToLocaleChange(RegisterLocalizationStrings);
+            }
+            catch { }
 
             ModLogger.Verbose("ModEntry", "Freeing UI overlay nodes...");
             _debugConsoleOverlay?.QueueFree();
@@ -241,6 +259,37 @@ public partial class ModEntry : Node
         catch (Exception ex)
         {
             ModLogger.Error($"Error during {ModName} unload.", ex);
+        }
+    }
+
+    /// <summary>
+    /// Registers custom AIOTweaks localization strings into the game's LocManager tables.
+    /// Safe to call multiple times or during locale changes.
+    /// </summary>
+    public static void RegisterLocalizationStrings()
+    {
+        try
+        {
+            if (LocManager.Instance != null)
+            {
+                var ancientsTable = LocManager.Instance.GetTable("ancients");
+                if (ancientsTable != null)
+                {
+                    var customStrings = new Dictionary<string, string>
+                    {
+                        { "AIOTWEAKS_ENDLESS_PROCEED.title", "[Endless] Loop to Act 1" },
+                        { "AIOTWEAKS_ENDLESS_PROCEED.description", "Restart from Act 1 with scaled enemies while keeping all cards, relics, and stats." },
+                        { "AIOTWEAKS_ENDLESS_LEAVE.title", "Victory (Leave to Menu)" },
+                        { "AIOTWEAKS_ENDLESS_LEAVE.description", "Complete the run and return to the main menu." }
+                    };
+                    ancientsTable.MergeWith(customStrings);
+                    ModLogger.Verbose("ModEntry", "Merged AIOTweaks Endless Mode localization keys into 'ancients' LocTable.");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Warn($"RegisterLocalizationStrings warning: {ex.Message}");
         }
     }
 }

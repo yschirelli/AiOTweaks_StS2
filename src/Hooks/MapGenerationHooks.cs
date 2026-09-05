@@ -17,6 +17,9 @@ using MegaCrit.Sts2.Core.Map;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Acts;
 using MegaCrit.Sts2.Core.Models.Encounters;
+using MegaCrit.Sts2.Core.Context;
+using MegaCrit.Sts2.Core.Events;
+using MegaCrit.Sts2.Core.Localization;
 using MegaCrit.Sts2.Core.Models.Events;
 using MegaCrit.Sts2.Core.Nodes;
 using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
@@ -577,50 +580,170 @@ public static class MapGenerationHooks
         }
     }
 
-    [HarmonyPatch(typeof(RunManager), nameof(RunManager.WinRun))]
-    public static class RunManagerWinRunPatch
+    /// <summary>
+    /// Intercepts TheArchitect cutscene options in Endless Mode.
+    /// Replaces the single "PROCEED" button with a choice to either loop back to Act 1 (Endless) or leave to the menu (Victory).
+    /// </summary>
+    [HarmonyPatch(typeof(EventModel), "SetEventState")]
+    public static class EventModelSetEventStatePatch
     {
         [HarmonyPrefix]
-        public static bool Prefix(RunManager __instance, ref Task __result)
+        public static void Prefix(EventModel __instance, LocString description, ref IEnumerable<EventOption> eventOptions)
         {
             try
             {
-                var tweaks = RunTweaksSaveManager.GetEffectivePreRunTweaks();
-                if (tweaks.EndlessMode.Enabled)
+                if (__instance is TheArchitect architect && RunTweaksSaveManager.GetEffectivePreRunTweaks().EndlessMode.Enabled)
                 {
-                    ModLogger.Info("Endless Mode active upon Act completion! Looping back to Act 0 and scaling enemies...");
-                    RunTweaksSaveManager.IncrementEndlessLoop();
-                    __result = LoopEndlessRunAsync(__instance);
-                    return false;
+                    var optionsList = eventOptions as IList<EventOption> ?? eventOptions.ToList();
+                    if (optionsList.Any(o => o.TextKey == "PROCEED" || o.IsProceed))
+                    {
+                        ModLogger.Info("TheArchitect cutscene reached final option in Endless Mode. Presenting Loop vs Victory choice.");
+                        ModEntry.RegisterLocalizationStrings();
+
+                        var endlessProceed = new EventOption(
+                            architect,
+                            () => OnEndlessProceedChosen(architect),
+                            "AIOTWEAKS_ENDLESS_PROCEED",
+                            disableOnChosen: true,
+                            isProceed: false
+                        ).ThatWontSaveToChoiceHistory();
+
+                        var endlessLeave = new EventOption(
+                            architect,
+                            () => OnEndlessLeaveChosen(architect),
+                            "AIOTWEAKS_ENDLESS_LEAVE",
+                            disableOnChosen: true,
+                            isProceed: false
+                        ).ThatWontSaveToChoiceHistory();
+
+                        eventOptions = new List<EventOption> { endlessProceed, endlessLeave };
+                    }
                 }
             }
             catch (Exception ex)
             {
-                ModLogger.Error("Error evaluating Endless Mode in RunManager.WinRun", ex);
+                ModLogger.Error("Error in EventModelSetEventStatePatch for Endless Mode", ex);
             }
-            return true;
         }
+    }
 
+    private static async Task PlayArchitectAttackAnimationsAsync(TheArchitect architect)
+    {
+        try
+        {
+            if (!LocalContext.IsMe(architect.Owner)) return;
+
+            var dialogueProp = typeof(TheArchitect).GetProperty("Dialogue", BindingFlags.Instance | BindingFlags.NonPublic);
+            var dialogue = dialogueProp?.GetValue(architect);
+            if (dialogue == null) return;
+
+            var endAttackersProp = dialogue.GetType().GetProperty("EndAttackers", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            var endAttackers = endAttackersProp?.GetValue(dialogue);
+            if (endAttackers == null) return;
+
+            var animPlayerMethod = typeof(TheArchitect).GetMethod("AnimPlayerAttackIfNecessary", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (animPlayerMethod != null)
+            {
+                var task = (Task)animPlayerMethod.Invoke(architect, new object[] { endAttackers })!;
+                await task;
+            }
+
+            var animArchMethod = typeof(TheArchitect).GetMethod("AnimArchitectAttackIfNecessary", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (animArchMethod != null)
+            {
+                var task = (Task)animArchMethod.Invoke(architect, new object[] { endAttackers })!;
+                await task;
+            }
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Error("Error playing architect attack animations", ex);
+        }
+    }
+
+    private static async Task OnEndlessProceedChosen(TheArchitect architect)
+    {
+        try
+        {
+            ModLogger.Info("Player chose [Endless Loop to Act 1] at Architect cutscene.");
+            await PlayArchitectAttackAnimationsAsync(architect);
+
+            // Clear event options to dismiss buttons
+            var emptyLocString = new LocString("ancients", "PROCEED.description");
+            var setEventStateMethod = typeof(EventModel).GetMethod("SetEventState", BindingFlags.Instance | BindingFlags.NonPublic);
+            setEventStateMethod?.Invoke(architect, new object[] { emptyLocString, Array.Empty<EventOption>() });
+
+            ModLogger.Info("Endless Mode looping back to Act 0 and scaling enemies...");
+            RunTweaksSaveManager.IncrementEndlessLoop();
+
+            // Execute EnterAct deferred so this option task completes immediately,
+            // avoiding the deadlock with EventSynchronizer.AwaitPendingOptionTasks()!
+            Callable.From(() =>
+            {
+                _ = ExecuteDeferredEnterAct();
+            }).CallDeferred();
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Error("Error in OnEndlessProceedChosen", ex);
+        }
+    }
+
+    private static async Task ExecuteDeferredEnterAct()
+    {
+        try
+        {
+            ModLogger.Info("Starting deferred EnterAct(0, true)...");
+            if (RunManager.Instance != null)
+            {
+                await RunManager.Instance.EnterAct(0, true);
+                ModLogger.Info("Deferred EnterAct(0, true) completed successfully.");
+            }
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Error("Error executing deferred EnterAct(0, true)", ex);
+        }
+    }
+
+    private static async Task OnEndlessLeaveChosen(TheArchitect architect)
+    {
+        try
+        {
+            ModLogger.Info("Player chose [Victory (Leave to Menu)] at Architect cutscene.");
+            await PlayArchitectAttackAnimationsAsync(architect);
+
+            // Clear event options
+            var emptyLocString = new LocString("ancients", "PROCEED.description");
+            var setEventStateMethod = typeof(EventModel).GetMethod("SetEventState", BindingFlags.Instance | BindingFlags.NonPublic);
+            setEventStateMethod?.Invoke(architect, new object[] { emptyLocString, Array.Empty<EventOption>() });
+
+            RunTweaksSaveManager.ClearActiveRun("EndlessModeVictory");
+            if (RunManager.Instance != null)
+            {
+                await RunManager.Instance.WinRun();
+            }
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Error("Error in OnEndlessLeaveChosen", ex);
+        }
+    }
+
+    [HarmonyPatch(typeof(RunManager), nameof(RunManager.WinRun))]
+    public static class RunManagerWinRunPatch
+    {
         [HarmonyPostfix]
         public static void Postfix()
         {
             try
             {
-                var tweaks = RunTweaksSaveManager.GetEffectivePreRunTweaks();
-                if (!tweaks.EndlessMode.Enabled)
-                {
-                    RunTweaksSaveManager.ClearActiveRun("WinRun");
-                }
+                RunTweaksSaveManager.ClearActiveRun("WinRun");
             }
             catch (Exception ex)
             {
                 ModLogger.Error("Error in RunManagerWinRunPatch clearing active run snapshot", ex);
             }
-        }
-
-        private static async Task LoopEndlessRunAsync(RunManager runManager)
-        {
-            await runManager.EnterAct(0, true);
         }
     }
 

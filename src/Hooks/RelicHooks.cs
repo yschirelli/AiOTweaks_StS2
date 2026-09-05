@@ -1,12 +1,15 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using Godot;
 using HarmonyLib;
 using AIOTweaks.Core;
 using AIOTweaks.Core.Config;
 using AIOTweaks.Core.Logging;
+using MegaCrit.Sts2.Core.Entities.Merchant;
 using MegaCrit.Sts2.Core.Entities.Relics;
+using MegaCrit.Sts2.Core.Factories;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Nodes.CommonUi;
 using MegaCrit.Sts2.Core.Nodes.Potions;
@@ -93,11 +96,64 @@ public static class RelicHooks
                     {
                         if (!list.Contains(__result))
                         {
-                            list.Add(__result);
+                            // Rotating to front ensures subsequent PullFromBack calls pull other relics before repeating
+                            list.Insert(0, __result);
                         }
                     }
                 }
                 catch { }
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(MerchantInventory), "PopulateRelicEntries")]
+    public static class MerchantInventory_PopulateRelicEntries_Patch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix(MerchantInventory __instance)
+        {
+            if (!ConfigManager.Current.PreRunTweaks.AllowMultipleRelics)
+            {
+                return true;
+            }
+
+            try
+            {
+                var player = __instance.Player;
+                var rarities = new RelicRarity[3]
+                {
+                    RelicFactory.RollRarity(player),
+                    RelicFactory.RollRarity(player),
+                    RelicRarity.Shop
+                };
+
+                var rolledRelics = new List<RelicModel>();
+
+                foreach (var rarity in rarities)
+                {
+                    var relic = RelicFactory.PullNextRelicFromBack(
+                        player,
+                        rarity,
+                        r => !rolledRelics.Any(seen => seen.Id == r.Id) && r.IsAllowedInShops
+                    )?.ToMutable();
+
+                    if (relic != null)
+                    {
+                        rolledRelics.Add(relic);
+                        __instance.AddRelicEntry(new MerchantRelicEntry(relic, player));
+                    }
+                    else
+                    {
+                        __instance.AddRelicEntry(new MerchantRelicEntry(rarity, player));
+                    }
+                }
+
+                return false;
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error("Error in MerchantInventory_PopulateRelicEntries_Patch", ex);
+                return true;
             }
         }
     }
