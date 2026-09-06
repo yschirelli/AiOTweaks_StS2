@@ -286,6 +286,7 @@ Settings persist directly inside the mod root directory (`mods/AIOTweaks/config.
     "forceNeowBonus": true,
     "mapRoomCount": 15,
     "playerDamageMultiplier": 1.0,
+    "playerDefendMultiplier": 1.0,
     "maxEnergy": 3,
     "enemyHealthMultiplier": 1.0,
     "enemyDamageMultiplier": 1.0,

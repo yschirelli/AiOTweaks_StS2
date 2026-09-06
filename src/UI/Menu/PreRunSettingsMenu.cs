@@ -33,6 +33,7 @@ public partial class PreRunSettingsMenu : Control
     private SpinBox? _bonusHpSpin;
     private SpinBox? _potionSlotsSpin;
     private CheckBox? _allowMultipleRelicsCheck;
+    private CheckBox? _forceNeowCheck;
     private Label? _statusBannerLabel;
 
     public override void _Ready()
@@ -144,6 +145,13 @@ public partial class PreRunSettingsMenu : Control
         };
         vbox.AddChild(_allowMultipleRelicsCheck);
 
+        _forceNeowCheck = new CheckBox 
+        { 
+            Text = " Spawn Neow at start? (Uncheck to skip Neow and start directly on map)",
+            TooltipText = "Guarantees Neow blessing when checked (default: enabled). When unchecked, skips Neow and starts directly on the map."
+        };
+        vbox.AddChild(_forceNeowCheck);
+
         vbox.AddChild(new HSeparator());
 
         var btnRow = new HBoxContainer();
@@ -214,6 +222,7 @@ public partial class PreRunSettingsMenu : Control
         if (_bonusHpSpin != null) _bonusHpSpin.Value = tweaks.StartingMaxHpBonus;
         if (_potionSlotsSpin != null) _potionSlotsSpin.Value = tweaks.PotionSlots;
         if (_allowMultipleRelicsCheck != null) _allowMultipleRelicsCheck.ButtonPressed = tweaks.AllowMultipleRelics;
+        if (_forceNeowCheck != null) _forceNeowCheck.ButtonPressed = tweaks.ForceNeowBonus;
     }
 
     private void OnSavePressed()
@@ -230,6 +239,7 @@ public partial class PreRunSettingsMenu : Control
         if (_bonusHpSpin != null) tweaks.StartingMaxHpBonus = (int)_bonusHpSpin.Value;
         if (_potionSlotsSpin != null) tweaks.PotionSlots = (int)_potionSlotsSpin.Value;
         if (_allowMultipleRelicsCheck != null) tweaks.AllowMultipleRelics = _allowMultipleRelicsCheck.ButtonPressed;
+        if (_forceNeowCheck != null) tweaks.ForceNeowBonus = _forceNeowCheck.ButtonPressed;
 
         ConfigManager.SaveConfig();
         ModLogger.Info("Pre-run settings saved successfully.");

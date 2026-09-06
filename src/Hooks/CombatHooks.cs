@@ -201,9 +201,12 @@ public static class CombatHooks
         {
             try
             {
-                if (target != null && !target.IsPlayer && __result > 0)
+                if (target != null && __result > 0)
                 {
-                    float defMult = RuntimeStateManager.GetEffectiveEnemyDefendMultiplier();
+                    float defMult = target.IsPlayer
+                        ? RuntimeStateManager.GetEffectivePlayerDefendMultiplier()
+                        : RuntimeStateManager.GetEffectiveEnemyDefendMultiplier();
+
                     if (Math.Abs(defMult - 1.0f) > 0.001f)
                     {
                         __result = Math.Max(0, (decimal)Math.Round((double)__result * defMult));
@@ -239,14 +242,18 @@ public static class CombatHooks
         {
             try
             {
-                if (!__instance.IsPlayer && amount > 0)
+                if (amount > 0)
                 {
-                    float defMult = RuntimeStateManager.GetEffectiveEnemyDefendMultiplier();
+                    float defMult = __instance.IsPlayer
+                        ? RuntimeStateManager.GetEffectivePlayerDefendMultiplier()
+                        : RuntimeStateManager.GetEffectiveEnemyDefendMultiplier();
+
                     if (Math.Abs(defMult - 1.0f) > 0.001f)
                     {
                         decimal original = amount;
                         amount = Math.Max(0, (decimal)Math.Round((double)amount * defMult));
-                        ModLogger.Verbose("CombatHooks", $"Enemy GainBlockInternal ({__instance.GetType().Name}): {original} -> {amount} (x{defMult:F2})");
+                        string creatureType = __instance.IsPlayer ? "Player" : "Enemy";
+                        ModLogger.Verbose("CombatHooks", $"{creatureType} GainBlockInternal ({__instance.GetType().Name}): {original} -> {amount} (x{defMult:F2})");
                     }
                 }
             }

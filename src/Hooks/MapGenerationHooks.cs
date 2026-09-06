@@ -89,6 +89,7 @@ public sealed class ActiveRunTweaksSnapshot
             ForceNeowBonus = source.ForceNeowBonus,
             MapRoomCount = source.MapRoomCount,
             PlayerDamageMultiplier = source.PlayerDamageMultiplier,
+            PlayerDefendMultiplier = source.PlayerDefendMultiplier,
             MaxEnergy = source.MaxEnergy,
             EnemyHealthMultiplier = source.EnemyHealthMultiplier,
             EnemyDamageMultiplier = source.EnemyDamageMultiplier,
@@ -353,6 +354,7 @@ public static class RunTweaksSaveManager
                preRun.StartingGoldBonus != 0 ||
                preRun.StartingMaxHpBonus != 0 ||
                Math.Abs(preRun.PlayerDamageMultiplier - 1.0f) > 0.001f ||
+               Math.Abs(preRun.PlayerDefendMultiplier - 1.0f) > 0.001f ||
                preRun.MaxEnergy != 3 ||
                Math.Abs(preRun.EnemyHealthMultiplier - 1.0f) > 0.001f ||
                Math.Abs(preRun.EnemyDamageMultiplier - 1.0f) > 0.001f ||
@@ -1974,6 +1976,31 @@ public static class MapGenerationHooks
             catch (Exception ex)
             {
                 ModLogger.Error("Error in OvergrowthGetUnlockedAncientsPatch", ex);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Guarantees that Underdocks (Act 1 variant) always provides Neow as an unlocked Ancient
+    /// whenever ForceNeowBonus is enabled or when the profile has not yet unlocked NeowEpoch.
+    /// </summary>
+    [HarmonyPatch(typeof(Underdocks), nameof(Underdocks.GetUnlockedAncients))]
+    public static class UnderdocksGetUnlockedAncientsPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(Underdocks __instance, UnlockState unlockState, ref IEnumerable<AncientEventModel> __result)
+        {
+            try
+            {
+                if (RunTweaksSaveManager.GetEffectivePreRunTweaks().ForceNeowBonus || !__result.Any())
+                {
+                    __result = new AncientEventModel[] { ModelDb.AncientEvent<Neow>() };
+                    ModLogger.Verbose("MapGenerationHooks", "Underdocks.GetUnlockedAncients: Injected Neow into unlocked ancients list.");
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error("Error in UnderdocksGetUnlockedAncientsPatch", ex);
             }
         }
     }

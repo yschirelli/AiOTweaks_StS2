@@ -67,6 +67,7 @@ public partial class ModSettingsDialog : CanvasLayer
     private PanelContainer? _tweaksRunLockNoticeContainer;
 
     private HSlider? _playerDmgSlider;
+    private HSlider? _playerDefSlider;
     private SpinBox? _maxEnergySpin;
 
     private HSlider? _enemyHpSlider;
@@ -597,6 +598,7 @@ public partial class ModSettingsDialog : CanvasLayer
             ConfigManager.Current.PreRunTweaks.FreeMapNavigation = false;
 
             ConfigManager.Current.PreRunTweaks.PlayerDamageMultiplier = 1.0f;
+            ConfigManager.Current.PreRunTweaks.PlayerDefendMultiplier = 1.0f;
             ConfigManager.Current.PreRunTweaks.MaxEnergy = 3;
 
             ConfigManager.Current.CombatSandbox.GodMode = false;
@@ -1019,6 +1021,19 @@ public partial class ModSettingsDialog : CanvasLayer
             if (RunTweaksSaveManager.ActiveSnapshot != null)
             {
                 RunTweaksSaveManager.ActiveSnapshot.PreRunTweaks.PlayerDamageMultiplier = (float)val;
+                RunTweaksSaveManager.SaveActiveSnapshot();
+            }
+            GameHelper.RefreshAllVisibleCards();
+        };
+
+        _playerDefSlider = AddSliderControl(playerScalingBox, "Player Defend/Block Multiplier:", 0.0f, 10.0f, 0.1f, 1.0f);
+        _playerDefSlider.ValueChanged += val =>
+        {
+            MarkTweaksModified();
+            ConfigManager.Current.PreRunTweaks.PlayerDefendMultiplier = (float)val;
+            if (RunTweaksSaveManager.ActiveSnapshot != null)
+            {
+                RunTweaksSaveManager.ActiveSnapshot.PreRunTweaks.PlayerDefendMultiplier = (float)val;
                 RunTweaksSaveManager.SaveActiveSnapshot();
             }
             GameHelper.RefreshAllVisibleCards();
@@ -4467,6 +4482,7 @@ public partial class ModSettingsDialog : CanvasLayer
         if (_enemyDefSlider != null) _enemyDefSlider.Value = tweaks.EnemyDefendMultiplier;
 
         if (_playerDmgSlider != null) _playerDmgSlider.Value = tweaks.PlayerDamageMultiplier;
+        if (_playerDefSlider != null) _playerDefSlider.Value = tweaks.PlayerDefendMultiplier;
         if (_maxEnergySpin != null) _maxEnergySpin.Value = tweaks.MaxEnergy;
 
         if (_endlessModeCheck != null) _endlessModeCheck.ButtonPressed = tweaks.EndlessMode.Enabled;
@@ -4543,6 +4559,11 @@ public partial class ModSettingsDialog : CanvasLayer
             tweaks.PlayerDamageMultiplier = (float)_playerDmgSlider.Value;
             GameHelper.RefreshAllVisibleCards();
         }
+        if (_playerDefSlider != null)
+        {
+            tweaks.PlayerDefendMultiplier = (float)_playerDefSlider.Value;
+            GameHelper.RefreshAllVisibleCards();
+        }
         if (_maxEnergySpin != null)
         {
             int energyVal = (int)_maxEnergySpin.Value;
@@ -4571,6 +4592,7 @@ public partial class ModSettingsDialog : CanvasLayer
             RunTweaksSaveManager.ActiveSnapshot.PreRunTweaks.EnemyDamageMultiplier = tweaks.EnemyDamageMultiplier;
             RunTweaksSaveManager.ActiveSnapshot.PreRunTweaks.EnemyDefendMultiplier = tweaks.EnemyDefendMultiplier;
             RunTweaksSaveManager.ActiveSnapshot.PreRunTweaks.PlayerDamageMultiplier = tweaks.PlayerDamageMultiplier;
+            RunTweaksSaveManager.ActiveSnapshot.PreRunTweaks.PlayerDefendMultiplier = tweaks.PlayerDefendMultiplier;
             RunTweaksSaveManager.SaveActiveSnapshot();
         }
 

@@ -93,6 +93,9 @@ public sealed class PreRunTweaksConfig
     [JsonPropertyName("playerDamageMultiplier")]
     public float PlayerDamageMultiplier { get; set; } = 1.0f;
 
+    [JsonPropertyName("playerDefendMultiplier")]
+    public float PlayerDefendMultiplier { get; set; } = 1.0f;
+
     [JsonPropertyName("maxEnergy")]
     public int MaxEnergy { get; set; } = 3;
 

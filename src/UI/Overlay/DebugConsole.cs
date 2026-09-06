@@ -627,6 +627,21 @@ public partial class DebugConsole : CanvasLayer
                 }
                 break;
 
+            case "playerdef":
+            case "defmult":
+                if (parts.Length > 1 && float.TryParse(parts[1], System.Globalization.CultureInfo.InvariantCulture, out float defMult))
+                {
+                    ConfigManager.Current.PreRunTweaks.PlayerDefendMultiplier = Math.Max(0f, defMult);
+                    GameHelper.RefreshAllVisibleCards();
+                    LogToConsole($"[color=green]Player defend multiplier set to {defMult:F2}x. Card block values updated.[/color]");
+                }
+                else
+                {
+                    LogToConsole($"[color=yellow]Current Player Defend Multiplier: {ConfigManager.Current.PreRunTweaks.PlayerDefendMultiplier:F2}x[/color]");
+                    LogToConsole("[color=red]Usage: playerdef <multiplier>[/color]");
+                }
+                break;
+
             case "shop":
             case "openshop":
             case "merchant":
