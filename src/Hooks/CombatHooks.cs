@@ -197,19 +197,36 @@ public static class CombatHooks
     public static class HookModifyBlockPatch
     {
         [HarmonyPostfix]
-        public static void Postfix(Creature? target, ref decimal __result)
+        public static void Postfix(Creature? target, MegaCrit.Sts2.Core.Models.CardModel? cardSource, ref decimal __result)
         {
             try
             {
-                if (target != null && __result > 0)
+                if (__result > 0)
                 {
-                    float defMult = target.IsPlayer
-                        ? RuntimeStateManager.GetEffectivePlayerDefendMultiplier()
-                        : RuntimeStateManager.GetEffectiveEnemyDefendMultiplier();
-
-                    if (Math.Abs(defMult - 1.0f) > 0.001f)
+                    Creature? effectiveTarget = target ?? cardSource?.Owner?.Creature;
+                    if (effectiveTarget != null)
                     {
-                        __result = Math.Max(0, (decimal)Math.Round((double)__result * defMult));
+                        float defMult = effectiveTarget.IsPlayer
+                            ? RuntimeStateManager.GetEffectivePlayerDefendMultiplier()
+                            : RuntimeStateManager.GetEffectiveEnemyDefendMultiplier();
+
+                        if (Math.Abs(defMult - 1.0f) > 0.001f)
+                        {
+                            decimal original = __result;
+                            __result = Math.Max(0, (decimal)Math.Round((double)__result * defMult));
+                            string creatureType = effectiveTarget.IsPlayer ? "Player" : "Enemy";
+                            ModLogger.Verbose("CombatHooks", $"{creatureType} HookModifyBlock ({effectiveTarget.GetType().Name}): {original} -> {__result} (x{defMult:F2})");
+                        }
+                    }
+                    else if (cardSource != null)
+                    {
+                        float defMult = RuntimeStateManager.GetEffectivePlayerDefendMultiplier();
+                        if (Math.Abs(defMult - 1.0f) > 0.001f)
+                        {
+                            decimal original = __result;
+                            __result = Math.Max(0, (decimal)Math.Round((double)__result * defMult));
+                            ModLogger.Verbose("CombatHooks", $"Player Card HookModifyBlock ({cardSource.GetType().Name}): {original} -> {__result} (x{defMult:F2})");
+                        }
                     }
                 }
             }
@@ -230,36 +247,6 @@ public static class CombatHooks
             {
                 ModLogger.Verbose("CombatHooks", $"GodMode prevented {amount} block damage on player.");
                 amount = 0; // Don't lose block in god mode
-            }
-        }
-    }
-
-    [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Entities.Creatures.Creature), "GainBlockInternal")]
-    public static class CreatureGainBlockInternalPatch
-    {
-        [HarmonyPrefix]
-        public static void Prefix(MegaCrit.Sts2.Core.Entities.Creatures.Creature __instance, ref decimal amount)
-        {
-            try
-            {
-                if (amount > 0)
-                {
-                    float defMult = __instance.IsPlayer
-                        ? RuntimeStateManager.GetEffectivePlayerDefendMultiplier()
-                        : RuntimeStateManager.GetEffectiveEnemyDefendMultiplier();
-
-                    if (Math.Abs(defMult - 1.0f) > 0.001f)
-                    {
-                        decimal original = amount;
-                        amount = Math.Max(0, (decimal)Math.Round((double)amount * defMult));
-                        string creatureType = __instance.IsPlayer ? "Player" : "Enemy";
-                        ModLogger.Verbose("CombatHooks", $"{creatureType} GainBlockInternal ({__instance.GetType().Name}): {original} -> {amount} (x{defMult:F2})");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                ModLogger.Debug($"CreatureGainBlockInternalPatch notice: {ex.Message}");
             }
         }
     }

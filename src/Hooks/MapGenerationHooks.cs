@@ -355,19 +355,22 @@ public static class RunTweaksSaveManager
     {
         try
         {
+            // If map screen is open and travel is enabled, the player is on the map and allowed to choose the next node.
+            var mapScreen = MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen.Instance;
+            if (mapScreen != null && mapScreen.IsTravelEnabled)
+            {
+                return false;
+            }
+
+            // Check if CombatManager is actively running or starting a combat encounter
             if (CombatManager.Instance != null && (CombatManager.Instance.IsInProgress || CombatManager.Instance.IsStarting))
             {
                 return true;
             }
 
+            // Check if ActionQueueSynchronizer is in any combat phase (PreCombatSetup, PlayPhase, NotPlayPhase, EndTurnPhaseOne)
             var syncState = RunManager.Instance?.ActionQueueSynchronizer?.CombatState;
             if (syncState.HasValue && syncState.Value != ActionSynchronizerCombatState.NotInCombat)
-            {
-                return true;
-            }
-
-            var combatRoom = MegaCrit.Sts2.Core.Nodes.Rooms.NCombatRoom.Instance;
-            if (combatRoom != null && combatRoom.Mode == CombatRoomMode.ActiveCombat)
             {
                 return true;
             }
