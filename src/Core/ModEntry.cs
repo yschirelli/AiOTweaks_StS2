@@ -279,7 +279,7 @@ public partial class ModEntry : Node
                     {
                         { "AIOTWEAKS_ENDLESS_LEAVE.title", "Continue (Victory)" },
                         { "AIOTWEAKS_ENDLESS_LEAVE.description", "Proceed to the Victory screen." },
-                        { "AIOTWEAKS_ENDLESS_PROCEED.title", "[Endless] Continue Run (Loop to Act 1)" },
+                        { "AIOTWEAKS_ENDLESS_PROCEED.title", "(Endless) Continue Run (Loop to Act 1)" },
                         { "AIOTWEAKS_ENDLESS_PROCEED.description", "Loop back to Act 1 with scaled enemies. Keep all progress." }
                     };
                     ancientsTable.MergeWith(customStrings);

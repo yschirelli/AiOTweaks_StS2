@@ -30,6 +30,10 @@ using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Runs.History;
 using MegaCrit.Sts2.Core.Platform;
 using MegaCrit.Sts2.Core.Unlocks;
+using MegaCrit.Sts2.Core.Combat;
+using MegaCrit.Sts2.Core.Entities.Multiplayer;
+using MegaCrit.Sts2.Core.GameActions;
+using MegaCrit.Sts2.Core.GameActions.Multiplayer;
 
 namespace AIOTweaks.Hooks;
 
@@ -347,10 +351,39 @@ public static class RunTweaksSaveManager
         ModLogger.Info($"RunTweaksSaveManager: FreeMapNavigation set to {enabled} (ActiveSnapshot={(ActiveSnapshot != null ? "updated" : "none")})");
     }
 
+    public static bool IsInCombat()
+    {
+        try
+        {
+            if (CombatManager.Instance != null && (CombatManager.Instance.IsInProgress || CombatManager.Instance.IsStarting))
+            {
+                return true;
+            }
+
+            var syncState = RunManager.Instance?.ActionQueueSynchronizer?.CombatState;
+            if (syncState.HasValue && syncState.Value != ActionSynchronizerCombatState.NotInCombat)
+            {
+                return true;
+            }
+
+            var combatRoom = MegaCrit.Sts2.Core.Nodes.Rooms.NCombatRoom.Instance;
+            if (combatRoom != null && combatRoom.Mode == CombatRoomMode.ActiveCombat)
+            {
+                return true;
+            }
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Error("Error checking IsInCombat", ex);
+        }
+        return false;
+    }
+
     public static void RefreshMapNavigationState(bool isFreeRoam)
     {
         try
         {
+            if (IsInCombat()) return;
             var screen = MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen.Instance;
             if (screen != null && GodotObject.IsInstanceValid(screen))
             {
@@ -805,6 +838,12 @@ public static class MapGenerationHooks
             ModLogger.Info("Starting deferred EnterAct(0, true)...");
             if (RunManager.Instance != null)
             {
+                // Ensure combat and action queues are cleanly reset before entering Act 0
+                CombatManager.Instance?.Reset(graceful: true);
+                RunManager.Instance.ActionQueueSynchronizer?.SetCombatState(ActionSynchronizerCombatState.NotInCombat);
+                RunManager.Instance.ActionQueueSet?.UnpauseAllPlayerQueues();
+                RunManager.Instance.ActionExecutor?.Unpause();
+
                 await RunManager.Instance.EnterAct(0, true);
                 ModLogger.Info("Deferred EnterAct(0, true) completed successfully.");
             }
@@ -1453,29 +1492,49 @@ public static class MapGenerationHooks
 
     /// <summary>
     /// Free Map Navigation (Flying Boots style): makes all map points clickable regardless of standard pathing connections.
+    /// Never allows travel during active combat or while map travel is disabled/in progress.
     /// </summary>
     [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapPoint), "get_IsTravelable")]
     public static class NMapPointIsTravelablePatch
     {
         [HarmonyPostfix]
-        public static void Postfix(ref bool __result)
+        public static void Postfix(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapPoint __instance, ref bool __result)
         {
+            if (RunTweaksSaveManager.IsInCombat())
+            {
+                __result = false;
+                return;
+            }
+
             if (RunTweaksSaveManager.IsFreeMapNavigationActive())
             {
+                var screen = AccessTools.Field(typeof(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapPoint), "_screen")?.GetValue(__instance)
+                    as MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen;
+                if (screen != null && (screen.IsTraveling || !screen.IsTravelEnabled))
+                {
+                    __result = false;
+                    return;
+                }
                 __result = true;
             }
         }
     }
 
     /// <summary>
-    /// Enables debug travel on NMapScreen when Free Map Navigation is enabled.
+    /// Enables debug travel on NMapScreen when Free Map Navigation is enabled, but never during combat or when travel is disabled.
     /// </summary>
     [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen), "get_IsDebugTravelEnabled")]
     public static class NMapScreenIsDebugTravelEnabledPatch
     {
         [HarmonyPostfix]
-        public static void Postfix(ref bool __result)
+        public static void Postfix(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen __instance, ref bool __result)
         {
+            if (RunTweaksSaveManager.IsInCombat() || __instance.IsTraveling || !__instance.IsTravelEnabled)
+            {
+                __result = false;
+                return;
+            }
+
             if (RunTweaksSaveManager.IsFreeMapNavigationActive())
             {
                 __result = true;
@@ -1484,7 +1543,8 @@ public static class MapGenerationHooks
     }
 
     /// <summary>
-    /// When traveling on map with Free Map Navigation active, marks active run as Custom mode and resets IsTraveling.
+    /// When traveling on map with Free Map Navigation active, marks active run as Custom mode.
+    /// Does not reset IsTraveling or re-enable points if entering combat.
     /// </summary>
     [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen), nameof(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen.TravelToMapCoord))]
     public static class NMapScreenTravelToMapCoordPatch
@@ -1501,7 +1561,7 @@ public static class MapGenerationHooks
         [HarmonyPostfix]
         public static void Postfix(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen __instance)
         {
-            if (RunTweaksSaveManager.IsFreeMapNavigationActive())
+            if (RunTweaksSaveManager.IsFreeMapNavigationActive() && !RunTweaksSaveManager.IsInCombat())
             {
                 __instance.IsTraveling = false;
                 __instance.RefreshAllPointVisuals();
@@ -1510,7 +1570,7 @@ public static class MapGenerationHooks
     }
 
     /// <summary>
-    /// Ensures map points remain travelable and IsTraveling is reset when opening the map screen.
+    /// Ensures map points remain travelable and IsTraveling is reset when opening the map screen outside combat.
     /// </summary>
     [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen), nameof(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen.Open))]
     public static class NMapScreenOpenPatch
@@ -1518,10 +1578,91 @@ public static class MapGenerationHooks
         [HarmonyPostfix]
         public static void Postfix(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen __instance)
         {
-            if (RunTweaksSaveManager.IsFreeMapNavigationActive())
+            if (RunTweaksSaveManager.IsFreeMapNavigationActive() && !RunTweaksSaveManager.IsInCombat())
             {
                 __instance.IsTraveling = false;
                 __instance.RefreshAllPointVisuals();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Prevents selecting or voting for map points while in combat.
+    /// </summary>
+    [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen), nameof(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen.OnMapPointSelectedLocally))]
+    public static class NMapScreenOnMapPointSelectedLocallyPatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix()
+        {
+            if (RunTweaksSaveManager.IsInCombat())
+            {
+                ModLogger.Warn("Blocked map point selection because player is currently in combat!");
+                return false;
+            }
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Defensive check: Prevents enqueuing NonCombat actions (like map move actions) while combat is active.
+    /// </summary>
+    [HarmonyPatch(typeof(ActionQueueSynchronizer), nameof(ActionQueueSynchronizer.RequestEnqueue))]
+    public static class ActionQueueSynchronizerRequestEnqueuePatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix(GameAction action)
+        {
+            if (action.ActionType == GameActionType.NonCombat && RunTweaksSaveManager.IsInCombat())
+            {
+                ModLogger.Warn($"ActionQueueSynchronizer: Blocked NonCombat action {action.GetType().Name} while in combat to prevent action queue deadlock!");
+                action.Cancel();
+                return false;
+            }
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Defensive check: If an illegal NonCombat action somehow sits at the front of a player's queue during active combat,
+    /// evict it so it does not permanently deadlock the action queue and prevent card plays!
+    /// </summary>
+    [HarmonyPatch(typeof(ActionQueueSet), nameof(ActionQueueSet.GetReadyAction))]
+    public static class ActionQueueSetGetReadyActionPatch
+    {
+        private static readonly FieldInfo? IsInCombatField = AccessTools.Field(typeof(ActionQueueSet), "_isInCombat");
+        private static readonly FieldInfo? ActionQueuesField = AccessTools.Field(typeof(ActionQueueSet), "_actionQueues");
+        private static readonly FieldInfo? ActionsListField = AccessTools.Field(AccessTools.Inner(typeof(ActionQueueSet), "ActionQueue"), "actions");
+
+        [HarmonyPrefix]
+        public static void Prefix(ActionQueueSet __instance)
+        {
+            try
+            {
+                bool isInCombat = (bool)(IsInCombatField?.GetValue(__instance) ?? false);
+                if (!isInCombat) return;
+
+                var queues = ActionQueuesField?.GetValue(__instance) as System.Collections.IList;
+                if (queues == null) return;
+
+                foreach (var queue in queues)
+                {
+                    if (queue == null) continue;
+                    var actions = ActionsListField?.GetValue(queue) as List<GameAction>;
+                    if (actions == null || actions.Count == 0) continue;
+
+                    while (actions.Count > 0 && actions[0].ActionType == GameActionType.NonCombat)
+                    {
+                        var blockedAction = actions[0];
+                        ModLogger.Warn($"ActionQueueSetPatch: Purging illegal NonCombat action {blockedAction.GetType().Name} ({blockedAction}) from front of queue during active combat!");
+                        blockedAction.Cancel();
+                        actions.RemoveAt(0);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error("Error in ActionQueueSetGetReadyActionPatch", ex);
             }
         }
     }
