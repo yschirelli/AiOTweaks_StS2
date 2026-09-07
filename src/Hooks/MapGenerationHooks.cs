@@ -235,6 +235,7 @@ public static class RunTweaksSaveManager
 
         ActiveSnapshot = snapshot;
         RuntimeStateManager.CurrentEndlessLoopCount = 0;
+        RuntimeStateManager.FreeMapNavigationEnabled = snapshot.PreRunTweaks.FreeMapNavigation;
         SaveActiveSnapshot();
 
         ModLogger.Info($"RunTweaksSaveManager: Started NEW run snapshot (Profile={profileId}, IsCustom={isCustom}, RoomCount={snapshot.PreRunTweaks.MapRoomCount}, Endless={snapshot.PreRunTweaks.EndlessMode.Enabled})");
@@ -265,6 +266,7 @@ public static class RunTweaksSaveManager
         else if (ActiveSnapshot != null)
         {
             RuntimeStateManager.CurrentEndlessLoopCount = ActiveSnapshot.EndlessLoopCount;
+            RuntimeStateManager.FreeMapNavigationEnabled = ActiveSnapshot.PreRunTweaks.FreeMapNavigation;
         }
     }
 
@@ -274,6 +276,7 @@ public static class RunTweaksSaveManager
         ModLogger.Info($"RunTweaksSaveManager: Clearing active run snapshot (Reason: {reason}, Profile: {profileId}).");
         ActiveSnapshot = null;
         RuntimeStateManager.CurrentEndlessLoopCount = 0;
+        RuntimeStateManager.FreeMapNavigationEnabled = false;
 
         lock (FileLock)
         {
@@ -309,6 +312,8 @@ public static class RunTweaksSaveManager
         }
     }
 
+    public static readonly MethodInfo? RecalculateTravelabilityMethod = AccessTools.Method(typeof(NMapScreen), "RecalculateTravelability");
+
     public static bool IsEndlessModeActive()
     {
         if (ActiveSnapshot != null && ActiveSnapshot.PreRunTweaks.EndlessMode.Enabled)
@@ -316,6 +321,52 @@ public static class RunTweaksSaveManager
             return true;
         }
         return ConfigManager.Current?.PreRunTweaks?.EndlessMode?.Enabled ?? false;
+    }
+
+    public static bool IsFreeMapNavigationActive()
+    {
+        if (ActiveSnapshot != null)
+        {
+            return ActiveSnapshot.PreRunTweaks.FreeMapNavigation || RuntimeStateManager.FreeMapNavigationEnabled;
+        }
+        return RuntimeStateManager.FreeMapNavigationEnabled || (ConfigManager.Current?.PreRunTweaks?.FreeMapNavigation ?? false);
+    }
+
+    public static void SetFreeMapNavigation(bool enabled)
+    {
+        RuntimeStateManager.FreeMapNavigationEnabled = enabled;
+        if (ConfigManager.Current?.PreRunTweaks != null)
+        {
+            ConfigManager.Current.PreRunTweaks.FreeMapNavigation = enabled;
+        }
+        if (ActiveSnapshot?.PreRunTweaks != null)
+        {
+            ActiveSnapshot.PreRunTweaks.FreeMapNavigation = enabled;
+            SaveActiveSnapshot();
+        }
+        ModLogger.Info($"RunTweaksSaveManager: FreeMapNavigation set to {enabled} (ActiveSnapshot={(ActiveSnapshot != null ? "updated" : "none")})");
+    }
+
+    public static void RefreshMapNavigationState(bool isFreeRoam)
+    {
+        try
+        {
+            var screen = MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen.Instance;
+            if (screen != null && GodotObject.IsInstanceValid(screen))
+            {
+                screen.IsTraveling = false;
+                if (!isFreeRoam)
+                {
+                    RecalculateTravelabilityMethod?.Invoke(screen, null);
+                }
+                screen.RefreshAllPointVisuals();
+                ModLogger.Info($"RunTweaksSaveManager: Refreshed map navigation state (isFreeRoam={isFreeRoam})");
+            }
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Error("Error refreshing map navigation state", ex);
+        }
     }
 
     public static PreRunTweaksConfig GetEffectivePreRunTweaks()
@@ -327,6 +378,11 @@ public static class RunTweaksSaveManager
             {
                 ActiveSnapshot.PreRunTweaks.EndlessMode.Enabled = true;
                 ActiveSnapshot.PreRunTweaks.EndlessMode.EnemyScalingMultiplier = ConfigManager.Current.PreRunTweaks.EndlessMode.EnemyScalingMultiplier;
+                SaveActiveSnapshot();
+            }
+            if (ConfigManager.Current?.PreRunTweaks != null && ConfigManager.Current.PreRunTweaks.FreeMapNavigation != ActiveSnapshot.PreRunTweaks.FreeMapNavigation)
+            {
+                ActiveSnapshot.PreRunTweaks.FreeMapNavigation = ConfigManager.Current.PreRunTweaks.FreeMapNavigation;
                 SaveActiveSnapshot();
             }
             return ActiveSnapshot.PreRunTweaks;
@@ -1404,7 +1460,7 @@ public static class MapGenerationHooks
         [HarmonyPostfix]
         public static void Postfix(ref bool __result)
         {
-            if (RuntimeStateManager.FreeMapNavigationEnabled || RunTweaksSaveManager.GetEffectivePreRunTweaks().FreeMapNavigation)
+            if (RunTweaksSaveManager.IsFreeMapNavigationActive())
             {
                 __result = true;
             }
@@ -1420,7 +1476,7 @@ public static class MapGenerationHooks
         [HarmonyPostfix]
         public static void Postfix(ref bool __result)
         {
-            if (RuntimeStateManager.FreeMapNavigationEnabled || RunTweaksSaveManager.GetEffectivePreRunTweaks().FreeMapNavigation)
+            if (RunTweaksSaveManager.IsFreeMapNavigationActive())
             {
                 __result = true;
             }
@@ -1436,7 +1492,7 @@ public static class MapGenerationHooks
         [HarmonyPrefix]
         public static void Prefix()
         {
-            if (RuntimeStateManager.FreeMapNavigationEnabled || RunTweaksSaveManager.GetEffectivePreRunTweaks().FreeMapNavigation)
+            if (RunTweaksSaveManager.IsFreeMapNavigationActive())
             {
                 GameHelper.EnsureCustomRunMode();
             }
@@ -1445,7 +1501,7 @@ public static class MapGenerationHooks
         [HarmonyPostfix]
         public static void Postfix(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen __instance)
         {
-            if (RuntimeStateManager.FreeMapNavigationEnabled || RunTweaksSaveManager.GetEffectivePreRunTweaks().FreeMapNavigation)
+            if (RunTweaksSaveManager.IsFreeMapNavigationActive())
             {
                 __instance.IsTraveling = false;
                 __instance.RefreshAllPointVisuals();
@@ -1462,7 +1518,7 @@ public static class MapGenerationHooks
         [HarmonyPostfix]
         public static void Postfix(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen __instance)
         {
-            if (RuntimeStateManager.FreeMapNavigationEnabled || RunTweaksSaveManager.GetEffectivePreRunTweaks().FreeMapNavigation)
+            if (RunTweaksSaveManager.IsFreeMapNavigationActive())
             {
                 __instance.IsTraveling = false;
                 __instance.RefreshAllPointVisuals();
@@ -1681,7 +1737,7 @@ public static class MapGenerationHooks
         private static readonly MethodInfo DrawPathsMethod = AccessTools.Method(typeof(NMapScreen), "DrawPaths");
         private static readonly MethodInfo InitMapVotesMethod = AccessTools.Method(typeof(NMapScreen), "InitMapVotes");
         private static readonly MethodInfo RefreshAllMapPointVotesMethod = AccessTools.Method(typeof(NMapScreen), "RefreshAllMapPointVotes");
-        private static readonly MethodInfo RecalculateTravelabilityMethod = AccessTools.Method(typeof(NMapScreen), "RecalculateTravelability");
+        private static readonly MethodInfo RecalculateTravelabilityMethod = RunTweaksSaveManager.RecalculateTravelabilityMethod!;
         private static readonly MethodInfo RefreshAllPointVisualsMethod = AccessTools.Method(typeof(NMapScreen), "RefreshAllPointVisuals");
 
         [HarmonyPrefix]
@@ -1844,7 +1900,7 @@ public static class MapGenerationHooks
                     RefreshAllPointVisualsMethod.Invoke(__instance, null);
                 }
 
-                if (RuntimeStateManager.FreeMapNavigationEnabled || RunTweaksSaveManager.GetEffectivePreRunTweaks().FreeMapNavigation)
+                if (RunTweaksSaveManager.IsFreeMapNavigationActive())
                 {
                     __instance.IsTraveling = false;
                     __instance.RefreshAllPointVisuals();

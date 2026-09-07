@@ -22,7 +22,7 @@ public partial class ModEntry : Node
 {
     public const string ModId = "AIOTweaks";
     public const string ModName = "AIOTweaks";
-    public const string ModVersion = "1.0.1";
+    public const string ModVersion = "1.1.0";
 
 #if DEBUG
     public const string BuildConfiguration = "DEBUG";
@@ -278,9 +278,9 @@ public partial class ModEntry : Node
                     var customStrings = new Dictionary<string, string>
                     {
                         { "AIOTWEAKS_ENDLESS_LEAVE.title", "Continue (Victory)" },
-                        { "AIOTWEAKS_ENDLESS_LEAVE.description", "Proceed as normal with the Architect cutscene to the Victory screen." },
+                        { "AIOTWEAKS_ENDLESS_LEAVE.description", "Proceed to the Victory screen." },
                         { "AIOTWEAKS_ENDLESS_PROCEED.title", "[Endless] Continue Run (Loop to Act 1)" },
-                        { "AIOTWEAKS_ENDLESS_PROCEED.description", "Loop back to Act 1 keeping all cards, relics, gold, and stats. Score accumulates and enemies scale progressively!" }
+                        { "AIOTWEAKS_ENDLESS_PROCEED.description", "Loop back to Act 1 with scaled enemies. Keep all progress." }
                     };
                     ancientsTable.MergeWith(customStrings);
                     ModLogger.Verbose("ModEntry", "Merged AIOTweaks Endless Mode localization keys into 'ancients' LocTable.");

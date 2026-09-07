@@ -382,7 +382,7 @@ public partial class DebugConsole : CanvasLayer
                              "  god, infenergy, onehitkill, killall, endturn\n" +
                              "  gold <amount>, setgold <amount>, heal <amount>, damage <amount>, setmaxhp <amount>\n" +
                              "  relic <id>, rmrelic <id>, card <id> [upgraded=true/false], handcard <id>\n" +
-                             "  event <id>, clearevent, endless [on/off/loop <n>/status]\n" +
+                             "  event <id>, clearevent, endless [on/off/loop <n>/status], freeroam [on/off]\n" +
                              "  draw <count>, energy <amount>, verbose [on/off], clear, reset[/color]");
                 break;
 
@@ -675,6 +675,46 @@ public partial class DebugConsole : CanvasLayer
                     bool active = RunTweaksSaveManager.IsEndlessModeActive();
                     int loop = RuntimeStateManager.CurrentEndlessLoopCount;
                     LogToConsole($"[color=cyan]Endless Mode is {(active ? "ENABLED" : "DISABLED")} (Current Loop: {loop}). Usage: endless <on|off|loop <count>|status>[/color]");
+                }
+                break;
+
+            case "freeroam":
+            case "freemap":
+                if (parts.Length > 1)
+                {
+                    string sub = parts[1].ToLowerInvariant();
+                    if (sub == "on" || sub == "true" || sub == "enable" || sub == "1")
+                    {
+                        RunTweaksSaveManager.SetFreeMapNavigation(true);
+                        GameHelper.EnsureCustomRunMode();
+                        RunTweaksSaveManager.RefreshMapNavigationState(true);
+                        ConfigManager.SaveConfig();
+                        LogToConsole("[color=green]Free Map Navigation ENABLED (Free Roam). Click ANY room freely on the map.[/color]");
+                    }
+                    else if (sub == "off" || sub == "false" || sub == "disable" || sub == "0")
+                    {
+                        RunTweaksSaveManager.SetFreeMapNavigation(false);
+                        RunTweaksSaveManager.RefreshMapNavigationState(false);
+                        ConfigManager.SaveConfig();
+                        LogToConsole("[color=yellow]Free Map Navigation DISABLED. Returned to normal path selection.[/color]");
+                    }
+                    else
+                    {
+                        LogToConsole("[color=red]Usage: freeroam <on|off>[/color]");
+                    }
+                }
+                else
+                {
+                    bool active = RunTweaksSaveManager.IsFreeMapNavigationActive();
+                    bool newState = !active;
+                    RunTweaksSaveManager.SetFreeMapNavigation(newState);
+                    if (newState)
+                    {
+                        GameHelper.EnsureCustomRunMode();
+                    }
+                    RunTweaksSaveManager.RefreshMapNavigationState(newState);
+                    ConfigManager.SaveConfig();
+                    LogToConsole($"[color=cyan]Free Map Navigation toggled: {(newState ? "[color=green]ENABLED[/color]" : "[color=yellow]DISABLED[/color]")}[/color]");
                 }
                 break;
 

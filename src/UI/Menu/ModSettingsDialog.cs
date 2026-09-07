@@ -623,7 +623,7 @@ public partial class ModSettingsDialog : CanvasLayer
 
             ConfigManager.Current.PreRunTweaks.EndlessMode.Enabled = false;
             ConfigManager.Current.PreRunTweaks.EndlessMode.EnemyScalingMultiplier = 2.0f;
-            ConfigManager.Current.PreRunTweaks.FreeMapNavigation = false;
+            RunTweaksSaveManager.SetFreeMapNavigation(false);
 
             ConfigManager.Current.PreRunTweaks.PlayerDamageMultiplier = 1.0f;
             ConfigManager.Current.PreRunTweaks.PlayerDefendMultiplier = 1.0f;
@@ -638,15 +638,10 @@ public partial class ModSettingsDialog : CanvasLayer
             ConfigManager.Current.CombatSandbox.MaxHandSizeOverride = 10;
 
             RuntimeStateManager.ResetSessionState();
-            RuntimeStateManager.FreeMapNavigationEnabled = false;
             GameHelper.SetPlayerMaxEnergy(3);
             GameHelper.RefreshCombatIntents();
             GameHelper.RefreshAllVisibleCards();
-            try
-            {
-                MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen.Instance?.RefreshAllPointVisuals();
-            }
-            catch { }
+            RunTweaksSaveManager.RefreshMapNavigationState(false);
 
             LoadSettingsValues();
             ConfigManager.SaveConfig();
@@ -943,7 +938,7 @@ public partial class ModSettingsDialog : CanvasLayer
         var endlessBox = new VBoxContainer();
         endlessBox.AddThemeConstantOverride("separation", 8);
 
-        _endlessModeCheck = new CheckBox { Text = " Enable Endless Mode (Scale enemies progressively each loop reset)" };
+        _endlessModeCheck = new CheckBox { Text = " Enable Endless Mode (Scale enemies each loop)" };
         _endlessModeCheck.Toggled += val =>
         {
             MarkTweaksModified();
@@ -982,17 +977,12 @@ public partial class ModSettingsDialog : CanvasLayer
         _freeMapNavCheck.Toggled += val =>
         {
             MarkTweaksModified();
-            RuntimeStateManager.FreeMapNavigationEnabled = val;
-            ConfigManager.Current.PreRunTweaks.FreeMapNavigation = val;
+            RunTweaksSaveManager.SetFreeMapNavigation(val);
             if (val)
             {
                 GameHelper.EnsureCustomRunMode();
             }
-            try
-            {
-                MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen.Instance?.RefreshAllPointVisuals();
-            }
-            catch { }
+            RunTweaksSaveManager.RefreshMapNavigationState(val);
         };
         endlessBox.AddChild(_freeMapNavCheck);
 
@@ -4537,7 +4527,7 @@ public partial class ModSettingsDialog : CanvasLayer
         bool endlessActive = (endlessSnap?.PreRunTweaks?.EndlessMode?.Enabled ?? false) || (tweaks.EndlessMode?.Enabled ?? false);
         if (_endlessModeCheck != null) _endlessModeCheck.ButtonPressed = endlessActive;
         if (_endlessMultiplierSpin != null) _endlessMultiplierSpin.Value = endlessSnap?.PreRunTweaks?.EndlessMode?.EnemyScalingMultiplier ?? (tweaks.EndlessMode?.EnemyScalingMultiplier ?? 2.0f);
-        if (_freeMapNavCheck != null) _freeMapNavCheck.ButtonPressed = tweaks.FreeMapNavigation;
+        if (_freeMapNavCheck != null) _freeMapNavCheck.ButtonPressed = RunTweaksSaveManager.IsFreeMapNavigationActive();
 
         if (_godModeCheck != null) _godModeCheck.ButtonPressed = RuntimeStateManager.GodModeEnabled || sandbox.GodMode;
         if (_infEnergyCheck != null) _infEnergyCheck.ButtonPressed = RuntimeStateManager.InfiniteEnergyEnabled || sandbox.InfiniteEnergy;
@@ -4639,8 +4629,7 @@ public partial class ModSettingsDialog : CanvasLayer
             }
             if (_freeMapNavCheck != null && GodotObject.IsInstanceValid(_freeMapNavCheck))
             {
-                tweaks.FreeMapNavigation = _freeMapNavCheck.ButtonPressed;
-                RuntimeStateManager.FreeMapNavigationEnabled = _freeMapNavCheck.ButtonPressed;
+                RunTweaksSaveManager.SetFreeMapNavigation(_freeMapNavCheck.ButtonPressed);
             }
 
             if (_godModeCheck != null && GodotObject.IsInstanceValid(_godModeCheck)) sandbox.GodMode = _godModeCheck.ButtonPressed;
@@ -4653,6 +4642,7 @@ public partial class ModSettingsDialog : CanvasLayer
             var snap = RunTweaksSaveManager.ActiveSnapshot;
             if (snap?.PreRunTweaks != null)
             {
+                snap.PreRunTweaks.FreeMapNavigation = tweaks.FreeMapNavigation;
                 snap.PreRunTweaks.EnemyHealthMultiplier = tweaks.EnemyHealthMultiplier;
                 snap.PreRunTweaks.EnemyDamageMultiplier = tweaks.EnemyDamageMultiplier;
                 snap.PreRunTweaks.EnemyDefendMultiplier = tweaks.EnemyDefendMultiplier;
