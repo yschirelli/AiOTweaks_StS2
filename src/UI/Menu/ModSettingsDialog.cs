@@ -63,6 +63,7 @@ public partial class ModSettingsDialog : CanvasLayer
     private SpinBox? _mapRoomCountSpin;
     private Label? _mapRoomWarningLabel;
     private CheckBox? _forceNeowCheck;
+    private bool _isLoadingSettings = false;
     private Label? _tweaksRunLockNoticeLabel;
     private PanelContainer? _tweaksRunLockNoticeContainer;
 
@@ -688,6 +689,7 @@ public partial class ModSettingsDialog : CanvasLayer
 
     private void MarkTweaksModified()
     {
+        if (_isLoadingSettings) return;
         SaveSettingsValues();
     }
 
@@ -900,7 +902,12 @@ public partial class ModSettingsDialog : CanvasLayer
         _allowMultipleRelicsCheck.Toggled += _ => MarkTweaksModified();
         preRunBox.AddChild(_allowMultipleRelicsCheck);
 
-        _forceNeowCheck = new CheckBox { Text = " Spawn Neow at start? (Uncheck to skip Neow and start on map)", TooltipText = "Guarantees Neow blessing when checked. When unchecked, skips Neow and starts directly on the map." };
+        _forceNeowCheck = new CheckBox 
+        { 
+            Text = " Spawn Neow at start? (Uncheck to skip Neow and start on map)", 
+            TooltipText = "Guarantees Neow blessing when checked. When unchecked, skips Neow and starts directly on the map.",
+            ButtonPressed = ConfigManager.Current.PreRunTweaks.ForceNeowBonus
+        };
         _forceNeowCheck.Toggled += _ => MarkTweaksModified();
         preRunBox.AddChild(_forceNeowCheck);
 
@@ -1164,7 +1171,7 @@ public partial class ModSettingsDialog : CanvasLayer
 
         var actionGrid = new GridContainer
         {
-            Columns = 4,
+            Columns = 3,
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
         };
         actionGrid.AddThemeConstantOverride("h_separation", 12);
@@ -1176,13 +1183,6 @@ public partial class ModSettingsDialog : CanvasLayer
             CustomMinimumSize = new Vector2(180, 38)
         };
         killAllBtn.Pressed += CombatDirector.KillAllEnemies;
-
-        var endTurnBtn = new Button 
-        { 
-            Text = " Force End Turn ",
-            CustomMinimumSize = new Vector2(180, 38)
-        };
-        endTurnBtn.Pressed += CombatDirector.EndTurn;
 
         var draw3Btn = new Button 
         { 
@@ -1199,7 +1199,6 @@ public partial class ModSettingsDialog : CanvasLayer
         energy3Btn.Pressed += () => CombatDirector.AddEnergy(3);
 
         actionGrid.AddChild(killAllBtn);
-        actionGrid.AddChild(endTurnBtn);
         actionGrid.AddChild(draw3Btn);
         actionGrid.AddChild(energy3Btn);
         actionsBox.AddChild(actionGrid);
@@ -1746,17 +1745,7 @@ public partial class ModSettingsDialog : CanvasLayer
         };
         scroll.AddChild(vbox);
 
-        var titleBox = new HBoxContainer();
-        titleBox.AddChild(new Label { Text = "Available Potions Catalog:", Modulate = new Color(0.4f, 0.8f, 1f), SizeFlagsHorizontal = Control.SizeFlags.ExpandFill });
-        
-        var addAllBtn = new Button { Text = " Fill Inventory with Potions " };
-        addAllBtn.Pressed += () => 
-        {
-            PotionDirector.AddPotion("all");
-            RefreshRealTimePotionTabs();
-        };
-        titleBox.AddChild(addAllBtn);
-        vbox.AddChild(titleBox);
+        vbox.AddChild(new Label { Text = "Available Potions Catalog:", Modulate = new Color(0.4f, 0.8f, 1f), SizeFlagsHorizontal = Control.SizeFlags.ExpandFill });
 
         var filterRow = new HBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         var searchInput = new LineEdit
@@ -4418,9 +4407,12 @@ public partial class ModSettingsDialog : CanvasLayer
 
     private void LoadSettingsValues()
     {
-        var tweaks = ConfigManager.Current.PreRunTweaks;
-        var sandbox = ConfigManager.Current.CombatSandbox;
-        var general = ConfigManager.Current.General;
+        _isLoadingSettings = true;
+        try
+        {
+            var tweaks = ConfigManager.Current.PreRunTweaks;
+            var sandbox = ConfigManager.Current.CombatSandbox;
+            var general = ConfigManager.Current.General;
 
         _consoleHotkeyVal = string.IsNullOrWhiteSpace(general.ConsoleHotkey) ? GeneralConfig.DefaultConsoleHotkey : general.ConsoleHotkey;
         _guiHotkeyVal = string.IsNullOrWhiteSpace(general.GuiOverlayHotkey) ? GeneralConfig.DefaultGuiOverlayHotkey : general.GuiOverlayHotkey;
@@ -4520,9 +4512,15 @@ public partial class ModSettingsDialog : CanvasLayer
             _damageAmountSpin.Value = 5;
         }
     }
+        finally
+        {
+            _isLoadingSettings = false;
+        }
+    }
 
     private void SaveSettingsValues()
     {
+        if (_isLoadingSettings) return;
         var tweaks = ConfigManager.Current.PreRunTweaks;
         var sandbox = ConfigManager.Current.CombatSandbox;
         var general = ConfigManager.Current.General;

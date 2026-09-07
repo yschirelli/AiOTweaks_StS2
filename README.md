@@ -78,7 +78,7 @@
 - **Merchant Anywhere**: Open a randomized shop interface mid-run via hotkey (`quickOpenShopKey`), menu button, or console command (`shop`).
 
 ### Combat Sandbox & Status Effects
-- **Instant Toggles**: God mode, infinite energy, one-hit kill, clear all enemies, and turn end overrides.
+- **Instant Toggles**: God mode, infinite energy, one-hit kill, and clear all enemies.
 - **Status Effects Manager**: Browse and apply buffs/debuffs (Strength, Dexterity, Vulnerable, Weak, Poison, Artifact, etc.) to player or active monsters with arbitrary stack counts.
 
 ### Debug Console (`F1`)

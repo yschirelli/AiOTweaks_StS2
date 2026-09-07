@@ -148,7 +148,8 @@ public partial class PreRunSettingsMenu : Control
         _forceNeowCheck = new CheckBox 
         { 
             Text = " Spawn Neow at start? (Uncheck to skip Neow and start directly on map)",
-            TooltipText = "Guarantees Neow blessing when checked (default: enabled). When unchecked, skips Neow and starts directly on the map."
+            TooltipText = "Guarantees Neow blessing when checked (default: enabled). When unchecked, skips Neow and starts directly on the map.",
+            ButtonPressed = ConfigManager.Current.PreRunTweaks.ForceNeowBonus
         };
         vbox.AddChild(_forceNeowCheck);
 

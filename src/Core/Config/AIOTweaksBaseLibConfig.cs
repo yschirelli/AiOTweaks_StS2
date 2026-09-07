@@ -244,6 +244,16 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
     }
 
     [ConfigSection("Map & Spire Utilities")]
+    public bool ForceNeowBonus
+    {
+        get => ConfigManager.Current.PreRunTweaks.ForceNeowBonus;
+        set
+        {
+            ConfigManager.Current.PreRunTweaks.ForceNeowBonus = value;
+            ConfigManager.SaveConfig();
+        }
+    }
+
     [ConfigSlider(1.0, 5.0, 0.5)]
     public double EliteNodeEncounterRate
     {
