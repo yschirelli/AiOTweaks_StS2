@@ -427,6 +427,24 @@ public static class RunTweaksSaveManager
         }
     }
 
+    public static void HideCombatRoomProceedButton()
+    {
+        try
+        {
+            var combatRoom = NCombatRoom.Instance;
+            if (combatRoom != null && GodotObject.IsInstanceValid(combatRoom) && combatRoom.Mode != CombatRoomMode.VisualOnly)
+            {
+                var proceedBtn = combatRoom.ProceedButton;
+                if (proceedBtn != null && GodotObject.IsInstanceValid(proceedBtn) && proceedBtn.Visible)
+                {
+                    proceedBtn.Visible = false;
+                    proceedBtn.Disable();
+                }
+            }
+        }
+        catch { }
+    }
+
     public static void RescueBossRoomProceed()
     {
         try
@@ -438,8 +456,27 @@ public static class RunTweaksSaveManager
             var currentRoom = runState.CurrentRoom;
             if (currentRoom == null || currentRoom.RoomType != RoomType.Boss) return;
 
+            // CRITICAL: The proceed button must ONLY be rescued/shown if the boss combat is ACTUALLY FINISHED!
+            // When entering a boss combat or while fighting, IsPreFinished is false.
+            if (currentRoom is CombatRoom combatRoomData && !combatRoomData.IsPreFinished)
+            {
+                HideCombatRoomProceedButton();
+                return;
+            }
+
             // If still in active combat, wait until combat ends
-            if (IsInCombat()) return;
+            if (IsInCombat())
+            {
+                HideCombatRoomProceedButton();
+                return;
+            }
+
+            var combatRoomCheck = NCombatRoom.Instance;
+            if (combatRoomCheck != null && GodotObject.IsInstanceValid(combatRoomCheck) && combatRoomCheck.Mode == CombatRoomMode.ActiveCombat)
+            {
+                HideCombatRoomProceedButton();
+                return;
+            }
 
             // 1. Ensure ActChangeSynchronizer's _lastTransitioningActIndex is reset if it blocks the current act
             if (runManager.ActChangeSynchronizer != null)
@@ -2795,6 +2832,7 @@ public static class MapGenerationHooks
 
     /// <summary>
     /// When entering or reloading a combat room, if it is a completed Boss room, ensure the Proceed button is available.
+    /// If it is an active combat room (e.g. at the start of boss combat), explicitly ensure ProceedButton is hidden.
     /// </summary>
     [HarmonyPatch(typeof(NCombatRoom), nameof(NCombatRoom._Ready))]
     public static class NCombatRoomReadyPatch
@@ -2804,7 +2842,19 @@ public static class MapGenerationHooks
         {
             try
             {
-                RunTweaksSaveManager.RescueBossRoomProceed();
+                if (__instance.Mode == CombatRoomMode.FinishedCombat)
+                {
+                    RunTweaksSaveManager.RescueBossRoomProceed();
+                }
+                else if (__instance.Mode != CombatRoomMode.VisualOnly)
+                {
+                    var proceedBtn = __instance.ProceedButton;
+                    if (proceedBtn != null && GodotObject.IsInstanceValid(proceedBtn) && proceedBtn.Visible)
+                    {
+                        proceedBtn.Visible = false;
+                        proceedBtn.Disable();
+                    }
+                }
             }
             catch (Exception ex)
             {
