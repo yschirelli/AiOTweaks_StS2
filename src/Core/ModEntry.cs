@@ -136,6 +136,9 @@ public partial class ModEntry : Node
                 ModLogger.Warn($"BaseLib ModConfig registration note: {ex.Message}");
             }
 
+            // Register serialization resolver to fix BaseLib and custom mod save serialization
+            SaveSerializationHooks.Initialize();
+
             if (!ConfigManager.Current.General.Enabled)
             {
                 ModLogger.Warn($"{ModName} is disabled in configuration.");

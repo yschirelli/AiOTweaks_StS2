@@ -257,9 +257,9 @@ public static class RelicHooks
     public static class NTopBar_MaxPotionsChanged_Patch
     {
         [HarmonyPostfix]
-        public static void Postfix(NTopBar __instance, [HarmonyArgument(0)] int _)
+        public static void Postfix(NTopBar __instance, [HarmonyArgument(0)] int newMaxPotions)
         {
-            AdjustTopBarLayout(__instance, _);
+            AdjustTopBarLayout(__instance, newMaxPotions);
         }
     }
 
