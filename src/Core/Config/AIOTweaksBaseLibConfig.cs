@@ -79,6 +79,28 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
         }
     }
 
+    [ConfigTextInput(TextInputPreset.Alphanumeric)]
+    public string QuickGodModeKey
+    {
+        get => ConfigManager.Current.General.QuickGodModeKey;
+        set
+        {
+            ConfigManager.Current.General.QuickGodModeKey = value?.Trim() ?? "";
+            ConfigManager.SaveConfig();
+        }
+    }
+
+    [ConfigTextInput(TextInputPreset.Alphanumeric)]
+    public string QuickKillEnemiesKey
+    {
+        get => ConfigManager.Current.General.QuickKillEnemiesKey;
+        set
+        {
+            ConfigManager.Current.General.QuickKillEnemiesKey = value?.Trim() ?? "";
+            ConfigManager.SaveConfig();
+        }
+    }
+
     [ConfigButton("Open GUI Menu Overlay")]
     public void OpenOverlayAction()
     {

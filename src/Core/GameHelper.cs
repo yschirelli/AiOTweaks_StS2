@@ -2343,6 +2343,91 @@ public static class GameHelper
         return false;
     }
 
+    public static bool IsMouseButtonMatch(InputEventMouseButton mouseEvent, string? hotkey)
+    {
+        if (mouseEvent == null || string.IsNullOrWhiteSpace(hotkey) || hotkey.Equals("None", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        string clean = hotkey.Trim().Replace(" ", "").ToLowerInvariant();
+        int parenIdx = clean.IndexOf('(');
+        if (parenIdx > 0)
+        {
+            clean = clean.Substring(0, parenIdx);
+        }
+
+        return mouseEvent.ButtonIndex switch
+        {
+            MouseButton.Xbutton1 => clean is "mouse4" or "mousebutton4" or "xbutton1" or "thumb1" or "mousethumb1" or "button4" or "back",
+            MouseButton.Xbutton2 => clean is "mouse5" or "mousebutton5" or "xbutton2" or "thumb2" or "mousethumb2" or "button5" or "forward",
+            MouseButton.Middle => clean is "mouse3" or "mousebutton3" or "middle" or "middlemouse" or "mousemiddle" or "wheelbutton" or "button3",
+            _ => false
+        };
+    }
+
+    public static bool IsHotkeyMatch(InputEvent @event, string? hotkey)
+    {
+        if (string.IsNullOrWhiteSpace(hotkey) || hotkey.Equals("None", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (@event is InputEventKey keyEvent && keyEvent.Pressed && !keyEvent.Echo)
+        {
+            return IsKeyMatch(keyEvent, hotkey);
+        }
+
+        if (@event is InputEventMouseButton mouseEvent && mouseEvent.Pressed)
+        {
+            return IsMouseButtonMatch(mouseEvent, hotkey);
+        }
+
+        return false;
+    }
+
+    public static string? GetMouseButtonCanonicalName(MouseButton button)
+    {
+        return button switch
+        {
+            MouseButton.Xbutton1 => "Mouse4",
+            MouseButton.Xbutton2 => "Mouse5",
+            MouseButton.Middle => "Mouse3",
+            _ => null
+        };
+    }
+
+    public static string FormatHotkeyDisplay(string? keyVal, string fallbackDefault = "")
+    {
+        string val = !string.IsNullOrWhiteSpace(keyVal) ? keyVal.Trim() : fallbackDefault.Trim();
+        if (string.IsNullOrWhiteSpace(val) || val.Equals("None", StringComparison.OrdinalIgnoreCase))
+        {
+            return "None";
+        }
+
+        string clean = val.Replace(" ", "").ToLowerInvariant();
+        int parenIdx = clean.IndexOf('(');
+        if (parenIdx > 0)
+        {
+            clean = clean.Substring(0, parenIdx);
+        }
+
+        if (clean is "mouse4" or "mousebutton4" or "xbutton1" or "thumb1" or "mousethumb1" or "button4" or "back")
+        {
+            return "Mouse 4 (Thumb 1)";
+        }
+        if (clean is "mouse5" or "mousebutton5" or "xbutton2" or "thumb2" or "mousethumb2" or "button5" or "forward")
+        {
+            return "Mouse 5 (Thumb 2)";
+        }
+        if (clean is "mouse3" or "mousebutton3" or "middle" or "middlemouse" or "mousemiddle" or "button3")
+        {
+            return "Mouse 3 (Middle)";
+        }
+
+        return val;
+    }
+
     public static bool IsInCombat()
     {
         var player = GetActivePlayer();

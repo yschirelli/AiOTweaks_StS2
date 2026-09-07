@@ -21,6 +21,16 @@ public partial class ModSettingsDialog : CanvasLayer
     private static ModSettingsDialog? _instance;
     public static ModSettingsDialog? Instance => _instance;
 
+    public static bool IsDialogOpen()
+    {
+        return _instance != null && GodotObject.IsInstanceValid(_instance._dialogPanel) && _instance._dialogPanel?.Visible == true;
+    }
+
+    public static bool IsAssigningHotkey()
+    {
+        return _instance != null && _instance._activeAssignButton != null;
+    }
+
     private ColorRect? _backdrop;
     private PanelContainer? _dialogPanel;
     private TabContainer? _tabs;
@@ -213,19 +223,32 @@ public partial class ModSettingsDialog : CanvasLayer
         if (_instance == this) _instance = null;
     }
 
-    public override void _UnhandledInput(InputEvent @event)
+    public override void _Input(InputEvent @event)
     {
         bool isDialogOpen = _dialogPanel != null && _dialogPanel.Visible;
 
-        if (@event is InputEventMouseButton mouseEv && !mouseEv.Pressed && mouseEv.ButtonIndex == MouseButton.Left)
+        if (isDialogOpen && _activeAssignButton != null)
         {
-            _isDragging = false;
-            _isResizing = false;
-        }
-
-        if (@event is InputEventKey keyEvent && keyEvent.Pressed && !keyEvent.Echo)
-        {
-            if (isDialogOpen && _activeAssignButton != null)
+            if (@event is InputEventMouseButton mouseEv && mouseEv.Pressed)
+            {
+                if (mouseEv.ButtonIndex is MouseButton.Xbutton1 or MouseButton.Xbutton2 or MouseButton.Middle)
+                {
+                    string? mouseName = GameHelper.GetMouseButtonCanonicalName(mouseEv.ButtonIndex);
+                    if (!string.IsNullOrEmpty(mouseName))
+                    {
+                        CompleteHotkeyAssignment(mouseName);
+                        GetViewport().SetInputAsHandled();
+                        return;
+                    }
+                }
+                else if (mouseEv.ButtonIndex == MouseButton.Right)
+                {
+                    CancelHotkeyAssignment();
+                    GetViewport().SetInputAsHandled();
+                    return;
+                }
+            }
+            else if (@event is InputEventKey keyEvent && keyEvent.Pressed && !keyEvent.Echo)
             {
                 if (keyEvent.Keycode == Key.Escape)
                 {
@@ -251,7 +274,42 @@ public partial class ModSettingsDialog : CanvasLayer
                 GetViewport().SetInputAsHandled();
                 return;
             }
+        }
+        else if (isDialogOpen && _activeAssignButton == null)
+        {
+            if (@event is InputEventMouseButton mouseEv && mouseEv.Pressed)
+            {
+                string guiKey = !string.IsNullOrWhiteSpace(ConfigManager.Current.General.GuiOverlayHotkey) && !ConfigManager.Current.General.GuiOverlayHotkey.Equals("None", StringComparison.OrdinalIgnoreCase)
+                    ? ConfigManager.Current.General.GuiOverlayHotkey
+                    : GeneralConfig.DefaultGuiOverlayHotkey;
+                if (GameHelper.IsMouseButtonMatch(mouseEv, guiKey))
+                {
+                    ToggleDialog();
+                    GetViewport().SetInputAsHandled();
+                    return;
+                }
+            }
+        }
+    }
 
+    public override void _UnhandledInput(InputEvent @event)
+    {
+        bool isDialogOpen = _dialogPanel != null && _dialogPanel.Visible;
+
+        if (@event is InputEventMouseButton mouseEv && !mouseEv.Pressed && mouseEv.ButtonIndex == MouseButton.Left)
+        {
+            _isDragging = false;
+            _isResizing = false;
+        }
+
+        if (isDialogOpen && _activeAssignButton != null)
+        {
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        if (@event is InputEventKey keyEvent && keyEvent.Pressed && !keyEvent.Echo)
+        {
             string guiKey = !string.IsNullOrWhiteSpace(ConfigManager.Current.General.GuiOverlayHotkey) && !ConfigManager.Current.General.GuiOverlayHotkey.Equals("None", StringComparison.OrdinalIgnoreCase)
                 ? ConfigManager.Current.General.GuiOverlayHotkey
                 : GeneralConfig.DefaultGuiOverlayHotkey;
@@ -265,6 +323,18 @@ public partial class ModSettingsDialog : CanvasLayer
             if (isDialogOpen && keyEvent.Keycode == Key.Escape)
             {
                 CloseDialog();
+                GetViewport().SetInputAsHandled();
+                return;
+            }
+        }
+        else if (@event is InputEventMouseButton mouseBtn && mouseBtn.Pressed)
+        {
+            string guiKey = !string.IsNullOrWhiteSpace(ConfigManager.Current.General.GuiOverlayHotkey) && !ConfigManager.Current.General.GuiOverlayHotkey.Equals("None", StringComparison.OrdinalIgnoreCase)
+                ? ConfigManager.Current.General.GuiOverlayHotkey
+                : GeneralConfig.DefaultGuiOverlayHotkey;
+            if (GameHelper.IsMouseButtonMatch(mouseBtn, guiKey))
+            {
+                ToggleDialog();
                 GetViewport().SetInputAsHandled();
                 return;
             }
@@ -845,7 +915,7 @@ public partial class ModSettingsDialog : CanvasLayer
         
         var hotkeyNote = new Label 
         { 
-            Text = "Click any hotkey button and press a key to rebind (Esc to cancel, Backspace/Clear to remove). If left empty, default hotkeys (F1 for Console, F3 for GUI) will be automatically restored.", 
+            Text = "Click any hotkey button and press a key or mouse thumb button (Mouse 4 / Mouse 5) to rebind (Esc or Right-Click to cancel, Backspace/Clear to remove). If left empty, default hotkeys (F1 for Console, F3 for GUI) will be automatically restored.", 
             Modulate = new Color(0.65f, 0.7f, 0.78f, 0.8f),
             AutowrapMode = TextServer.AutowrapMode.WordSmart
         };
@@ -4769,7 +4839,7 @@ public partial class ModSettingsDialog : CanvasLayer
         _previousAssignVal = currentVal;
         _activeFallbackDefault = fallbackDefault;
 
-        button.Text = "Press any key... (Esc: Cancel)";
+        button.Text = "Press key or mouse thumb button... (Esc: Cancel)";
         button.Modulate = new Color(1f, 0.85f, 0.3f);
     }
 
@@ -4805,8 +4875,8 @@ public partial class ModSettingsDialog : CanvasLayer
 
     private static void UpdateHotkeyButtonText(Button btn, string keyVal, string fallbackDefault = "")
     {
-        string displayKey = !string.IsNullOrWhiteSpace(keyVal) ? keyVal : fallbackDefault;
-        if (string.IsNullOrWhiteSpace(displayKey))
+        string displayKey = GameHelper.FormatHotkeyDisplay(keyVal, fallbackDefault);
+        if (string.IsNullOrWhiteSpace(displayKey) || displayKey.Equals("None", StringComparison.OrdinalIgnoreCase))
         {
             btn.Text = "None (Assign Key)";
             btn.Modulate = new Color(0.7f, 0.7f, 0.75f);

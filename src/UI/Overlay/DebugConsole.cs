@@ -51,74 +51,30 @@ public partial class DebugConsole : CanvasLayer
         RuntimeStateManager.OnStateReset -= OnSessionReset;
     }
 
+    public override void _Input(InputEvent @event)
+    {
+        if (@event is InputEventMouseButton mouseEvent && mouseEvent.Pressed)
+        {
+            if (ModSettingsDialog.IsAssigningHotkey())
+            {
+                return;
+            }
+
+            HandleHotkeyEvent(mouseEvent);
+        }
+    }
+
     public override void _UnhandledInput(InputEvent @event)
     {
         if (@event is InputEventKey keyEvent && keyEvent.Pressed && !keyEvent.Echo)
         {
-            string consoleHotkey = !string.IsNullOrWhiteSpace(ConfigManager.Current.General.ConsoleHotkey) && !ConfigManager.Current.General.ConsoleHotkey.Equals("None", StringComparison.OrdinalIgnoreCase)
-                ? ConfigManager.Current.General.ConsoleHotkey
-                : GeneralConfig.DefaultConsoleHotkey;
-            if (GameHelper.IsKeyMatch(keyEvent, consoleHotkey))
+            HandleHotkeyEvent(keyEvent);
+        }
+        else if (@event is InputEventMouseButton mouseEvent && mouseEvent.Pressed)
+        {
+            if (!ModSettingsDialog.IsAssigningHotkey())
             {
-                ModLogger.Verbose("DebugConsole", $"Console hotkey matched ({keyEvent.Keycode}). Toggling visibility...");
-                ToggleConsoleVisibility();
-                GetViewport().SetInputAsHandled();
-                return;
-            }
-
-            if (_isConsoleVisible && keyEvent.Keycode == Key.Escape)
-            {
-                ModLogger.Verbose("DebugConsole", "Escape key pressed while console visible. Closing console...");
-                SetConsoleVisibility(false);
-                GetViewport().SetInputAsHandled();
-                return;
-            }
-
-            if (!_isConsoleVisible)
-            {
-                if (GameHelper.IsShopMenuOpen() && keyEvent.Keycode == Key.Escape)
-                {
-                    ModLogger.Verbose("DebugConsole", "Escape key pressed while shop overlay visible. Closing shop...");
-                    GameHelper.CloseShopMenu();
-                    GetViewport().SetInputAsHandled();
-                    return;
-                }
-
-                string guiHotkey = !string.IsNullOrWhiteSpace(ConfigManager.Current.General.GuiOverlayHotkey) && !ConfigManager.Current.General.GuiOverlayHotkey.Equals("None", StringComparison.OrdinalIgnoreCase)
-                    ? ConfigManager.Current.General.GuiOverlayHotkey
-                    : GeneralConfig.DefaultGuiOverlayHotkey;
-                if (GameHelper.IsKeyMatch(keyEvent, guiHotkey))
-                {
-                    ModLogger.Verbose("DebugConsole", $"GUI overlay hotkey matched ({guiHotkey}). Toggling ModSettingsDialog...");
-                    ModSettingsDialog.ToggleDialog();
-                    GetViewport().SetInputAsHandled();
-                    return;
-                }
-
-                if (GameHelper.IsKeyMatch(keyEvent, ConfigManager.Current.General.QuickOpenShopKey))
-                {
-                    ModLogger.Verbose("DebugConsole", "Quick Open Shop hotkey matched. Toggling Shop Menu...");
-                    GameHelper.OpenShopMenu();
-                    GetViewport().SetInputAsHandled();
-                    return;
-                }
-
-                if (GameHelper.IsKeyMatch(keyEvent, ConfigManager.Current.General.QuickGodModeKey))
-                {
-                    ModLogger.Verbose("DebugConsole", "Quick God Mode hotkey matched. Toggling GodMode...");
-                    CombatDirector.ToggleGodMode();
-                    UpdateStatusButtons();
-                    GetViewport().SetInputAsHandled();
-                    return;
-                }
-
-                if (GameHelper.IsKeyMatch(keyEvent, ConfigManager.Current.General.QuickKillEnemiesKey))
-                {
-                    ModLogger.Verbose("DebugConsole", "Quick Kill Enemies hotkey matched. Invoking KillAllEnemies...");
-                    CombatDirector.KillAllEnemies();
-                    GetViewport().SetInputAsHandled();
-                    return;
-                }
+                HandleHotkeyEvent(mouseEvent);
             }
         }
 
@@ -126,6 +82,77 @@ public partial class DebugConsole : CanvasLayer
         {
             GetViewport().SetInputAsHandled();
         }
+    }
+
+    private bool HandleHotkeyEvent(InputEvent @event)
+    {
+        string consoleHotkey = !string.IsNullOrWhiteSpace(ConfigManager.Current.General.ConsoleHotkey) && !ConfigManager.Current.General.ConsoleHotkey.Equals("None", StringComparison.OrdinalIgnoreCase)
+            ? ConfigManager.Current.General.ConsoleHotkey
+            : GeneralConfig.DefaultConsoleHotkey;
+        if (GameHelper.IsHotkeyMatch(@event, consoleHotkey))
+        {
+            ModLogger.Verbose("DebugConsole", "Console hotkey matched. Toggling visibility...");
+            ToggleConsoleVisibility();
+            GetViewport().SetInputAsHandled();
+            return true;
+        }
+
+        if (_isConsoleVisible && @event is InputEventKey keyEvent && keyEvent.Keycode == Key.Escape)
+        {
+            ModLogger.Verbose("DebugConsole", "Escape key pressed while console visible. Closing console...");
+            SetConsoleVisibility(false);
+            GetViewport().SetInputAsHandled();
+            return true;
+        }
+
+        if (!_isConsoleVisible)
+        {
+            if (GameHelper.IsShopMenuOpen() && @event is InputEventKey escKey && escKey.Keycode == Key.Escape)
+            {
+                ModLogger.Verbose("DebugConsole", "Escape key pressed while shop overlay visible. Closing shop...");
+                GameHelper.CloseShopMenu();
+                GetViewport().SetInputAsHandled();
+                return true;
+            }
+
+            string guiHotkey = !string.IsNullOrWhiteSpace(ConfigManager.Current.General.GuiOverlayHotkey) && !ConfigManager.Current.General.GuiOverlayHotkey.Equals("None", StringComparison.OrdinalIgnoreCase)
+                ? ConfigManager.Current.General.GuiOverlayHotkey
+                : GeneralConfig.DefaultGuiOverlayHotkey;
+            if (GameHelper.IsHotkeyMatch(@event, guiHotkey))
+            {
+                ModLogger.Verbose("DebugConsole", $"GUI overlay hotkey matched ({guiHotkey}). Toggling ModSettingsDialog...");
+                ModSettingsDialog.ToggleDialog();
+                GetViewport().SetInputAsHandled();
+                return true;
+            }
+
+            if (GameHelper.IsHotkeyMatch(@event, ConfigManager.Current.General.QuickOpenShopKey))
+            {
+                ModLogger.Verbose("DebugConsole", "Quick Open Shop hotkey matched. Toggling Shop Menu...");
+                GameHelper.OpenShopMenu();
+                GetViewport().SetInputAsHandled();
+                return true;
+            }
+
+            if (GameHelper.IsHotkeyMatch(@event, ConfigManager.Current.General.QuickGodModeKey))
+            {
+                ModLogger.Verbose("DebugConsole", "Quick God Mode hotkey matched. Toggling GodMode...");
+                CombatDirector.ToggleGodMode();
+                UpdateStatusButtons();
+                GetViewport().SetInputAsHandled();
+                return true;
+            }
+
+            if (GameHelper.IsHotkeyMatch(@event, ConfigManager.Current.General.QuickKillEnemiesKey))
+            {
+                ModLogger.Verbose("DebugConsole", "Quick Kill Enemies hotkey matched. Invoking KillAllEnemies...");
+                CombatDirector.KillAllEnemies();
+                GetViewport().SetInputAsHandled();
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public void ToggleConsoleVisibility()
