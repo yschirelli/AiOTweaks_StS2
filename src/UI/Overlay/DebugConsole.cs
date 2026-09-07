@@ -8,8 +8,12 @@ using AIOTweaks.Core.State;
 using AIOTweaks.Cheats;
 using AIOTweaks.Hooks;
 using AIOTweaks.UI.Menu;
+using HarmonyLib;
+using MegaCrit.Sts2.Core.Helpers;
+using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Nodes;
 using MegaCrit.Sts2.Core.Nodes.CommonUi;
+using MegaCrit.Sts2.Core.Runs;
 
 namespace AIOTweaks.UI.Overlay;
 
@@ -28,6 +32,7 @@ public partial class DebugConsole : CanvasLayer
 
     private readonly List<string> _commandHistory = new();
     private int _historyIndex = -1;
+    private double _bossRescueCheckTimer = 0;
 
     public override void _Ready()
     {
@@ -49,6 +54,17 @@ public partial class DebugConsole : CanvasLayer
         UpdateBlockingState(false);
         ModLogger.OnLogged -= OnLogReceived;
         RuntimeStateManager.OnStateReset -= OnSessionReset;
+    }
+
+    public override void _Process(double delta)
+    {
+        base._Process(delta);
+        _bossRescueCheckTimer += delta;
+        if (_bossRescueCheckTimer >= 0.25)
+        {
+            _bossRescueCheckTimer = 0;
+            RunTweaksSaveManager.RescueBossRoomProceed();
+        }
     }
 
     public override void _Input(InputEvent @event)
@@ -410,7 +426,27 @@ public partial class DebugConsole : CanvasLayer
                              "  gold <amount>, setgold <amount>, heal <amount>, damage <amount>, setmaxhp <amount>\n" +
                              "  relic <id>, rmrelic <id>, card <id> [upgraded=true/false], handcard <id>\n" +
                              "  event <id>, clearevent, endless [on/off/loop <n>/status], freeroam [on/off]\n" +
-                             "  draw <count>, energy <amount>, verbose [on/off], clear, reset[/color]");
+                             "  proceed, nextact, draw <count>, energy <amount>, verbose [on/off], clear, reset[/color]");
+                break;
+
+            case "proceed":
+            case "nextact":
+                if (RunManager.Instance?.ActChangeSynchronizer != null)
+                {
+                    AccessTools.Field(typeof(ActChangeSynchronizer), "_lastTransitioningActIndex")
+                        ?.SetValue(RunManager.Instance.ActChangeSynchronizer, -1);
+                    RunManager.Instance.ActChangeSynchronizer.SetLocalPlayerReady();
+                    LogToConsole("[color=green]Invoked ActChangeSynchronizer.SetLocalPlayerReady(). Transitioning to next act...[/color]");
+                }
+                else if (RunManager.Instance != null)
+                {
+                    TaskHelper.RunSafely(RunManager.Instance.EnterNextAct());
+                    LogToConsole("[color=green]Invoked RunManager.EnterNextAct(). Transitioning to next act...[/color]");
+                }
+                else
+                {
+                    LogToConsole("[color=red]No active RunManager instance found.[/color]");
+                }
                 break;
 
             case "verbose":

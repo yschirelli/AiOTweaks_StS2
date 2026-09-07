@@ -34,6 +34,12 @@ using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Entities.Multiplayer;
 using MegaCrit.Sts2.Core.GameActions;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
+using MegaCrit.Sts2.Core.Multiplayer.Game;
+using MegaCrit.Sts2.Core.Nodes.Rooms;
+using MegaCrit.Sts2.Core.Nodes.Screens;
+using MegaCrit.Sts2.Core.Nodes.Screens.Overlays;
+using MegaCrit.Sts2.Core.Nodes.CommonUi;
+using MegaCrit.Sts2.Core.Entities.Players;
 
 namespace AIOTweaks.Hooks;
 
@@ -380,6 +386,108 @@ public static class RunTweaksSaveManager
             ModLogger.Error("Error checking IsInCombat", ex);
         }
         return false;
+    }
+
+    private static readonly Callable BossProceedCallable = Callable.From<NButton>(OnRescuedBossProceedClicked);
+
+    private static void OnRescuedBossProceedClicked(NButton btn)
+    {
+        try
+        {
+            btn.Disable();
+            ModLogger.Info("Rescued Boss Room Proceed Button clicked! Initiating act transition.");
+            if (RunManager.Instance?.ActChangeSynchronizer != null)
+            {
+                AccessTools.Field(typeof(ActChangeSynchronizer), "_lastTransitioningActIndex")
+                    ?.SetValue(RunManager.Instance.ActChangeSynchronizer, -1);
+                RunManager.Instance.ActChangeSynchronizer.SetLocalPlayerReady();
+            }
+            else if (RunManager.Instance != null)
+            {
+                TaskHelper.RunSafely(RunManager.Instance.EnterNextAct());
+            }
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Error("Error handling Boss Proceed button click", ex);
+        }
+    }
+
+    public static void RescueBossRoomProceed()
+    {
+        try
+        {
+            var runManager = RunManager.Instance;
+            var runState = runManager?.DebugOnlyGetState();
+            if (runManager == null || runState == null) return;
+
+            var currentRoom = runState.CurrentRoom;
+            if (currentRoom == null || currentRoom.RoomType != RoomType.Boss) return;
+
+            // If still in active combat, wait until combat ends
+            if (IsInCombat()) return;
+
+            // 1. Ensure ActChangeSynchronizer's _lastTransitioningActIndex is reset if it blocks the current act
+            if (runManager.ActChangeSynchronizer != null)
+            {
+                var lastActField = AccessTools.Field(typeof(ActChangeSynchronizer), "_lastTransitioningActIndex");
+                int lastAct = (int)(lastActField?.GetValue(runManager.ActChangeSynchronizer) ?? -1);
+                if (lastAct >= runState.CurrentActIndex)
+                {
+                    lastActField?.SetValue(runManager.ActChangeSynchronizer, -1);
+                    ModLogger.Info($"RescueBossRoomProceed: Reset _lastTransitioningActIndex from {lastAct} to -1.");
+                }
+            }
+
+            // 2. Check if NRewardsScreen is on overlay stack
+            var rewardsScreen = NOverlayStack.Instance?.Peek() as NRewardsScreen;
+            if (rewardsScreen != null && GodotObject.IsInstanceValid(rewardsScreen))
+            {
+                var disableField = AccessTools.Field(typeof(NRewardsScreen), "_disableProceedForever");
+                var proceedBtnField = AccessTools.Field(typeof(NRewardsScreen), "_proceedButton");
+                var proceedBtn = proceedBtnField?.GetValue(rewardsScreen) as NProceedButton;
+
+                if (proceedBtn != null && GodotObject.IsInstanceValid(proceedBtn))
+                {
+                    bool isForeverDisabled = (bool)(disableField?.GetValue(rewardsScreen) ?? false);
+                    if (isForeverDisabled || !proceedBtn.IsEnabled)
+                    {
+                        disableField?.SetValue(rewardsScreen, false);
+                        proceedBtn.Visible = true;
+                        proceedBtn.UpdateText(NProceedButton.ProceedLoc);
+                        proceedBtn.Enable();
+                        proceedBtn.SetPulseState(true);
+                    }
+                }
+                return;
+            }
+
+            // 3. If NRewardsScreen is not present or closed, rescue via NCombatRoom.ProceedButton
+            var combatRoom = NCombatRoom.Instance;
+            if (combatRoom != null && GodotObject.IsInstanceValid(combatRoom))
+            {
+                var proceedBtn = combatRoom.ProceedButton;
+                if (proceedBtn != null && GodotObject.IsInstanceValid(proceedBtn))
+                {
+                    if (!proceedBtn.Visible || !proceedBtn.IsEnabled)
+                    {
+                        proceedBtn.Visible = true;
+                        proceedBtn.UpdateText(NProceedButton.ProceedLoc);
+                        proceedBtn.Enable();
+                        proceedBtn.SetPulseState(true);
+
+                        if (!proceedBtn.IsConnected(NClickableControl.SignalName.Released, BossProceedCallable))
+                        {
+                            proceedBtn.Connect(NClickableControl.SignalName.Released, BossProceedCallable);
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Error("Error in RescueBossRoomProceed", ex);
+        }
     }
 
     public static void RefreshMapNavigationState(bool isFreeRoam)
@@ -846,6 +954,13 @@ public static class MapGenerationHooks
                 RunManager.Instance.ActionQueueSynchronizer?.SetCombatState(ActionSynchronizerCombatState.NotInCombat);
                 RunManager.Instance.ActionQueueSet?.UnpauseAllPlayerQueues();
                 RunManager.Instance.ActionExecutor?.Unpause();
+
+                // Reset ActChangeSynchronizer's _lastTransitioningActIndex so act transitions in the new loop are never blocked
+                if (RunManager.Instance.ActChangeSynchronizer != null)
+                {
+                    AccessTools.Field(typeof(ActChangeSynchronizer), "_lastTransitioningActIndex")
+                        ?.SetValue(RunManager.Instance.ActChangeSynchronizer, -1);
+                }
 
                 await RunManager.Instance.EnterAct(0, true);
                 ModLogger.Info("Deferred EnterAct(0, true) completed successfully.");
@@ -2402,6 +2517,145 @@ public static class MapGenerationHooks
             {
                 ModLogger.Error("Error in RoomSetGetBossPatch", ex);
                 return true; // Let original run if reflection fails
+            }
+        }
+    }
+
+    #endregion
+
+    #region Act Synchronization & Endless Boss Proceed Patches
+
+    /// <summary>
+    /// Resets ActChangeSynchronizer's _lastTransitioningActIndex if it would block transitioning from the current act.
+    /// In vanilla, acts only increment monotonically (0 -> 1 -> 2).
+    /// In Endless Mode, when looping from Act 3 back to Act 1, _lastTransitioningActIndex remains 2, causing
+    /// ActChangeSynchronizer.OnPlayerReady to reject the player's ready vote as an outdated act packet.
+    /// </summary>
+    [HarmonyPatch(typeof(ActChangeSynchronizer), nameof(ActChangeSynchronizer.OnPlayerReady))]
+    public static class ActChangeSynchronizerOnPlayerReadyPatch
+    {
+        private static readonly FieldInfo? LastActField = AccessTools.Field(typeof(ActChangeSynchronizer), "_lastTransitioningActIndex");
+
+        [HarmonyPrefix]
+        public static void Prefix(ActChangeSynchronizer __instance, int actIndex)
+        {
+            try
+            {
+                if (LastActField != null)
+                {
+                    int lastAct = (int)(LastActField.GetValue(__instance) ?? -1);
+                    if (lastAct >= actIndex)
+                    {
+                        ModLogger.Info($"ActChangeSynchronizerOnPlayerReadyPatch: Resetting _lastTransitioningActIndex from {lastAct} to -1 for actIndex={actIndex} (Endless Mode).");
+                        LastActField.SetValue(__instance, -1);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error("Error in ActChangeSynchronizerOnPlayerReadyPatch", ex);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Ensures that whenever an act is loaded or set (e.g. entering Act 0 on loop),
+    /// _lastTransitioningActIndex is cleared if it exceeds the new act index.
+    /// </summary>
+    [HarmonyPatch(typeof(RunManager), nameof(RunManager.SetActInternal))]
+    public static class RunManagerSetActInternalPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(RunManager __instance, int actIndex)
+        {
+            try
+            {
+                if (__instance.ActChangeSynchronizer != null)
+                {
+                    var field = AccessTools.Field(typeof(ActChangeSynchronizer), "_lastTransitioningActIndex");
+                    int lastAct = (int)(field?.GetValue(__instance.ActChangeSynchronizer) ?? -1);
+                    if (lastAct >= actIndex)
+                    {
+                        field?.SetValue(__instance.ActChangeSynchronizer, -1);
+                        ModLogger.Info($"RunManagerSetActInternalPatch: Reset _lastTransitioningActIndex from {lastAct} to -1 for act {actIndex}.");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error("Error in RunManagerSetActInternalPatch", ex);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Ensures that when the player clicks Proceed on the rewards screen in a boss room,
+    /// _lastTransitioningActIndex is guaranteed to be reset before SetLocalPlayerReady is called.
+    /// </summary>
+    [HarmonyPatch(typeof(NRewardsScreen), "OnProceedButtonPressed")]
+    public static class NRewardsScreenOnProceedButtonPressedPatch
+    {
+        [HarmonyPrefix]
+        public static void Prefix(NRewardsScreen __instance)
+        {
+            try
+            {
+                var runState = RunManager.Instance?.DebugOnlyGetState();
+                if (RunManager.Instance?.ActChangeSynchronizer != null && runState != null)
+                {
+                    var field = AccessTools.Field(typeof(ActChangeSynchronizer), "_lastTransitioningActIndex");
+                    int lastAct = (int)(field?.GetValue(RunManager.Instance.ActChangeSynchronizer) ?? -1);
+                    if (lastAct >= runState.CurrentActIndex)
+                    {
+                        field?.SetValue(RunManager.Instance.ActChangeSynchronizer, -1);
+                        ModLogger.Info($"NRewardsScreenOnProceedButtonPressedPatch: Resetting _lastTransitioningActIndex from {lastAct} to -1.");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error("Error in NRewardsScreenOnProceedButtonPressedPatch", ex);
+            }
+        }
+    }
+
+    /// <summary>
+    /// When entering or reloading a combat room, if it is a completed Boss room, ensure the Proceed button is available.
+    /// </summary>
+    [HarmonyPatch(typeof(NCombatRoom), nameof(NCombatRoom._Ready))]
+    public static class NCombatRoomReadyPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(NCombatRoom __instance)
+        {
+            try
+            {
+                RunTweaksSaveManager.RescueBossRoomProceed();
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error("Error in NCombatRoomReadyPatch", ex);
+            }
+        }
+    }
+
+    /// <summary>
+    /// When NRewardsScreen updates its state (e.g. all rewards collected or screen completing),
+    /// ensure the boss room proceed button is safely enabled.
+    /// </summary>
+    [HarmonyPatch(typeof(NRewardsScreen), "UpdateScreenState")]
+    public static class NRewardsScreenUpdateScreenStatePatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(NRewardsScreen __instance)
+        {
+            try
+            {
+                RunTweaksSaveManager.RescueBossRoomProceed();
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error("Error in NRewardsScreenUpdateScreenStatePatch", ex);
             }
         }
     }
