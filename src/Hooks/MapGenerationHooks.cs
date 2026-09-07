@@ -784,8 +784,8 @@ public static class MapGenerationHooks
     [HarmonyPatch(typeof(RunManager), nameof(RunManager.SetUpNewSingleplayer))]
     public static class RunManagerSetUpNewSingleplayerPatch
     {
-        [HarmonyPostfix]
-        public static void Postfix(RunState state)
+        [HarmonyPrefix]
+        public static void Prefix(RunState state)
         {
             try
             {
@@ -801,8 +801,8 @@ public static class MapGenerationHooks
     [HarmonyPatch(typeof(RunManager), nameof(RunManager.SetUpNewMultiplayer))]
     public static class RunManagerSetUpNewMultiplayerPatch
     {
-        [HarmonyPostfix]
-        public static void Postfix(RunState state)
+        [HarmonyPrefix]
+        public static void Prefix(RunState state)
         {
             try
             {
@@ -818,8 +818,8 @@ public static class MapGenerationHooks
     [HarmonyPatch(typeof(RunManager), nameof(RunManager.SetUpSavedSingleplayer))]
     public static class RunManagerSetUpSavedSingleplayerPatch
     {
-        [HarmonyPostfix]
-        public static void Postfix(RunState state, MegaCrit.Sts2.Core.Saves.SerializableRun save)
+        [HarmonyPrefix]
+        public static void Prefix(RunState state, MegaCrit.Sts2.Core.Saves.SerializableRun save)
         {
             try
             {
@@ -835,8 +835,8 @@ public static class MapGenerationHooks
     [HarmonyPatch(typeof(RunManager), nameof(RunManager.SetUpSavedMultiplayer))]
     public static class RunManagerSetUpSavedMultiplayerPatch
     {
-        [HarmonyPostfix]
-        public static void Postfix(RunState state, MegaCrit.Sts2.Core.Multiplayer.Game.Lobby.LoadRunLobby lobby)
+        [HarmonyPrefix]
+        public static void Prefix(RunState state, MegaCrit.Sts2.Core.Multiplayer.Game.Lobby.LoadRunLobby lobby)
         {
             try
             {
@@ -1050,7 +1050,17 @@ public static class MapGenerationHooks
                     state.Rng.MockRng(rngType, typeSeed);
                 }
 
-                ModLogger.Info($"Endless Mode: Regenerated fresh rooms, encounters, bosses, and sub-RNGs for loop #{loop}.");
+                // ALSO re-seed player RNGs so card rewards, shops, and relic offerings roll brand new items for this loop!
+                string loopSeedStr = !string.IsNullOrEmpty(state.Rng?.StringSeed)
+                    ? $"{state.Rng.StringSeed}_loop_{loop}"
+                    : $"endless_{loop}_{loopSeed}";
+
+                foreach (var player in state.Players)
+                {
+                    player.InitializeSeed(loopSeedStr);
+                }
+
+                ModLogger.Info($"Endless Mode: Regenerated fresh rooms, encounters, bosses, sub-RNGs, and player RNGs for loop #{loop}.");
 
                 // Ensure combat and action queues are cleanly reset before entering Act 0
                 CombatManager.Instance?.Reset(graceful: true);
@@ -1214,7 +1224,7 @@ public static class MapGenerationHooks
                 if (desiredRooms > 15)
                 {
                     __result = isMultiplayer ? Math.Max(1, desiredRooms - 1) : desiredRooms;
-                    ModLogger.Verbose("MapGenerationHooks", $"ActModel.GetNumberOfRooms: Custom MapRoomCount applied -> {__result} rooms for act.");
+                    ModLogger.Info($"ActModel.GetNumberOfRooms: Custom MapRoomCount applied -> {__result} rooms for act (configured: {desiredRooms}).");
                 }
             }
             catch (Exception ex)
@@ -1768,7 +1778,7 @@ public static class MapGenerationHooks
             {
                 var screen = AccessTools.Field(typeof(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapPoint), "_screen")?.GetValue(__instance)
                     as MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen ?? MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen.Instance;
-                if (screen != null && (screen.IsTraveling || !screen.IsTravelEnabled))
+                if (screen != null && screen.IsTraveling)
                 {
                     __result = false;
                     return;
@@ -1779,7 +1789,7 @@ public static class MapGenerationHooks
     }
 
     /// <summary>
-    /// Enables debug travel on NMapScreen when Free Map Navigation is enabled, but never during combat or when travel is disabled.
+    /// Enables debug travel on NMapScreen when Free Map Navigation is enabled, but never during combat.
     /// </summary>
     [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen), "get_IsDebugTravelEnabled")]
     public static class NMapScreenIsDebugTravelEnabledPatch
@@ -1787,7 +1797,7 @@ public static class MapGenerationHooks
         [HarmonyPostfix]
         public static void Postfix(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen __instance, ref bool __result)
         {
-            if (RunTweaksSaveManager.IsInCombat() || __instance.IsTraveling || !__instance.IsTravelEnabled)
+            if (RunTweaksSaveManager.IsInCombat() || __instance.IsTraveling)
             {
                 __result = false;
                 return;
@@ -1802,7 +1812,6 @@ public static class MapGenerationHooks
 
     /// <summary>
     /// When traveling on map with Free Map Navigation active, marks active run as Custom mode.
-    /// Does not reset IsTraveling or re-enable points if entering combat.
     /// </summary>
     [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen), nameof(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen.TravelToMapCoord))]
     public static class NMapScreenTravelToMapCoordPatch
@@ -1815,20 +1824,45 @@ public static class MapGenerationHooks
                 GameHelper.EnsureCustomRunMode();
             }
         }
+    }
 
+    /// <summary>
+    /// Sets all unvisited map points to Travelable state when Free Map Navigation is enabled.
+    /// This ensures all map points are visually illuminated, selectable, and interactive outside combat.
+    /// </summary>
+    [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen), "RecalculateTravelability")]
+    public static class NMapScreenRecalculateTravelabilityPatch
+    {
         [HarmonyPostfix]
         public static void Postfix(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen __instance)
         {
-            if (RunTweaksSaveManager.IsFreeMapNavigationActive() && !RunTweaksSaveManager.IsInCombat())
+            try
             {
-                __instance.IsTraveling = false;
-                __instance.RefreshAllPointVisuals();
+                if (RunTweaksSaveManager.IsFreeMapNavigationActive() && !RunTweaksSaveManager.IsInCombat())
+                {
+                    var dict = AccessTools.Field(typeof(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen), "_mapPointDictionary")
+                        ?.GetValue(__instance) as System.Collections.IDictionary;
+                    if (dict != null)
+                    {
+                        foreach (var val in dict.Values)
+                        {
+                            if (val is NMapPoint point && point.State != MapPointState.Traveled)
+                            {
+                                point.State = MapPointState.Travelable;
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error("Error in NMapScreenRecalculateTravelabilityPatch", ex);
             }
         }
     }
 
     /// <summary>
-    /// Ensures map points remain travelable and IsTraveling is reset when opening the map screen outside combat.
+    /// Refreshes all map point visuals when opening the map screen outside combat if Free Map Navigation is active.
     /// </summary>
     [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen), nameof(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen.Open))]
     public static class NMapScreenOpenPatch
@@ -1838,7 +1872,6 @@ public static class MapGenerationHooks
         {
             if (RunTweaksSaveManager.IsFreeMapNavigationActive() && !RunTweaksSaveManager.IsInCombat())
             {
-                __instance.IsTraveling = false;
                 __instance.RefreshAllPointVisuals();
             }
         }
@@ -2763,9 +2796,8 @@ public static class MapGenerationHooks
         public static void Postfix(RelicModel __instance, Player player, ref bool __result)
         {
             if (!__result) return;
-            var tweaks = RunTweaksSaveManager.GetEffectivePreRunTweaks();
-            if (tweaks.AllowMultipleRelics) return;
 
+            // In Endless mode or repeated visits, Neow should always offer fresh relics not yet owned by the player
             if (player?.Relics != null && player.Relics.Any(r => r.Id == __instance.Id))
             {
                 __result = false;

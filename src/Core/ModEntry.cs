@@ -177,13 +177,43 @@ public partial class ModEntry : Node
             _harmony = new Harmony(ModId);
             var assembly = System.Reflection.Assembly.GetExecutingAssembly();
             ModLogger.Verbose("ModEntry", $"Scanning and applying Harmony patches from assembly: {assembly.FullName}");
-            _harmony.PatchAll(assembly);
-            
-            ModLogger.Info("All Harmony hooks applied successfully.");
+
+            int successCount = 0;
+            int failureCount = 0;
+
+            foreach (var type in assembly.GetTypes())
+            {
+                if (type.GetCustomAttributes(typeof(HarmonyPatch), true).Length > 0)
+                {
+                    try
+                    {
+                        var processor = _harmony.CreateClassProcessor(type);
+                        var methods = processor.Patch();
+                        if (methods != null && methods.Count > 0)
+                        {
+                            successCount++;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        failureCount++;
+                        ModLogger.Error($"Failed to apply Harmony patch class '{type.FullName}'", ex);
+                    }
+                }
+            }
+
+            if (failureCount == 0)
+            {
+                ModLogger.Info($"All {successCount} Harmony patch classes applied successfully.");
+            }
+            else
+            {
+                ModLogger.Warn($"Harmony patching completed: {successCount} succeeded, {failureCount} failed.");
+            }
         }
         catch (Exception ex)
         {
-            ModLogger.Error("Harmony initialization encountered an issue.", ex);
+            ModLogger.Error("Harmony initialization encountered a critical issue.", ex);
         }
     }
 
