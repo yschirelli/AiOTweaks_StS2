@@ -107,18 +107,25 @@ public static class ModLogger
         string timestamp = DateTime.Now.ToString("HH:mm:ss.fff");
         string formatted = $"{Tag} [{timestamp}] [{level.ToString().ToUpperInvariant()}] {message}";
 
-        switch (level)
+        try
         {
-            case LogLevel.Debug:
-            case LogLevel.Info:
-                GD.Print(formatted);
-                break;
-            case LogLevel.Warn:
-                GD.PushWarning(formatted);
-                break;
-            case LogLevel.Error:
-                GD.PushError(formatted);
-                break;
+            switch (level)
+            {
+                case LogLevel.Debug:
+                case LogLevel.Info:
+                    GD.Print(formatted);
+                    break;
+                case LogLevel.Warn:
+                    GD.PushWarning(formatted);
+                    break;
+                case LogLevel.Error:
+                    GD.PushError(formatted);
+                    break;
+            }
+        }
+        catch
+        {
+            Console.WriteLine(formatted);
         }
 
         try
