@@ -59,11 +59,11 @@
 
 ### Pre-Run Tweaks & Modifiers
 - **Run Modifiers**: Adjust gold rewards, shop discounts, draft pool sizes, starting gold/max HP, and force Neow encounters.
-- **Combat Multipliers**: Independent sliders for player damage, enemy health, enemy damage, and enemy defend/block.
+- **Combat Multipliers**: Independent sliders for player damage, player defend/block, enemy health, enemy damage, and enemy defend/block.
 - **Max Energy & Potion Slots**: Configure baseline energy and scale maximum potion slots from 1 to 10 with automatic top-bar layout anti-overlap shifting.
 - **Allow Multiple Relics**: Option to keep collected relics in loot pools for multi-relic stacking builds.
-- **Endless Mode**: Compounding loop scaling for enemies over infinite run loops.
-- **Custom Map Generation**: Adjust floor length (15–50 rooms), customize node distribution weights, or toggle Free Navigation ("Flying Boots") to visit any room freely.
+- **Endless Mode**: Compounding loop scaling for enemies over infinite run loops with an in-game option to continue into loops at the Architect victory sequence.
+- **Custom Map Generation & Navigation**: Adjust floor length (15–50 rooms), customize node distribution weights, or toggle Free Map Navigation ("Flying Boots" / Free Roam) to travel to any room freely on the map with seamless return to normal path selection upon deactivation.
 
 ### Card & Deck Director
 - **Live Pile Views**: Inspect Master Deck, Hand, Draw Pile, Discard Pile, and Exhaust Pile with live counters and search filters.
@@ -134,7 +134,10 @@ Open the console with your configured keybind (`F1`) and execute any of the foll
 | `draw` | `draw 3` | Immediately draws specified number of cards in combat. |
 | `energy` | `energy 2` | Adds specified energy points in combat. |
 | `maxenergy` | `maxenergy 5` | Sets or displays the baseline Max Energy count. |
+| `endless` | `endless on` | Configures Endless Mode (`on`, `off`, `loop <count>`, `status`). |
+| `freeroam` / `freemap` | `freeroam on` | Toggles Free Map Navigation (freely click any room or return to normal pathing). |
 | `playerdmg` / `dmgmult` | `playerdmg 2.5` | Sets or displays the player damage multiplier. |
+| `playerdef` / `defmult` | `playerdef 2.0` | Sets or displays the player defend/block multiplier. |
 | `verbose` / `debuglog` | `verbose on` | Toggles verbose diagnostic logging. |
 | `clear` | `clear` | Clears text from the console log window. |
 | `reset` | `reset` | Clears all transient cheats and resets state to default. |
@@ -217,8 +220,11 @@ Run the root build script, which automatically detects your .NET SDK, locates St
 # Compile Release build (default)
 ./build.sh
 
+# Compile Release build and deploy DLLs directly to game mod folder
+./build.sh --deploy
+
 # Compile Debug build (forcefully enables verbose logging and writes to aiotweaks_debug.log in mod root)
-./build.sh debug
+./build.sh debug --deploy
 ```
 
 ### Manual Build
