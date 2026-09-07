@@ -426,7 +426,7 @@ public partial class DebugConsole : CanvasLayer
                              "  gold <amount>, setgold <amount>, heal <amount>, damage <amount>, setmaxhp <amount>\n" +
                              "  relic <id>, rmrelic <id>, card <id> [upgraded=true/false], handcard <id>\n" +
                              "  event <id>, clearevent, endless [on/off/loop <n>/status], freeroam [on/off]\n" +
-                             "  proceed, nextact, draw <count>, energy <amount>, verbose [on/off], clear, reset[/color]");
+                             "  seed [val/clear/roll/status], proceed, nextact, draw <count>, energy <amount>, verbose [on/off], clear, reset[/color]");
                 break;
 
             case "proceed":
@@ -778,6 +778,46 @@ public partial class DebugConsole : CanvasLayer
                     RunTweaksSaveManager.RefreshMapNavigationState(newState);
                     ConfigManager.SaveConfig();
                     LogToConsole($"[color=cyan]Free Map Navigation toggled: {(newState ? "[color=green]ENABLED[/color]" : "[color=yellow]DISABLED[/color]")}[/color]");
+                }
+                break;
+
+            case "seed":
+                if (parts.Length > 1)
+                {
+                    string sub = parts[1];
+                    string subLower = sub.ToLowerInvariant();
+                    if (subLower == "clear" || subLower == "none" || subLower == "random")
+                    {
+                        ConfigManager.Current.PreRunTweaks.CustomSeed = "";
+                        ConfigManager.SaveConfig();
+                        LogToConsole("[color=green]Pre-run custom seed cleared. Next run will use a procedural random seed.[/color]");
+                    }
+                    else if (subLower == "roll" || subLower == "new")
+                    {
+                        string rand = MegaCrit.Sts2.Core.Helpers.SeedHelper.GetRandomSeed();
+                        ConfigManager.Current.PreRunTweaks.CustomSeed = rand;
+                        ConfigManager.SaveConfig();
+                        LogToConsole($"[color=green]Rolled new pre-run custom seed: '{rand}'. Next run will use this seed.[/color]");
+                    }
+                    else if (subLower == "status")
+                    {
+                        string preRunSeed = ConfigManager.Current.PreRunTweaks.CustomSeed;
+                        string? activeSeed = RunTweaksSaveManager.GetActiveRunSeed();
+                        LogToConsole($"[color=cyan]Active Run Seed: {(string.IsNullOrEmpty(activeSeed) ? "(None / No active run)" : activeSeed)} | Configured Pre-Run Seed: {(string.IsNullOrEmpty(preRunSeed) ? "(Procedural / Random)" : preRunSeed)}[/color]");
+                    }
+                    else
+                    {
+                        string canonical = MegaCrit.Sts2.Core.Helpers.SeedHelper.CanonicalizeSeed(sub);
+                        ConfigManager.Current.PreRunTweaks.CustomSeed = canonical;
+                        ConfigManager.SaveConfig();
+                        LogToConsole($"[color=green]Set pre-run custom seed to '{canonical}'. Next run will start in Custom Mode with this seed.[/color]");
+                    }
+                }
+                else
+                {
+                    string preRunSeed = ConfigManager.Current.PreRunTweaks.CustomSeed;
+                    string? activeSeed = RunTweaksSaveManager.GetActiveRunSeed();
+                    LogToConsole($"[color=cyan]Seed Status: Active Run = {(string.IsNullOrEmpty(activeSeed) ? "(None)" : activeSeed)}, Pre-Run Config = {(string.IsNullOrEmpty(preRunSeed) ? "(Procedural)" : preRunSeed)}\nUsage: seed <value | clear | roll | status>[/color]");
                 }
                 break;
 

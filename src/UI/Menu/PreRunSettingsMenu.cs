@@ -34,6 +34,9 @@ public partial class PreRunSettingsMenu : Control
     private SpinBox? _potionSlotsSpin;
     private CheckBox? _allowMultipleRelicsCheck;
     private CheckBox? _forceNeowCheck;
+    private CheckBox? _bypassTutorialCheck;
+    private LineEdit? _customSeedInput;
+    private Label? _seedStatusLabel;
     private Label? _statusBannerLabel;
 
     public override void _Ready()
@@ -147,11 +150,74 @@ public partial class PreRunSettingsMenu : Control
 
         _forceNeowCheck = new CheckBox 
         { 
-            Text = " Spawn Neow at start? (Uncheck to skip Neow and start directly on map)",
+            Text = " Spawn Neow at start?",
             TooltipText = "Guarantees Neow blessing when checked (default: enabled). When unchecked, skips Neow and starts directly on the map.",
             ButtonPressed = ConfigManager.Current.PreRunTweaks.ForceNeowBonus
         };
         vbox.AddChild(_forceNeowCheck);
+
+        vbox.AddChild(new HSeparator());
+        vbox.AddChild(new Label { Text = "--- Run Seed & Randomization ---", Modulate = new Color(0.3f, 0.85f, 1f) });
+
+        var seedRow = new HBoxContainer();
+        seedRow.AddChild(new Label { Text = "Custom Run Seed: ", CustomMinimumSize = new Vector2(170, 0) });
+
+        _customSeedInput = new LineEdit
+        {
+            PlaceholderText = "Random (Leave blank for new seed)",
+            CustomMinimumSize = new Vector2(280, 0),
+            MaxLength = 16
+        };
+        _customSeedInput.TextChanged += (newText) =>
+        {
+            string upper = newText.ToUpperInvariant().Replace("O", "0").Replace("I", "1");
+            if (_customSeedInput.Text != upper)
+            {
+                _customSeedInput.Text = upper;
+                _customSeedInput.CaretColumn = upper.Length;
+            }
+            UpdateSeedStatusLabel();
+        };
+        seedRow.AddChild(_customSeedInput);
+
+        var randomSeedBtn = new Button { Text = " Randomize " };
+        randomSeedBtn.Pressed += () =>
+        {
+            string rand = MegaCrit.Sts2.Core.Helpers.SeedHelper.GetRandomSeed();
+            if (_customSeedInput != null)
+            {
+                _customSeedInput.Text = rand;
+            }
+            UpdateSeedStatusLabel();
+        };
+        seedRow.AddChild(randomSeedBtn);
+
+        var clearSeedBtn = new Button { Text = " Clear (Random) " };
+        clearSeedBtn.Pressed += () =>
+        {
+            if (_customSeedInput != null)
+            {
+                _customSeedInput.Text = "";
+            }
+            UpdateSeedStatusLabel();
+        };
+        seedRow.AddChild(clearSeedBtn);
+        vbox.AddChild(seedRow);
+
+        _seedStatusLabel = new Label
+        {
+            Text = "Procedural: A fresh unique seed will be rolled automatically on embarkation.",
+            Modulate = new Color(0.6f, 0.95f, 0.6f)
+        };
+        vbox.AddChild(_seedStatusLabel);
+
+        _bypassTutorialCheck = new CheckBox
+        {
+            Text = " Force Procedural Encounters (Bypass Tutorial / Discovery locks on encounters, bosses & rewards)",
+            TooltipText = "When enabled (default), skips the game's hardcoded tutorial encounters/bosses/card rewards on fresh or modded profiles, ensuring true procedural variety.",
+            ButtonPressed = ConfigManager.Current.PreRunTweaks.BypassTutorialAndDiscoveryLocks
+        };
+        vbox.AddChild(_bypassTutorialCheck);
 
         vbox.AddChild(new HSeparator());
 
@@ -224,6 +290,26 @@ public partial class PreRunSettingsMenu : Control
         if (_potionSlotsSpin != null) _potionSlotsSpin.Value = tweaks.PotionSlots;
         if (_allowMultipleRelicsCheck != null) _allowMultipleRelicsCheck.ButtonPressed = tweaks.AllowMultipleRelics;
         if (_forceNeowCheck != null) _forceNeowCheck.ButtonPressed = tweaks.ForceNeowBonus;
+        if (_customSeedInput != null) _customSeedInput.Text = tweaks.CustomSeed;
+        if (_bypassTutorialCheck != null) _bypassTutorialCheck.ButtonPressed = tweaks.BypassTutorialAndDiscoveryLocks;
+        UpdateSeedStatusLabel();
+    }
+
+    private void UpdateSeedStatusLabel()
+    {
+        if (_seedStatusLabel == null) return;
+        string text = _customSeedInput?.Text?.Trim() ?? "";
+        if (string.IsNullOrEmpty(text))
+        {
+            _seedStatusLabel.Text = "Procedural: A fresh unique seed will be rolled automatically on embarkation.";
+            _seedStatusLabel.Modulate = new Color(0.6f, 0.95f, 0.6f);
+        }
+        else
+        {
+            string canonical = MegaCrit.Sts2.Core.Helpers.SeedHelper.CanonicalizeSeed(text);
+            _seedStatusLabel.Text = $"Custom Seed: '{canonical}' (Run will start in Custom Mode with fixed RNG seed)";
+            _seedStatusLabel.Modulate = new Color(1f, 0.85f, 0.3f);
+        }
     }
 
     private void OnSavePressed()
@@ -241,6 +327,8 @@ public partial class PreRunSettingsMenu : Control
         if (_potionSlotsSpin != null) tweaks.PotionSlots = (int)_potionSlotsSpin.Value;
         if (_allowMultipleRelicsCheck != null) tweaks.AllowMultipleRelics = _allowMultipleRelicsCheck.ButtonPressed;
         if (_forceNeowCheck != null) tweaks.ForceNeowBonus = _forceNeowCheck.ButtonPressed;
+        if (_customSeedInput != null) tweaks.CustomSeed = _customSeedInput.Text.Trim();
+        if (_bypassTutorialCheck != null) tweaks.BypassTutorialAndDiscoveryLocks = _bypassTutorialCheck.ButtonPressed;
 
         ConfigManager.SaveConfig();
         ModLogger.Info("Pre-run settings saved successfully.");

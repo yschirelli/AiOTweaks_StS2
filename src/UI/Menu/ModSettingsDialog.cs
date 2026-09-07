@@ -89,6 +89,10 @@ public partial class ModSettingsDialog : CanvasLayer
     private CheckBox? _freeMapNavCheck;
     private CheckBox? _allowMultipleRelicsCheck;
     private SpinBox? _potionSlotsPreRunSpin;
+    private LineEdit? _customSeedInput;
+    private Label? _seedStatusLabel;
+    private Label? _activeRunSeedLabel;
+    private CheckBox? _bypassTutorialCheck;
 
     private CheckBox? _godModeCheck;
     private CheckBox? _infEnergyCheck;
@@ -693,6 +697,8 @@ public partial class ModSettingsDialog : CanvasLayer
 
             ConfigManager.Current.PreRunTweaks.EndlessMode.Enabled = false;
             ConfigManager.Current.PreRunTweaks.EndlessMode.EnemyScalingMultiplier = 2.0f;
+            ConfigManager.Current.PreRunTweaks.CustomSeed = "";
+            ConfigManager.Current.PreRunTweaks.BypassTutorialAndDiscoveryLocks = true;
             RunTweaksSaveManager.SetFreeMapNavigation(false);
 
             ConfigManager.Current.PreRunTweaks.PlayerDamageMultiplier = 1.0f;
@@ -1002,6 +1008,95 @@ public partial class ModSettingsDialog : CanvasLayer
         };
         _forceNeowCheck.Toggled += _ => MarkTweaksModified();
         preRunBox.AddChild(_forceNeowCheck);
+
+        preRunBox.AddChild(new HSeparator());
+        preRunBox.AddChild(new Label { Text = "--- Run Seed & Procedural Variety ---", Modulate = new Color(0.3f, 0.85f, 1f) });
+
+        var seedRow = new HBoxContainer();
+        seedRow.AddChild(new Label { Text = "Custom Run Seed: ", CustomMinimumSize = new Vector2(230, 0) });
+
+        _customSeedInput = new LineEdit
+        {
+            PlaceholderText = "Random (Leave blank for new seed)",
+            CustomMinimumSize = new Vector2(220, 0),
+            MaxLength = 16
+        };
+        _customSeedInput.TextChanged += newText =>
+        {
+            string upper = newText.ToUpperInvariant().Replace("O", "0").Replace("I", "1");
+            if (_customSeedInput.Text != upper)
+            {
+                _customSeedInput.Text = upper;
+                _customSeedInput.CaretColumn = upper.Length;
+            }
+            MarkTweaksModified();
+            UpdateSeedStatusLabel();
+        };
+        seedRow.AddChild(_customSeedInput);
+
+        var randomSeedBtn = new Button { Text = " Randomize " };
+        randomSeedBtn.Pressed += () =>
+        {
+            string rand = MegaCrit.Sts2.Core.Helpers.SeedHelper.GetRandomSeed();
+            if (_customSeedInput != null)
+            {
+                _customSeedInput.Text = rand;
+            }
+            MarkTweaksModified();
+            UpdateSeedStatusLabel();
+        };
+        seedRow.AddChild(randomSeedBtn);
+
+        var clearSeedBtn = new Button { Text = " Clear " };
+        clearSeedBtn.Pressed += () =>
+        {
+            if (_customSeedInput != null)
+            {
+                _customSeedInput.Text = "";
+            }
+            MarkTweaksModified();
+            UpdateSeedStatusLabel();
+        };
+        seedRow.AddChild(clearSeedBtn);
+        preRunBox.AddChild(seedRow);
+
+        _seedStatusLabel = new Label
+        {
+            Text = "Procedural: A fresh unique seed will be rolled automatically on embarkation.",
+            Modulate = new Color(0.6f, 0.95f, 0.6f)
+        };
+        preRunBox.AddChild(_seedStatusLabel);
+
+        var activeSeedRow = new HBoxContainer();
+        _activeRunSeedLabel = new Label
+        {
+            Text = "Active Run Seed: (No active run)",
+            CustomMinimumSize = new Vector2(320, 0),
+            Modulate = new Color(0.7f, 0.7f, 0.7f)
+        };
+        activeSeedRow.AddChild(_activeRunSeedLabel);
+
+        var copyActiveSeedBtn = new Button { Text = " Copy Active Seed " };
+        copyActiveSeedBtn.Pressed += () =>
+        {
+            string? s = RunTweaksSaveManager.GetActiveRunSeed();
+            if (!string.IsNullOrEmpty(s))
+            {
+                DisplayServer.ClipboardSet(s);
+                ModLogger.Info($"Copied active run seed '{s}' to clipboard.");
+            }
+        };
+        activeSeedRow.AddChild(copyActiveSeedBtn);
+        preRunBox.AddChild(activeSeedRow);
+
+        _bypassTutorialCheck = new CheckBox
+        {
+            Text = " Force Procedural Encounters (Bypass Tutorial & Discovery Locks)",
+            TooltipText = "When enabled (default), bypasses the game's hardcoded tutorial encounters/bosses/card rewards on fresh or modded profiles, ensuring true procedural variety.",
+            ButtonPressed = ConfigManager.Current.PreRunTweaks.BypassTutorialAndDiscoveryLocks
+        };
+        _bypassTutorialCheck.Toggled += _ => MarkTweaksModified();
+        preRunBox.AddChild(_bypassTutorialCheck);
 
         leftCol.AddChild(CreateSectionCard("Pre-Run Tweaks & Map Generation (Pre-Run Only)", preRunBox, new Color(1f, 0.85f, 0.35f)));
 
@@ -4521,6 +4616,40 @@ public partial class ModSettingsDialog : CanvasLayer
         return slider;
     }
 
+    private void UpdateSeedStatusLabel()
+    {
+        if (_seedStatusLabel == null) return;
+        string text = _customSeedInput?.Text?.Trim() ?? "";
+        if (string.IsNullOrEmpty(text))
+        {
+            _seedStatusLabel.Text = "Procedural: A fresh unique seed will be rolled automatically on embarkation.";
+            _seedStatusLabel.Modulate = new Color(0.6f, 0.95f, 0.6f);
+        }
+        else
+        {
+            string canonical = MegaCrit.Sts2.Core.Helpers.SeedHelper.CanonicalizeSeed(text);
+            _seedStatusLabel.Text = $"Custom Seed: '{canonical}' (Next run will start in Custom Mode with fixed RNG seed)";
+            _seedStatusLabel.Modulate = new Color(1f, 0.85f, 0.3f);
+        }
+    }
+
+    private void UpdateActiveRunSeedDisplay()
+    {
+        if (_activeRunSeedLabel == null) return;
+        string? activeSeed = RunTweaksSaveManager.GetActiveRunSeed();
+
+        if (!string.IsNullOrEmpty(activeSeed))
+        {
+            _activeRunSeedLabel.Text = $"Active Run Seed: {activeSeed}";
+            _activeRunSeedLabel.Modulate = new Color(0.4f, 0.9f, 1f);
+        }
+        else
+        {
+            _activeRunSeedLabel.Text = "Active Run Seed: (No active run)";
+            _activeRunSeedLabel.Modulate = new Color(0.6f, 0.6f, 0.6f);
+        }
+    }
+
     private void LoadSettingsValues()
     {
         _isLoadingSettings = true;
@@ -4577,6 +4706,10 @@ public partial class ModSettingsDialog : CanvasLayer
         if (_potionSlotsPreRunSpin != null) _potionSlotsPreRunSpin.Value = tweaks.PotionSlots;
         if (_allowMultipleRelicsCheck != null) _allowMultipleRelicsCheck.ButtonPressed = tweaks.AllowMultipleRelics;
         if (_forceNeowCheck != null) _forceNeowCheck.ButtonPressed = tweaks.ForceNeowBonus;
+        if (_customSeedInput != null) _customSeedInput.Text = tweaks.CustomSeed;
+        if (_bypassTutorialCheck != null) _bypassTutorialCheck.ButtonPressed = tweaks.BypassTutorialAndDiscoveryLocks;
+        UpdateSeedStatusLabel();
+        UpdateActiveRunSeedDisplay();
 
         if (_eliteSlider != null) _eliteSlider.Value = tweaks.MapNodeDistribution.EliteWeightMultiplier;
         if (_shopSlider != null) _shopSlider.Value = tweaks.MapNodeDistribution.ShopWeightMultiplier;
@@ -4660,6 +4793,8 @@ public partial class ModSettingsDialog : CanvasLayer
             if (_potionSlotsPreRunSpin != null && GodotObject.IsInstanceValid(_potionSlotsPreRunSpin)) tweaks.PotionSlots = (int)_potionSlotsPreRunSpin.Value;
             if (_allowMultipleRelicsCheck != null && GodotObject.IsInstanceValid(_allowMultipleRelicsCheck)) tweaks.AllowMultipleRelics = _allowMultipleRelicsCheck.ButtonPressed;
             if (_forceNeowCheck != null && GodotObject.IsInstanceValid(_forceNeowCheck)) tweaks.ForceNeowBonus = _forceNeowCheck.ButtonPressed;
+            if (_customSeedInput != null && GodotObject.IsInstanceValid(_customSeedInput)) tweaks.CustomSeed = _customSeedInput.Text.Trim();
+            if (_bypassTutorialCheck != null && GodotObject.IsInstanceValid(_bypassTutorialCheck)) tweaks.BypassTutorialAndDiscoveryLocks = _bypassTutorialCheck.ButtonPressed;
 
             if (tweaks.MapNodeDistribution != null)
             {

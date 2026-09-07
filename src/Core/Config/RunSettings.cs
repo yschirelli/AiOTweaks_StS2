@@ -51,6 +51,12 @@ public sealed class RunSettings
     [JsonPropertyName("potionSlots")]
     public int PotionSlots { get; set; } = 3;
 
+    [JsonPropertyName("customSeed")]
+    public string CustomSeed { get; set; } = "";
+
+    [JsonPropertyName("bypassTutorialAndDiscoveryLocks")]
+    public bool BypassTutorialAndDiscoveryLocks { get; set; } = true;
+
     public RunSettings Clone()
     {
         return new RunSettings
@@ -68,7 +74,9 @@ public sealed class RunSettings
             CardRewardCount = CardRewardCount,
             DraftModeEnabled = DraftModeEnabled,
             AllowMultipleRelics = AllowMultipleRelics,
-            PotionSlots = PotionSlots
+            PotionSlots = PotionSlots,
+            CustomSeed = CustomSeed,
+            BypassTutorialAndDiscoveryLocks = BypassTutorialAndDiscoveryLocks
         };
     }
 }

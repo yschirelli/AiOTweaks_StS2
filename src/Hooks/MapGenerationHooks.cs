@@ -93,6 +93,8 @@ public sealed class ActiveRunTweaksSnapshot
         if (source == null) return new PreRunTweaksConfig();
         return new PreRunTweaksConfig
         {
+            CustomSeed = source.CustomSeed,
+            BypassTutorialAndDiscoveryLocks = source.BypassTutorialAndDiscoveryLocks,
             GoldRewardMultiplier = source.GoldRewardMultiplier,
             ShopDiscountMultiplier = source.ShopDiscountMultiplier,
             CardRewardCount = source.CardRewardCount,
@@ -235,7 +237,7 @@ public static class RunTweaksSaveManager
         {
             ProfileId = profileId,
             StartTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-            RunSeed = runState?.Rng?.Seed.ToString() ?? "",
+            RunSeed = runState?.Rng?.StringSeed ?? runState?.Rng?.Seed.ToString() ?? "",
             IsCustom = isCustom,
             EndlessLoopCount = 0,
             SavedAtUtc = DateTime.UtcNow,
@@ -304,6 +306,18 @@ public static class RunTweaksSaveManager
                 ModLogger.Error($"RunTweaksSaveManager: Failed to delete snapshot file for profile {profileId}", ex);
             }
         }
+    }
+
+    public static string? GetActiveRunSeed()
+    {
+        string? s = ActiveSnapshot?.RunSeed;
+        if (!string.IsNullOrEmpty(s)) return s;
+        if (RunManager.Instance != null)
+        {
+            var runState = MapGenerationHooks.GetRunState(RunManager.Instance);
+            return runState?.Rng?.StringSeed;
+        }
+        return null;
     }
 
     public static void IncrementEndlessLoop()
@@ -566,6 +580,7 @@ public static class RunTweaksSaveManager
     public static bool IsCustomRun(PreRunTweaksConfig preRun, RunSettings runSettings)
     {
         if (IsMapTweakModified(preRun, runSettings)) return true;
+        if (!string.IsNullOrWhiteSpace(preRun.CustomSeed) || !string.IsNullOrWhiteSpace(runSettings.CustomSeed)) return true;
 
         return Math.Abs(preRun.GoldRewardMultiplier - 1.0f) > 0.001f ||
                Math.Abs(preRun.ShopDiscountMultiplier - 1.0f) > 0.001f ||
@@ -596,6 +611,11 @@ public static class RunTweaksSaveManager
     {
         return IsMapTweakModified(GetEffectivePreRunTweaks(), GetEffectiveRunSettings());
     }
+
+    public static bool IsRunActiveAndCustom()
+    {
+        return ActiveSnapshot?.IsCustom == true;
+    }
 }
 
 /// <summary>
@@ -616,7 +636,7 @@ public static class MapGenerationHooks
     private static readonly FieldInfo? RoomSetBossField = typeof(RoomSet).GetField("_boss", BindingFlags.NonPublic | BindingFlags.Instance);
     private static readonly FieldInfo? ActModelRoomsField = typeof(ActModel).GetField("_rooms", BindingFlags.NonPublic | BindingFlags.Instance);
 
-    private static RunState? GetRunState(RunManager? runManager)
+    public static RunState? GetRunState(RunManager? runManager)
     {
         if (runManager == null) return null;
         return (RunManagerStateProp?.GetValue(runManager) as RunState) ?? runManager.DebugOnlyGetState();
@@ -640,28 +660,49 @@ public static class MapGenerationHooks
     public static class RunStateCreateForNewRunPatch
     {
         [HarmonyPrefix]
-        public static void Prefix(ref GameMode gameMode)
+        public static void Prefix(ref GameMode gameMode, ref string seed)
         {
             try
             {
-                ModLogger.Verbose("MapGenerationHooks", $"RunState.CreateForNewRun prefix evaluating GameMode: incoming={gameMode}");
-                if (RunTweaksSaveManager.IsCustomRunPending())
+                var customSeed = ConfigManager.Current.PreRunTweaks.CustomSeed?.Trim();
+                if (!string.IsNullOrWhiteSpace(customSeed))
+                {
+                    string canonical = MegaCrit.Sts2.Core.Helpers.SeedHelper.CanonicalizeSeed(customSeed);
+                    seed = canonical;
+                    gameMode = GameMode.Custom;
+                    ModLogger.Info($"SeedingSystem: Custom seed '{canonical}' applied to new run (GameMode.Custom).");
+                }
+                else if (RunTweaksSaveManager.IsCustomRunPending())
                 {
                     if (gameMode == GameMode.Standard)
                     {
                         gameMode = GameMode.Custom;
-                        ModLogger.Info("Pre-run tweaks or map modifiers are active: Automatically set GameMode to Custom (Seeded/Fair Mode).");
+                        ModLogger.Info($"Pre-run tweaks or map modifiers are active: Automatically set GameMode to Custom (Fair Mode). Procedural seed: {seed}");
                     }
                 }
                 else
                 {
-                    ModLogger.Info("Map generation tweaks are at game default: Proceeding with standard run (GameMode.Standard).");
+                    ModLogger.Info($"SeedingSystem: Fresh procedural random seed '{seed}' used for standard run (GameMode.Standard).");
                 }
             }
             catch (Exception ex)
             {
-                ModLogger.Error("Error evaluating fair play GameMode in RunState.CreateForNewRun", ex);
+                ModLogger.Error("Error evaluating fair play GameMode / seed in RunState.CreateForNewRun", ex);
             }
+        }
+    }
+
+    /// <summary>
+    /// Prevents 'Seed should not be changed in standard mode!' NotImplementedException
+    /// in NCharacterSelectScreen.SeedChanged when seeds are modified.
+    /// </summary>
+    [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Nodes.Screens.CharacterSelect.NCharacterSelectScreen), "SeedChanged")]
+    public static class NCharacterSelectScreenSeedChangedPatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix()
+        {
+            return false; // Suppress exception
         }
     }
 
@@ -947,8 +988,21 @@ public static class MapGenerationHooks
         try
         {
             ModLogger.Info("Starting deferred EnterAct(0, true)...");
-            if (RunManager.Instance != null)
+            var state = GetRunState(RunManager.Instance);
+            if (RunManager.Instance != null && state != null)
             {
+                int loop = RuntimeStateManager.CurrentEndlessLoopCount;
+
+                // Re-seed and regenerate fresh rooms for all acts for the new endless loop
+                ulong loopSeed = state.Rng.Seed ^ ((ulong)loop * 0x9E3779B97F4A7C15uL);
+                var loopRng = new MegaCrit.Sts2.Core.Random.Rng(loopSeed, $"endless_loop_{loop}");
+
+                foreach (var act in state.Acts)
+                {
+                    act.GenerateRooms(loopRng, state.UnlockState, state.Players.Count > 1);
+                }
+                ModLogger.Info($"Endless Mode: Regenerated fresh rooms, encounters, and bosses for loop #{loop}.");
+
                 // Ensure combat and action queues are cleanly reset before entering Act 0
                 CombatManager.Instance?.Reset(graceful: true);
                 RunManager.Instance.ActionQueueSynchronizer?.SetCombatState(ActionSynchronizerCombatState.NotInCombat);
@@ -963,7 +1017,7 @@ public static class MapGenerationHooks
                 }
 
                 await RunManager.Instance.EnterAct(0, true);
-                ModLogger.Info("Deferred EnterAct(0, true) completed successfully.");
+                ModLogger.Info($"Deferred EnterAct(0, true) completed successfully for Endless Loop #{loop}.");
             }
         }
         catch (Exception ex)
@@ -1255,6 +1309,8 @@ public static class MapGenerationHooks
         {
             try
             {
+                if (!AreMapTweaksModified()) return true;
+
                 var grid = GridField?.GetValue(__instance) as MapPoint?[,];
                 int rowCount = __instance.GetRowCount();
                 if (grid == null || rowCount < 2) return true;
@@ -1336,6 +1392,13 @@ public static class MapGenerationHooks
         [HarmonyPrefix]
         public static bool Prefix(StandardActMap __instance, MapPoint current, ref MapCoord __result)
         {
+            if (__instance.GetRowCount() <= 15)
+            {
+                // On standard 15-floor maps, let vanilla execute its exact PRNG shuffle and crossover check.
+                // We only intervene if row count is expanded beyond standard 15 floors.
+                return true;
+            }
+
             try
             {
                 int col = current.coord.col;
@@ -1400,6 +1463,20 @@ public static class MapGenerationHooks
                 __result = new MapCoord { col = current.coord.col, row = current.coord.row + 1 };
                 return false;
             }
+        }
+
+        [HarmonyFinalizer]
+        public static Exception? Finalizer(StandardActMap __instance, MapPoint current, Exception? __exception, ref MapCoord __result)
+        {
+            if (__exception != null)
+            {
+                int col = current.coord.col;
+                int row = current.coord.row + 1;
+                __result = new MapCoord { col = col, row = row };
+                ModLogger.Warn($"StandardActMap.GenerateNextCoord safely recovered from exception at row {row}, col {col}.");
+                return null;
+            }
+            return null;
         }
     }
 
@@ -1580,6 +1657,20 @@ public static class MapGenerationHooks
     [HarmonyPatch(typeof(StandardActMap), nameof(StandardActMap.CreateFor))]
     public static class StandardActMapCreateForPatch
     {
+        [HarmonyPrefix]
+        public static bool Prefix(RunState runState, bool replaceTreasureWithElites, ref StandardActMap __result)
+        {
+            int loop = RuntimeStateManager.CurrentEndlessLoopCount;
+            if (loop > 0)
+            {
+                ulong loopSeed = runState.Rng.Seed ^ ((ulong)loop * 0x9E3779B97F4A7C15uL);
+                var rng = new MegaCrit.Sts2.Core.Random.Rng(loopSeed, $"act_{runState.CurrentActIndex + 1}_loop_{loop}_map");
+                __result = new StandardActMap(rng, runState.Act, runState.Players.Count > 1, replaceTreasureWithElites, runState.Act.HasSecondBoss);
+                return false;
+            }
+            return true;
+        }
+
         [HarmonyFinalizer]
         public static Exception? Finalizer(RunState runState, bool replaceTreasureWithElites, Exception? __exception, ref StandardActMap __result)
         {
@@ -2475,9 +2566,8 @@ public static class MapGenerationHooks
                 }
 
                 var fallback = ModelDb.AncientEvent<Neow>();
-                RoomSetAncientField?.SetValue(__instance, fallback);
                 __result = fallback;
-                ModLogger.Warn("RoomSet.get_Ancient: _ancient was null on access; safely supplied Neow fallback.");
+                ModLogger.Verbose("MapGenerationHooks", "RoomSet.get_Ancient: _ancient was null on access; safely supplied transient Neow fallback.");
                 return false;
             }
             catch (Exception ex)
@@ -2490,7 +2580,7 @@ public static class MapGenerationHooks
 
     /// <summary>
     /// Prevents 'RoomSet.Boss not set! You must call GenerateRooms' InvalidOperationException
-    /// by providing a safe fallback boss if accessed prior to generation.
+    /// by providing a safe transient fallback boss if accessed prior to generation, without locking _boss prematurely.
     /// </summary>
     [HarmonyPatch(typeof(RoomSet), "get_Boss")]
     public static class RoomSetGetBossPatch
@@ -2508,9 +2598,8 @@ public static class MapGenerationHooks
                 }
 
                 var fallbackBoss = ModelDb.Encounter<VantomBoss>();
-                RoomSetBossField?.SetValue(__instance, fallbackBoss);
                 __result = fallbackBoss;
-                ModLogger.Warn("RoomSet.get_Boss: _boss was null on access; safely supplied boss fallback.");
+                ModLogger.Verbose("MapGenerationHooks", "RoomSet.get_Boss: _boss was null on access; safely supplied transient boss fallback.");
                 return false;
             }
             catch (Exception ex)
@@ -2518,6 +2607,91 @@ public static class MapGenerationHooks
                 ModLogger.Error("Error in RoomSetGetBossPatch", ex);
                 return true; // Let original run if reflection fails
             }
+        }
+    }
+
+    #endregion
+
+    #region Procedural Generation & Tutorial Bypass Patches
+
+    /// <summary>
+    /// Bypasses hardcoded tutorial card rewards and potion drops (e.g. Ironclad run 0
+    /// always getting Setup Strike / Tremble / Blood Wall) when procedural mode is enabled or in custom runs.
+    /// </summary>
+    [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Rewards.RewardsSet), "TryGenerateTutorialRewards")]
+    public static class RewardsSetTryGenerateTutorialRewardsPatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix(ref bool __result)
+        {
+            try
+            {
+                if (RunTweaksSaveManager.GetEffectivePreRunTweaks().BypassTutorialAndDiscoveryLocks ||
+                    RunTweaksSaveManager.IsCustomRunPending() ||
+                    RunTweaksSaveManager.IsRunActiveAndCustom())
+                {
+                    __result = false;
+                    return false; // Skip tutorial reward generation, forcing dynamic procedural reward generation
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error("Error in RewardsSetTryGenerateTutorialRewardsPatch", ex);
+            }
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Prevents forcing fixed encounter sequences (e.g. Overgrowth forcing NibbitsWeak -> SlimesWeak -> ShrinkerBeetleWeak)
+    /// when procedural generation is active.
+    /// </summary>
+    [HarmonyPatch(typeof(RunManager), nameof(RunManager.ShouldApplyTutorialModifications))]
+    public static class RunManagerShouldApplyTutorialModificationsPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(ref bool __result)
+        {
+            try
+            {
+                if (RunTweaksSaveManager.GetEffectivePreRunTweaks().BypassTutorialAndDiscoveryLocks ||
+                    RunTweaksSaveManager.IsCustomRunPending() ||
+                    RunTweaksSaveManager.IsRunActiveAndCustom())
+                {
+                    __result = false;
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error("Error in RunManagerShouldApplyTutorialModificationsPatch", ex);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Prevents forcing fixed BossDiscoveryOrder (which forces VantomBoss as the Act 1 boss on fresh profiles)
+    /// when procedural generation is active, allowing true PRNG item selection from AllBossEncounters.
+    /// </summary>
+    [HarmonyPatch(typeof(ActModel), nameof(ActModel.ApplyDiscoveryOrderModifications))]
+    public static class ActModelApplyDiscoveryOrderModificationsPatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix()
+        {
+            try
+            {
+                if (RunTweaksSaveManager.GetEffectivePreRunTweaks().BypassTutorialAndDiscoveryLocks ||
+                    RunTweaksSaveManager.IsCustomRunPending() ||
+                    RunTweaksSaveManager.IsRunActiveAndCustom())
+                {
+                    return false; // Skip discovery order locks, leaving rooms.Boss randomly rolled by rng.NextItem
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error("Error in ActModelApplyDiscoveryOrderModificationsPatch", ex);
+            }
+            return true;
         }
     }
 

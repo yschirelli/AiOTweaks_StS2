@@ -63,6 +63,12 @@ public sealed class GeneralConfig
 
 public sealed class PreRunTweaksConfig
 {
+    [JsonPropertyName("customSeed")]
+    public string CustomSeed { get; set; } = "";
+
+    [JsonPropertyName("bypassTutorialAndDiscoveryLocks")]
+    public bool BypassTutorialAndDiscoveryLocks { get; set; } = true;
+
     [JsonPropertyName("goldRewardMultiplier")]
     public float GoldRewardMultiplier { get; set; } = 1.0f;
 
