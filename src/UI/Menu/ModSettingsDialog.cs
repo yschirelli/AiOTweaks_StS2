@@ -130,6 +130,7 @@ public partial class ModSettingsDialog : CanvasLayer
     public override void _Ready()
     {
         _instance = this;
+        ProcessMode = ProcessModeEnum.Always;
         Layer = 130;
         SetupDialogUI();
 
@@ -277,7 +278,7 @@ public partial class ModSettingsDialog : CanvasLayer
 
     public static void ShowDialog()
     {
-        if (_instance != null)
+        if (_instance != null && GodotObject.IsInstanceValid(_instance))
         {
             _instance.OpenDialog();
         }
@@ -285,7 +286,7 @@ public partial class ModSettingsDialog : CanvasLayer
 
     public static void HideDialog()
     {
-        if (_instance != null)
+        if (_instance != null && GodotObject.IsInstanceValid(_instance))
         {
             _instance.CloseDialog();
         }
@@ -293,9 +294,9 @@ public partial class ModSettingsDialog : CanvasLayer
 
     public static void ToggleDialog()
     {
-        if (_instance != null)
+        if (_instance != null && GodotObject.IsInstanceValid(_instance))
         {
-            if (_instance._dialogPanel != null && _instance._dialogPanel.Visible)
+            if (_instance._dialogPanel != null && GodotObject.IsInstanceValid(_instance._dialogPanel) && _instance._dialogPanel.Visible)
             {
                 _instance.CloseDialog();
             }
@@ -322,25 +323,32 @@ public partial class ModSettingsDialog : CanvasLayer
 
     public void OpenDialog()
     {
-        ModLogger.Verbose("ModSettingsDialog", "OpenDialog called. Loading settings values and computing run status...");
-        if (_dialogPanel != null)
+        try
         {
-            LoadSettingsValues();
-            ApplyOrRestoreWindowLayout();
-            
-            bool inRun = GameHelper.GetActivePlayer() != null;
-            ModLogger.Verbose("ModSettingsDialog", $"Player inRun status: {inRun}");
-            if (_tabs != null)
+            ModLogger.Verbose("ModSettingsDialog", "OpenDialog called. Loading settings values and computing run status...");
+            if (_dialogPanel != null && GodotObject.IsInstanceValid(_dialogPanel))
             {
-                int tweaksIdx = 5;
-                _tabs.SetTabDisabled(tweaksIdx, false);
-            }
-            UpdateTweaksRunLockState(inRun);
+                LoadSettingsValues();
+                ApplyOrRestoreWindowLayout();
+                
+                bool inRun = GameHelper.GetActivePlayer() != null;
+                ModLogger.Verbose("ModSettingsDialog", $"Player inRun status: {inRun}");
+                if (_tabs != null && GodotObject.IsInstanceValid(_tabs))
+                {
+                    int tweaksIdx = 5;
+                    _tabs.SetTabDisabled(tweaksIdx, false);
+                }
+                UpdateTweaksRunLockState(inRun);
 
-            if (_backdrop != null) _backdrop.Visible = true;
-            _dialogPanel.Visible = true;
-            UpdateBlockingState(true);
-            RefreshTab(_tabs?.CurrentTab ?? 0);
+                if (_backdrop != null && GodotObject.IsInstanceValid(_backdrop)) _backdrop.Visible = true;
+                _dialogPanel.Visible = true;
+                UpdateBlockingState(true);
+                RefreshTab(_tabs?.CurrentTab ?? 0);
+            }
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Error("ModSettingsDialog: Error in OpenDialog", ex);
         }
     }
 
@@ -349,17 +357,36 @@ public partial class ModSettingsDialog : CanvasLayer
         ModLogger.Verbose("ModSettingsDialog", "CloseDialog called.");
         _isDragging = false;
         _isResizing = false;
-        CancelHotkeyAssignment();
-        SaveSettingsValues();
-        if (_dialogPanel != null)
+
+        try
         {
-            _dialogPanel.Visible = false;
+            CancelHotkeyAssignment();
         }
-        if (_backdrop != null)
+        catch (Exception ex)
         {
-            _backdrop.Visible = false;
+            ModLogger.Error("ModSettingsDialog: Error in CancelHotkeyAssignment during CloseDialog.", ex);
         }
-        UpdateBlockingState(false);
+
+        try
+        {
+            SaveSettingsValues();
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Error("ModSettingsDialog: Error in SaveSettingsValues during CloseDialog.", ex);
+        }
+        finally
+        {
+            if (_dialogPanel != null && GodotObject.IsInstanceValid(_dialogPanel))
+            {
+                _dialogPanel.Visible = false;
+            }
+            if (_backdrop != null && GodotObject.IsInstanceValid(_backdrop))
+            {
+                _backdrop.Visible = false;
+            }
+            UpdateBlockingState(false);
+        }
     }
 
     private void UpdateBlockingState(bool block)
@@ -917,13 +944,37 @@ public partial class ModSettingsDialog : CanvasLayer
         endlessBox.AddThemeConstantOverride("separation", 8);
 
         _endlessModeCheck = new CheckBox { Text = " Enable Endless Mode (Scale enemies progressively each loop reset)" };
-        _endlessModeCheck.Toggled += _ => MarkTweaksModified();
+        _endlessModeCheck.Toggled += val =>
+        {
+            MarkTweaksModified();
+            if (ConfigManager.Current.PreRunTweaks.EndlessMode != null)
+                ConfigManager.Current.PreRunTweaks.EndlessMode.Enabled = val;
+
+            var snap = RunTweaksSaveManager.ActiveSnapshot;
+            if (snap?.PreRunTweaks?.EndlessMode != null)
+            {
+                snap.PreRunTweaks.EndlessMode.Enabled = val;
+                RunTweaksSaveManager.SaveActiveSnapshot();
+            }
+        };
         endlessBox.AddChild(_endlessModeCheck);
 
         var endlessMultRow = new HBoxContainer();
         endlessMultRow.AddChild(new Label { Text = "Endless Loop Scaling Multiplier: ", CustomMinimumSize = new Vector2(230, 0) });
         _endlessMultiplierSpin = new SpinBox { MinValue = 1.0, MaxValue = 10.0, Step = 0.1, Value = 2.0 }.MakeNumericOnly();
-        _endlessMultiplierSpin.ValueChanged += _ => MarkTweaksModified();
+        _endlessMultiplierSpin.ValueChanged += val =>
+        {
+            MarkTweaksModified();
+            if (ConfigManager.Current.PreRunTweaks.EndlessMode != null)
+                ConfigManager.Current.PreRunTweaks.EndlessMode.EnemyScalingMultiplier = (float)val;
+
+            var snap = RunTweaksSaveManager.ActiveSnapshot;
+            if (snap?.PreRunTweaks?.EndlessMode != null)
+            {
+                snap.PreRunTweaks.EndlessMode.EnemyScalingMultiplier = (float)val;
+                RunTweaksSaveManager.SaveActiveSnapshot();
+            }
+        };
         endlessMultRow.AddChild(_endlessMultiplierSpin);
         endlessBox.AddChild(endlessMultRow);
 
@@ -981,9 +1032,10 @@ public partial class ModSettingsDialog : CanvasLayer
         {
             MarkTweaksModified();
             ConfigManager.Current.PreRunTweaks.EnemyHealthMultiplier = (float)val;
-            if (RunTweaksSaveManager.ActiveSnapshot != null)
+            var snap = RunTweaksSaveManager.ActiveSnapshot;
+            if (snap?.PreRunTweaks != null)
             {
-                RunTweaksSaveManager.ActiveSnapshot.PreRunTweaks.EnemyHealthMultiplier = (float)val;
+                snap.PreRunTweaks.EnemyHealthMultiplier = (float)val;
                 RunTweaksSaveManager.SaveActiveSnapshot();
             }
             GameHelper.RescaleActiveMonstersHp();
@@ -994,9 +1046,10 @@ public partial class ModSettingsDialog : CanvasLayer
         {
             MarkTweaksModified();
             ConfigManager.Current.PreRunTweaks.EnemyDamageMultiplier = (float)val;
-            if (RunTweaksSaveManager.ActiveSnapshot != null)
+            var snap = RunTweaksSaveManager.ActiveSnapshot;
+            if (snap?.PreRunTweaks != null)
             {
-                RunTweaksSaveManager.ActiveSnapshot.PreRunTweaks.EnemyDamageMultiplier = (float)val;
+                snap.PreRunTweaks.EnemyDamageMultiplier = (float)val;
                 RunTweaksSaveManager.SaveActiveSnapshot();
             }
             GameHelper.RefreshCombatIntents();
@@ -1007,9 +1060,10 @@ public partial class ModSettingsDialog : CanvasLayer
         {
             MarkTweaksModified();
             ConfigManager.Current.PreRunTweaks.EnemyDefendMultiplier = (float)val;
-            if (RunTweaksSaveManager.ActiveSnapshot != null)
+            var snap = RunTweaksSaveManager.ActiveSnapshot;
+            if (snap?.PreRunTweaks != null)
             {
-                RunTweaksSaveManager.ActiveSnapshot.PreRunTweaks.EnemyDefendMultiplier = (float)val;
+                snap.PreRunTweaks.EnemyDefendMultiplier = (float)val;
                 RunTweaksSaveManager.SaveActiveSnapshot();
             }
             GameHelper.RefreshCombatIntents();
@@ -1025,9 +1079,10 @@ public partial class ModSettingsDialog : CanvasLayer
         {
             MarkTweaksModified();
             ConfigManager.Current.PreRunTweaks.PlayerDamageMultiplier = (float)val;
-            if (RunTweaksSaveManager.ActiveSnapshot != null)
+            var snap = RunTweaksSaveManager.ActiveSnapshot;
+            if (snap?.PreRunTweaks != null)
             {
-                RunTweaksSaveManager.ActiveSnapshot.PreRunTweaks.PlayerDamageMultiplier = (float)val;
+                snap.PreRunTweaks.PlayerDamageMultiplier = (float)val;
                 RunTweaksSaveManager.SaveActiveSnapshot();
             }
             GameHelper.RefreshAllVisibleCards();
@@ -1038,9 +1093,10 @@ public partial class ModSettingsDialog : CanvasLayer
         {
             MarkTweaksModified();
             ConfigManager.Current.PreRunTweaks.PlayerDefendMultiplier = (float)val;
-            if (RunTweaksSaveManager.ActiveSnapshot != null)
+            var snap = RunTweaksSaveManager.ActiveSnapshot;
+            if (snap?.PreRunTweaks != null)
             {
-                RunTweaksSaveManager.ActiveSnapshot.PreRunTweaks.PlayerDefendMultiplier = (float)val;
+                snap.PreRunTweaks.PlayerDefendMultiplier = (float)val;
                 RunTweaksSaveManager.SaveActiveSnapshot();
             }
             GameHelper.RefreshAllVisibleCards();
@@ -4431,8 +4487,8 @@ public partial class ModSettingsDialog : CanvasLayer
             if (RunTweaksSaveManager.HasActiveRunSnapshot)
             {
                 _tweaksRunLockNoticeContainer.Visible = true;
-                var snap = RunTweaksSaveManager.ActiveSnapshot;
-                string modeText = (snap?.IsCustom ?? false) ? "Custom (Seeded/Fair Mode)" : "Standard (Non-Custom)";
+                var activeSnap = RunTweaksSaveManager.ActiveSnapshot;
+                string modeText = (activeSnap?.IsCustom ?? false) ? "Custom (Seeded/Fair Mode)" : "Standard (Non-Custom)";
                 string endlessText = (RuntimeStateManager.CurrentEndlessLoopCount > 0) ? $", Endless Loop #{RuntimeStateManager.CurrentEndlessLoopCount}" : "";
                 _tweaksRunLockNoticeLabel.Text = $"[Active Run In Progress - {modeText}{endlessText}]\nMap generation & starting modifiers are locked to this run's snapshot. Any changes saved below will apply when you start your NEXT run.";
                 _tweaksRunLockNoticeLabel.Modulate = new Color(1f, 0.85f, 0.4f);
@@ -4477,8 +4533,10 @@ public partial class ModSettingsDialog : CanvasLayer
         if (_playerDefSlider != null) _playerDefSlider.Value = tweaks.PlayerDefendMultiplier;
         if (_maxEnergySpin != null) _maxEnergySpin.Value = tweaks.MaxEnergy;
 
-        if (_endlessModeCheck != null) _endlessModeCheck.ButtonPressed = tweaks.EndlessMode.Enabled;
-        if (_endlessMultiplierSpin != null) _endlessMultiplierSpin.Value = tweaks.EndlessMode.EnemyScalingMultiplier;
+        var endlessSnap = RunTweaksSaveManager.ActiveSnapshot;
+        bool endlessActive = (endlessSnap?.PreRunTweaks?.EndlessMode?.Enabled ?? false) || (tweaks.EndlessMode?.Enabled ?? false);
+        if (_endlessModeCheck != null) _endlessModeCheck.ButtonPressed = endlessActive;
+        if (_endlessMultiplierSpin != null) _endlessMultiplierSpin.Value = endlessSnap?.PreRunTweaks?.EndlessMode?.EnemyScalingMultiplier ?? (tweaks.EndlessMode?.EnemyScalingMultiplier ?? 2.0f);
         if (_freeMapNavCheck != null) _freeMapNavCheck.ButtonPressed = tweaks.FreeMapNavigation;
 
         if (_godModeCheck != null) _godModeCheck.ButtonPressed = RuntimeStateManager.GodModeEnabled || sandbox.GodMode;
@@ -4521,89 +4579,108 @@ public partial class ModSettingsDialog : CanvasLayer
     private void SaveSettingsValues()
     {
         if (_isLoadingSettings) return;
-        var tweaks = ConfigManager.Current.PreRunTweaks;
-        var sandbox = ConfigManager.Current.CombatSandbox;
-        var general = ConfigManager.Current.General;
-
-        general.ConsoleHotkey = string.IsNullOrWhiteSpace(_consoleHotkeyVal) ? GeneralConfig.DefaultConsoleHotkey : _consoleHotkeyVal;
-        general.GuiOverlayHotkey = string.IsNullOrWhiteSpace(_guiHotkeyVal) ? GeneralConfig.DefaultGuiOverlayHotkey : _guiHotkeyVal;
-        general.QuickGodModeKey = _quickGodModeVal ?? "";
-        general.QuickKillEnemiesKey = _quickKillEnemiesVal ?? "";
-        general.QuickOpenShopKey = _quickOpenShopVal ?? "";
-
-        if (_mapRoomCountSpin != null) tweaks.MapRoomCount = (int)_mapRoomCountSpin.Value;
-        if (_goldSlider != null) tweaks.GoldRewardMultiplier = (float)_goldSlider.Value;
-        if (_shopDiscountSlider != null) tweaks.ShopDiscountMultiplier = (float)_shopDiscountSlider.Value;
-        if (_cardRewardSpin != null) tweaks.CardRewardCount = (int)_cardRewardSpin.Value;
-        if (_bonusGoldSpin != null) tweaks.StartingGoldBonus = (int)_bonusGoldSpin.Value;
-        if (_bonusHpSpin != null) tweaks.StartingMaxHpBonus = (int)_bonusHpSpin.Value;
-        if (_potionSlotsPreRunSpin != null) tweaks.PotionSlots = (int)_potionSlotsPreRunSpin.Value;
-        if (_allowMultipleRelicsCheck != null) tweaks.AllowMultipleRelics = _allowMultipleRelicsCheck.ButtonPressed;
-        if (_forceNeowCheck != null) tweaks.ForceNeowBonus = _forceNeowCheck.ButtonPressed;
-
-        if (_eliteSlider != null) tweaks.MapNodeDistribution.EliteWeightMultiplier = (float)_eliteSlider.Value;
-        if (_shopSlider != null) tweaks.MapNodeDistribution.ShopWeightMultiplier = (float)_shopSlider.Value;
-        if (_eventSlider != null) tweaks.MapNodeDistribution.EventWeightMultiplier = (float)_eventSlider.Value;
-        if (_restSlider != null) tweaks.MapNodeDistribution.RestSiteWeightMultiplier = (float)_restSlider.Value;
-        if (_combatSlider != null) tweaks.MapNodeDistribution.CombatWeightMultiplier = (float)_combatSlider.Value;
-        if (_treasureSlider != null) tweaks.MapNodeDistribution.TreasureRoomMultiplier = (float)_treasureSlider.Value;
-
-        if (_enemyHpSlider != null) tweaks.EnemyHealthMultiplier = (float)_enemyHpSlider.Value;
-        if (_enemyDmgSlider != null) tweaks.EnemyDamageMultiplier = (float)_enemyDmgSlider.Value;
-        if (_enemyDefSlider != null) tweaks.EnemyDefendMultiplier = (float)_enemyDefSlider.Value;
-
-        if (_playerDmgSlider != null)
+        try
         {
-            tweaks.PlayerDamageMultiplier = (float)_playerDmgSlider.Value;
-            GameHelper.RefreshAllVisibleCards();
-        }
-        if (_playerDefSlider != null)
-        {
-            tweaks.PlayerDefendMultiplier = (float)_playerDefSlider.Value;
-            GameHelper.RefreshAllVisibleCards();
-        }
-        if (_maxEnergySpin != null)
-        {
-            int energyVal = (int)_maxEnergySpin.Value;
-            tweaks.MaxEnergy = energyVal;
-            GameHelper.SetPlayerMaxEnergy(energyVal);
-        }
+            var tweaks = ConfigManager.Current.PreRunTweaks;
+            var sandbox = ConfigManager.Current.CombatSandbox;
+            var general = ConfigManager.Current.General;
 
-        if (_endlessModeCheck != null) tweaks.EndlessMode.Enabled = _endlessModeCheck.ButtonPressed;
-        if (_endlessMultiplierSpin != null) tweaks.EndlessMode.EnemyScalingMultiplier = (float)_endlessMultiplierSpin.Value;
-        if (_freeMapNavCheck != null)
-        {
-            tweaks.FreeMapNavigation = _freeMapNavCheck.ButtonPressed;
-            RuntimeStateManager.FreeMapNavigationEnabled = _freeMapNavCheck.ButtonPressed;
+            general.ConsoleHotkey = string.IsNullOrWhiteSpace(_consoleHotkeyVal) ? GeneralConfig.DefaultConsoleHotkey : _consoleHotkeyVal;
+            general.GuiOverlayHotkey = string.IsNullOrWhiteSpace(_guiHotkeyVal) ? GeneralConfig.DefaultGuiOverlayHotkey : _guiHotkeyVal;
+            general.QuickGodModeKey = _quickGodModeVal ?? "";
+            general.QuickKillEnemiesKey = _quickKillEnemiesVal ?? "";
+            general.QuickOpenShopKey = _quickOpenShopVal ?? "";
+
+            if (_mapRoomCountSpin != null && GodotObject.IsInstanceValid(_mapRoomCountSpin)) tweaks.MapRoomCount = (int)_mapRoomCountSpin.Value;
+            if (_goldSlider != null && GodotObject.IsInstanceValid(_goldSlider)) tweaks.GoldRewardMultiplier = (float)_goldSlider.Value;
+            if (_shopDiscountSlider != null && GodotObject.IsInstanceValid(_shopDiscountSlider)) tweaks.ShopDiscountMultiplier = (float)_shopDiscountSlider.Value;
+            if (_cardRewardSpin != null && GodotObject.IsInstanceValid(_cardRewardSpin)) tweaks.CardRewardCount = (int)_cardRewardSpin.Value;
+            if (_bonusGoldSpin != null && GodotObject.IsInstanceValid(_bonusGoldSpin)) tweaks.StartingGoldBonus = (int)_bonusGoldSpin.Value;
+            if (_bonusHpSpin != null && GodotObject.IsInstanceValid(_bonusHpSpin)) tweaks.StartingMaxHpBonus = (int)_bonusHpSpin.Value;
+            if (_potionSlotsPreRunSpin != null && GodotObject.IsInstanceValid(_potionSlotsPreRunSpin)) tweaks.PotionSlots = (int)_potionSlotsPreRunSpin.Value;
+            if (_allowMultipleRelicsCheck != null && GodotObject.IsInstanceValid(_allowMultipleRelicsCheck)) tweaks.AllowMultipleRelics = _allowMultipleRelicsCheck.ButtonPressed;
+            if (_forceNeowCheck != null && GodotObject.IsInstanceValid(_forceNeowCheck)) tweaks.ForceNeowBonus = _forceNeowCheck.ButtonPressed;
+
+            if (tweaks.MapNodeDistribution != null)
+            {
+                if (_eliteSlider != null && GodotObject.IsInstanceValid(_eliteSlider)) tweaks.MapNodeDistribution.EliteWeightMultiplier = (float)_eliteSlider.Value;
+                if (_shopSlider != null && GodotObject.IsInstanceValid(_shopSlider)) tweaks.MapNodeDistribution.ShopWeightMultiplier = (float)_shopSlider.Value;
+                if (_eventSlider != null && GodotObject.IsInstanceValid(_eventSlider)) tweaks.MapNodeDistribution.EventWeightMultiplier = (float)_eventSlider.Value;
+                if (_restSlider != null && GodotObject.IsInstanceValid(_restSlider)) tweaks.MapNodeDistribution.RestSiteWeightMultiplier = (float)_restSlider.Value;
+                if (_combatSlider != null && GodotObject.IsInstanceValid(_combatSlider)) tweaks.MapNodeDistribution.CombatWeightMultiplier = (float)_combatSlider.Value;
+                if (_treasureSlider != null && GodotObject.IsInstanceValid(_treasureSlider)) tweaks.MapNodeDistribution.TreasureRoomMultiplier = (float)_treasureSlider.Value;
+            }
+
+            if (_enemyHpSlider != null && GodotObject.IsInstanceValid(_enemyHpSlider)) tweaks.EnemyHealthMultiplier = (float)_enemyHpSlider.Value;
+            if (_enemyDmgSlider != null && GodotObject.IsInstanceValid(_enemyDmgSlider)) tweaks.EnemyDamageMultiplier = (float)_enemyDmgSlider.Value;
+            if (_enemyDefSlider != null && GodotObject.IsInstanceValid(_enemyDefSlider)) tweaks.EnemyDefendMultiplier = (float)_enemyDefSlider.Value;
+
+            if (_playerDmgSlider != null && GodotObject.IsInstanceValid(_playerDmgSlider))
+            {
+                tweaks.PlayerDamageMultiplier = (float)_playerDmgSlider.Value;
+                try { GameHelper.RefreshAllVisibleCards(); } catch { }
+            }
+            if (_playerDefSlider != null && GodotObject.IsInstanceValid(_playerDefSlider))
+            {
+                tweaks.PlayerDefendMultiplier = (float)_playerDefSlider.Value;
+                try { GameHelper.RefreshAllVisibleCards(); } catch { }
+            }
+            if (_maxEnergySpin != null && GodotObject.IsInstanceValid(_maxEnergySpin))
+            {
+                int energyVal = (int)_maxEnergySpin.Value;
+                tweaks.MaxEnergy = energyVal;
+                try { GameHelper.SetPlayerMaxEnergy(energyVal); } catch { }
+            }
+
+            if (tweaks.EndlessMode != null)
+            {
+                if (_endlessModeCheck != null && GodotObject.IsInstanceValid(_endlessModeCheck)) tweaks.EndlessMode.Enabled = _endlessModeCheck.ButtonPressed;
+                if (_endlessMultiplierSpin != null && GodotObject.IsInstanceValid(_endlessMultiplierSpin)) tweaks.EndlessMode.EnemyScalingMultiplier = (float)_endlessMultiplierSpin.Value;
+            }
+            if (_freeMapNavCheck != null && GodotObject.IsInstanceValid(_freeMapNavCheck))
+            {
+                tweaks.FreeMapNavigation = _freeMapNavCheck.ButtonPressed;
+                RuntimeStateManager.FreeMapNavigationEnabled = _freeMapNavCheck.ButtonPressed;
+            }
+
+            if (_godModeCheck != null && GodotObject.IsInstanceValid(_godModeCheck)) sandbox.GodMode = _godModeCheck.ButtonPressed;
+            if (_infEnergyCheck != null && GodotObject.IsInstanceValid(_infEnergyCheck)) sandbox.InfiniteEnergy = _infEnergyCheck.ButtonPressed;
+            if (_oneHitKillCheck != null && GodotObject.IsInstanceValid(_oneHitKillCheck)) sandbox.OneHitKill = _oneHitKillCheck.ButtonPressed;
+            if (_infPotionsCheck != null && GodotObject.IsInstanceValid(_infPotionsCheck)) sandbox.InfinitePotions = _infPotionsCheck.ButtonPressed;
+            if (_noExhaustCheck != null && GodotObject.IsInstanceValid(_noExhaustCheck)) sandbox.NoCardExhaust = _noExhaustCheck.ButtonPressed;
+            if (_bonusDrawSpin != null && GodotObject.IsInstanceValid(_bonusDrawSpin)) sandbox.BonusDrawPerTurn = (int)_bonusDrawSpin.Value;
+
+            var snap = RunTweaksSaveManager.ActiveSnapshot;
+            if (snap?.PreRunTweaks != null)
+            {
+                snap.PreRunTweaks.EnemyHealthMultiplier = tweaks.EnemyHealthMultiplier;
+                snap.PreRunTweaks.EnemyDamageMultiplier = tweaks.EnemyDamageMultiplier;
+                snap.PreRunTweaks.EnemyDefendMultiplier = tweaks.EnemyDefendMultiplier;
+                snap.PreRunTweaks.PlayerDamageMultiplier = tweaks.PlayerDamageMultiplier;
+                snap.PreRunTweaks.PlayerDefendMultiplier = tweaks.PlayerDefendMultiplier;
+                if (snap.PreRunTweaks.EndlessMode != null && tweaks.EndlessMode != null)
+                {
+                    snap.PreRunTweaks.EndlessMode.Enabled = tweaks.EndlessMode.Enabled;
+                    snap.PreRunTweaks.EndlessMode.EnemyScalingMultiplier = tweaks.EndlessMode.EnemyScalingMultiplier;
+                }
+                RunTweaksSaveManager.SaveActiveSnapshot();
+            }
+
+            if (_dialogPanel != null && GodotObject.IsInstanceValid(_dialogPanel))
+            {
+                ConfigManager.Current.UI.MenuPosX = _dialogPanel.Position.X;
+                ConfigManager.Current.UI.MenuPosY = _dialogPanel.Position.Y;
+                ConfigManager.Current.UI.MenuWidth = _dialogPanel.Size.X;
+                ConfigManager.Current.UI.MenuHeight = _dialogPanel.Size.Y;
+            }
+
+            ConfigManager.SaveConfig();
+            ModLogger.Info("Mod settings saved successfully.");
         }
-
-        if (_godModeCheck != null) sandbox.GodMode = _godModeCheck.ButtonPressed;
-        if (_infEnergyCheck != null) sandbox.InfiniteEnergy = _infEnergyCheck.ButtonPressed;
-        if (_oneHitKillCheck != null) sandbox.OneHitKill = _oneHitKillCheck.ButtonPressed;
-        if (_infPotionsCheck != null) sandbox.InfinitePotions = _infPotionsCheck.ButtonPressed;
-        if (_noExhaustCheck != null) sandbox.NoCardExhaust = _noExhaustCheck.ButtonPressed;
-        if (_bonusDrawSpin != null) sandbox.BonusDrawPerTurn = (int)_bonusDrawSpin.Value;
-
-        if (RunTweaksSaveManager.ActiveSnapshot != null)
+        catch (Exception ex)
         {
-            RunTweaksSaveManager.ActiveSnapshot.PreRunTweaks.EnemyHealthMultiplier = tweaks.EnemyHealthMultiplier;
-            RunTweaksSaveManager.ActiveSnapshot.PreRunTweaks.EnemyDamageMultiplier = tweaks.EnemyDamageMultiplier;
-            RunTweaksSaveManager.ActiveSnapshot.PreRunTweaks.EnemyDefendMultiplier = tweaks.EnemyDefendMultiplier;
-            RunTweaksSaveManager.ActiveSnapshot.PreRunTweaks.PlayerDamageMultiplier = tweaks.PlayerDamageMultiplier;
-            RunTweaksSaveManager.ActiveSnapshot.PreRunTweaks.PlayerDefendMultiplier = tweaks.PlayerDefendMultiplier;
-            RunTweaksSaveManager.SaveActiveSnapshot();
+            ModLogger.Error("ModSettingsDialog.SaveSettingsValues: Failed to save settings values.", ex);
         }
-
-        if (_dialogPanel != null)
-        {
-            ConfigManager.Current.UI.MenuPosX = _dialogPanel.Position.X;
-            ConfigManager.Current.UI.MenuPosY = _dialogPanel.Position.Y;
-            ConfigManager.Current.UI.MenuWidth = _dialogPanel.Size.X;
-            ConfigManager.Current.UI.MenuHeight = _dialogPanel.Size.Y;
-        }
-
-        ConfigManager.SaveConfig();
-        ModLogger.Info("Mod settings saved successfully.");
     }
 
     private void ExecuteDirectCommand(string input)

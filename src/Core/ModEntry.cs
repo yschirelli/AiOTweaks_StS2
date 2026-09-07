@@ -277,10 +277,10 @@ public partial class ModEntry : Node
                 {
                     var customStrings = new Dictionary<string, string>
                     {
-                        { "AIOTWEAKS_ENDLESS_PROCEED.title", "[Endless] Loop to Act 1" },
-                        { "AIOTWEAKS_ENDLESS_PROCEED.description", "Restart from Act 1 with scaled enemies while keeping all cards, relics, and stats." },
-                        { "AIOTWEAKS_ENDLESS_LEAVE.title", "Victory (Leave to Menu)" },
-                        { "AIOTWEAKS_ENDLESS_LEAVE.description", "Complete the run and return to the main menu." }
+                        { "AIOTWEAKS_ENDLESS_LEAVE.title", "Continue (Victory)" },
+                        { "AIOTWEAKS_ENDLESS_LEAVE.description", "Proceed as normal with the Architect cutscene to the Victory screen." },
+                        { "AIOTWEAKS_ENDLESS_PROCEED.title", "[Endless] Continue Run (Loop to Act 1)" },
+                        { "AIOTWEAKS_ENDLESS_PROCEED.description", "Loop back to Act 1 keeping all cards, relics, gold, and stats. Score accumulates and enemies scale progressively!" }
                     };
                     ancientsTable.MergeWith(customStrings);
                     ModLogger.Verbose("ModEntry", "Merged AIOTweaks Endless Mode localization keys into 'ancients' LocTable.");

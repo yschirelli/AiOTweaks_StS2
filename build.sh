@@ -5,42 +5,59 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Parse build arguments
 CONFIG="Release"
-case "${1,,}" in
-    debug|-d|--debug)
-        CONFIG="Debug"
-        ;;
-    release|-r|--release|"")
-        CONFIG="Release"
-        ;;
-    -h|--help|help)
-        echo "========================================="
-        echo " AIOTweaks Build Script"
-        echo "========================================="
-        echo "Usage: ./build.sh [Configuration]"
-        echo ""
-        echo "Options:"
-        echo "  Release, -r, --release   (Default) Build optimized Release binary."
-        echo "  Debug,   -d, --debug     Build Debug binary (forcefully enables verbose"
-        echo "                           logging and saves logs to aiotweaks_debug.log"
-        echo "                           in the mod's root folder)."
-        echo "  -h,      --help          Display this help message."
-        echo ""
-        echo "Environment Variables (Optional):"
-        echo "  STS2_PATH      Explicit path to sts2.dll"
-        echo "  BASELIB_PATH   Explicit path to BaseLib.dll"
-        echo "========================================="
-        exit 0
-        ;;
-    *)
-        CONFIG="$1"
-        ;;
-esac
+DEPLOY=false
+
+for arg in "$@"; do
+    case "${arg,,}" in
+        debug|-d|--debug)
+            CONFIG="Debug"
+            ;;
+        release|-r|--release)
+            CONFIG="Release"
+            ;;
+        deploy|-dp|--deploy)
+            DEPLOY=true
+            ;;
+        -h|--help|help)
+            echo "========================================="
+            echo " AIOTweaks Build Script"
+            echo "========================================="
+            echo "Usage: ./build.sh [Configuration] [--deploy]"
+            echo ""
+            echo "Options:"
+            echo "  Release, -r,  --release  (Default) Build optimized Release binary."
+            echo "  Debug,   -d,  --debug    Build Debug binary (forcefully enables verbose"
+            echo "                           logging and saves logs to aiotweaks_debug.log"
+            echo "                           in the mod's root folder)."
+            echo "  Deploy,  -dp, --deploy   Deploy built DLLs to the game mod folder if found."
+            echo "  -h,           --help     Display this help message."
+            echo ""
+            echo "Environment Variables (Optional):"
+            echo "  STS2_PATH      Explicit path to sts2.dll"
+            echo "  BASELIB_PATH   Explicit path to BaseLib.dll"
+            echo "  STS2_MOD_DIR   Explicit path to target AIOTweaks mod directory"
+            echo "========================================="
+            exit 0
+            ;;
+        *)
+            # Allow positional configuration if it doesn't start with -
+            if [[ "$arg" != -* ]]; then
+                CONFIG="$arg"
+            fi
+            ;;
+    esac
+done
 
 echo "========================================="
 if [ "$CONFIG" = "Debug" ]; then
     echo " Building AIOTweaks (${CONFIG}) [Debug Mode: Force Verbose + File Logging]"
 else
     echo " Building AIOTweaks (${CONFIG})"
+fi
+if [ "$DEPLOY" = true ]; then
+    echo " Deployment: Enabled (--deploy)"
+else
+    echo " Deployment: Disabled (pass --deploy or -dp to copy DLLs to game folder)"
 fi
 echo "========================================="
 
@@ -130,5 +147,32 @@ echo " Output Location: ${OUTPUT_DIR:-$SCRIPT_DIR/src/.godot/mono/temp/bin/$CONF
 if [ -n "$OUTPUT_DIR" ] && [ -d "$OUTPUT_DIR" ]; then
     echo " Built Files:"
     ls -lh "$OUTPUT_DIR"/AIOTweaks.* 2>/dev/null || ls -la "$OUTPUT_DIR"
+
+    # Deploy to game mods directory if requested
+    if [ "$DEPLOY" = true ]; then
+        TARGET_MOD_DIR=""
+        if [ -n "$STS2_MOD_DIR" ] && [ -d "$STS2_MOD_DIR" ]; then
+            TARGET_MOD_DIR="$STS2_MOD_DIR"
+        else
+            for base in "${STEAM_CANDIDATE_PATHS[@]}"; do
+                candidate_mod_dir="$base/steamapps/common/Slay the Spire 2/mods/AIOTweaks"
+                if [ -d "$candidate_mod_dir" ]; then
+                    TARGET_MOD_DIR="$candidate_mod_dir"
+                    break
+                fi
+            done
+        fi
+
+        if [ -n "$TARGET_MOD_DIR" ] && [ -d "$TARGET_MOD_DIR" ]; then
+            echo " [Deploy] Target mod folder verified: $TARGET_MOD_DIR"
+            echo " [Deploy] Deploying built DLLs..."
+            cp -vf "$OUTPUT_DIR"/AIOTweaks.* "$TARGET_MOD_DIR/"
+            echo " [Deploy] Deployment completed successfully!"
+        else
+            echo " [Deploy] Warning: Target game mod folder not found."
+            echo "          Expected: .../Slay the Spire 2/mods/AIOTweaks"
+            echo "          Please ensure the game and mods/AIOTweaks folder exist, or set STS2_MOD_DIR."
+        fi
+    fi
 fi
 echo "========================================="

@@ -27,6 +27,8 @@ using MegaCrit.Sts2.Core.Nodes.Screens.Map;
 using MegaCrit.Sts2.Core.Random;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
+using MegaCrit.Sts2.Core.Runs.History;
+using MegaCrit.Sts2.Core.Platform;
 using MegaCrit.Sts2.Core.Unlocks;
 
 namespace AIOTweaks.Hooks;
@@ -295,6 +297,7 @@ public static class RunTweaksSaveManager
     {
         if (ActiveSnapshot != null)
         {
+            ActiveSnapshot.PreRunTweaks.EndlessMode.Enabled = true;
             ActiveSnapshot.EndlessLoopCount++;
             RuntimeStateManager.CurrentEndlessLoopCount = ActiveSnapshot.EndlessLoopCount;
             SaveActiveSnapshot();
@@ -306,10 +309,26 @@ public static class RunTweaksSaveManager
         }
     }
 
+    public static bool IsEndlessModeActive()
+    {
+        if (ActiveSnapshot != null && ActiveSnapshot.PreRunTweaks.EndlessMode.Enabled)
+        {
+            return true;
+        }
+        return ConfigManager.Current?.PreRunTweaks?.EndlessMode?.Enabled ?? false;
+    }
+
     public static PreRunTweaksConfig GetEffectivePreRunTweaks()
     {
         if (ActiveSnapshot != null)
         {
+            // Sync EndlessMode if user enabled it in current config
+            if (ConfigManager.Current?.PreRunTweaks?.EndlessMode?.Enabled == true && !ActiveSnapshot.PreRunTweaks.EndlessMode.Enabled)
+            {
+                ActiveSnapshot.PreRunTweaks.EndlessMode.Enabled = true;
+                ActiveSnapshot.PreRunTweaks.EndlessMode.EnemyScalingMultiplier = ConfigManager.Current.PreRunTweaks.EndlessMode.EnemyScalingMultiplier;
+                SaveActiveSnapshot();
+            }
             return ActiveSnapshot.PreRunTweaks;
         }
         return ConfigManager.Current.PreRunTweaks;
@@ -584,7 +603,9 @@ public static class MapGenerationHooks
 
     /// <summary>
     /// Intercepts TheArchitect cutscene options in Endless Mode.
-    /// Replaces the single "PROCEED" button with a choice to either loop back to Act 1 (Endless) or leave to the menu (Victory).
+    /// Replaces the single "PROCEED" button with choices:
+    /// Option 1: Continue (Victory) - proceeds as normal with the Architect cutscene and dialog killing you and then the Victory screen.
+    /// Option 2: [Endless] Continue Run (Loop to Act 1) - loops back to Act 1 keeping cards, stats, relics, gold, with compounding scaling and cumulative score.
     /// </summary>
     [HarmonyPatch(typeof(EventModel), "SetEventState")]
     public static class EventModelSetEventStatePatch
@@ -594,14 +615,25 @@ public static class MapGenerationHooks
         {
             try
             {
-                if (__instance is TheArchitect architect && RunTweaksSaveManager.GetEffectivePreRunTweaks().EndlessMode.Enabled)
+                if (__instance is TheArchitect architect && RunTweaksSaveManager.IsEndlessModeActive())
                 {
                     var optionsList = eventOptions as IList<EventOption> ?? eventOptions.ToList();
-                    if (optionsList.Any(o => o.TextKey == "PROCEED" || o.IsProceed))
+                    var vanillaProceed = optionsList.FirstOrDefault(o => o.TextKey.Equals("PROCEED", StringComparison.OrdinalIgnoreCase) || o.IsProceed);
+                    if (vanillaProceed != null)
                     {
                         ModLogger.Info("TheArchitect cutscene reached final option in Endless Mode. Presenting Loop vs Victory choice.");
                         ModEntry.RegisterLocalizationStrings();
 
+                        // Option 1: Continue (Victory) - proceeds with vanilla cutscene killing you and opening the victory screen
+                        var endlessLeave = new EventOption(
+                            architect,
+                            () => OnEndlessLeaveChosen(architect, vanillaProceed),
+                            "AIOTWEAKS_ENDLESS_LEAVE",
+                            disableOnChosen: true,
+                            isProceed: false
+                        ).ThatWontSaveToChoiceHistory();
+
+                        // Option 2: [Endless] Continue Run (Loop to Act 1) - loops back to Act 1 with all stats and cumulative score
                         var endlessProceed = new EventOption(
                             architect,
                             () => OnEndlessProceedChosen(architect),
@@ -610,15 +642,7 @@ public static class MapGenerationHooks
                             isProceed: false
                         ).ThatWontSaveToChoiceHistory();
 
-                        var endlessLeave = new EventOption(
-                            architect,
-                            () => OnEndlessLeaveChosen(architect),
-                            "AIOTWEAKS_ENDLESS_LEAVE",
-                            disableOnChosen: true,
-                            isProceed: false
-                        ).ThatWontSaveToChoiceHistory();
-
-                        eventOptions = new List<EventOption> { endlessProceed, endlessLeave };
+                        eventOptions = new List<EventOption> { endlessLeave, endlessProceed };
                     }
                 }
             }
@@ -629,7 +653,7 @@ public static class MapGenerationHooks
         }
     }
 
-    private static async Task PlayArchitectAttackAnimationsAsync(TheArchitect architect)
+    private static async Task PlayArchitectAttackAnimationsAsync(TheArchitect architect, bool includeArchitectAttack = true)
     {
         try
         {
@@ -650,11 +674,14 @@ public static class MapGenerationHooks
                 await task;
             }
 
-            var animArchMethod = typeof(TheArchitect).GetMethod("AnimArchitectAttackIfNecessary", BindingFlags.Instance | BindingFlags.NonPublic);
-            if (animArchMethod != null)
+            if (includeArchitectAttack)
             {
-                var task = (Task)animArchMethod.Invoke(architect, new object[] { endAttackers })!;
-                await task;
+                var animArchMethod = typeof(TheArchitect).GetMethod("AnimArchitectAttackIfNecessary", BindingFlags.Instance | BindingFlags.NonPublic);
+                if (animArchMethod != null)
+                {
+                    var task = (Task)animArchMethod.Invoke(architect, new object[] { endAttackers })!;
+                    await task;
+                }
             }
         }
         catch (Exception ex)
@@ -667,18 +694,42 @@ public static class MapGenerationHooks
     {
         try
         {
-            ModLogger.Info("Player chose [Endless Loop to Act 1] at Architect cutscene.");
-            await PlayArchitectAttackAnimationsAsync(architect);
+            ModLogger.Info("Player chose [[Endless] Continue Run (Loop to Act 1)] at Architect cutscene.");
 
-            // Clear event options to dismiss buttons
+            // 1. Play player attack animation on the Architect (dealing damage for the current loop, without dying)
+            await PlayArchitectAttackAnimationsAsync(architect, includeArchitectAttack: false);
+
+            // 2. Accumulate current loop score into global Architect stats
+            try
+            {
+                if (architect.Owner?.RunState != null)
+                {
+                    int currentScore = ScoreUtility.CalculateScore(architect.Owner.RunState, won: true);
+                    StatsManager.IncrementArchitectDamage(currentScore);
+                    ModLogger.Info($"Recorded {currentScore} loop damage to global Architect stats.");
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Warn($"Failed to increment global Architect damage: {ex.Message}");
+            }
+
+            // 3. Clear event options to dismiss buttons
             var emptyLocString = new LocString("ancients", "PROCEED.description");
             var setEventStateMethod = typeof(EventModel).GetMethod("SetEventState", BindingFlags.Instance | BindingFlags.NonPublic);
             setEventStateMethod?.Invoke(architect, new object[] { emptyLocString, Array.Empty<EventOption>() });
 
-            ModLogger.Info("Endless Mode looping back to Act 0 and scaling enemies...");
-            RunTweaksSaveManager.IncrementEndlessLoop();
+            // 4. Ensure player health is alive and healthy
+            if (architect.Owner?.Creature != null)
+            {
+                architect.Owner.Creature.SetCurrentHpInternal(Math.Max(1, architect.Owner.Creature.CurrentHp));
+            }
 
-            // Execute EnterAct deferred so this option task completes immediately,
+            // 5. Increment endless loop count and persist snapshot
+            RunTweaksSaveManager.IncrementEndlessLoop();
+            ModLogger.Info($"Endless Mode looping back to Act 1 (Loop #{RuntimeStateManager.CurrentEndlessLoopCount}) with preserved cards, relics, gold, and cumulative score.");
+
+            // 6. Execute EnterAct deferred so this option task completes immediately,
             // avoiding the deadlock with EventSynchronizer.AwaitPendingOptionTasks()!
             Callable.From(() =>
             {
@@ -708,27 +759,73 @@ public static class MapGenerationHooks
         }
     }
 
-    private static async Task OnEndlessLeaveChosen(TheArchitect architect)
+    private static async Task OnEndlessLeaveChosen(TheArchitect architect, EventOption? vanillaProceed)
     {
         try
         {
-            ModLogger.Info("Player chose [Victory (Leave to Menu)] at Architect cutscene.");
-            await PlayArchitectAttackAnimationsAsync(architect);
-
-            // Clear event options
-            var emptyLocString = new LocString("ancients", "PROCEED.description");
-            var setEventStateMethod = typeof(EventModel).GetMethod("SetEventState", BindingFlags.Instance | BindingFlags.NonPublic);
-            setEventStateMethod?.Invoke(architect, new object[] { emptyLocString, Array.Empty<EventOption>() });
+            ModLogger.Info("Player chose [Continue (Victory)] at Architect cutscene. Proceeding with vanilla Architect animation, dialogue, and Victory screen.");
 
             RunTweaksSaveManager.ClearActiveRun("EndlessModeVictory");
-            if (RunManager.Instance != null)
+
+            // Execute TheArchitect's vanilla WinRun method so the scene proceeds as normal:
+            // player attacks -> architect attacks & kills player -> RunManager.WinRun() -> Victory screen
+            if (vanillaProceed != null)
             {
-                await RunManager.Instance.WinRun();
+                await vanillaProceed.Chosen();
+            }
+            else
+            {
+                var winRunMethod = typeof(TheArchitect).GetMethod("WinRun", BindingFlags.Instance | BindingFlags.NonPublic);
+                if (winRunMethod != null)
+                {
+                    var task = (Task)winRunMethod.Invoke(architect, null)!;
+                    await task;
+                }
+                else
+                {
+                    await PlayArchitectAttackAnimationsAsync(architect, includeArchitectAttack: true);
+                    if (RunManager.Instance != null)
+                    {
+                        await RunManager.Instance.WinRun();
+                    }
+                }
             }
         }
         catch (Exception ex)
         {
             ModLogger.Error("Error in OnEndlessLeaveChosen", ex);
+        }
+    }
+
+    /// <summary>
+    /// Fixes vanilla RunState bug in Endless Mode where CurrentMapPointHistoryEntry
+    /// always evaluates to _mapPointHistory.LastOrDefault()?.LastOrDefault(), which
+    /// points to Act 3 after looping back to Act 1.
+    /// This ensures current room stats, gold, and visited points accumulate to the CURRENT act.
+    /// </summary>
+    [HarmonyPatch(typeof(RunState), "CurrentMapPointHistoryEntry", MethodType.Getter)]
+    public static class RunStateCurrentMapPointHistoryEntryPatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix(RunState __instance, ref MapPointHistoryEntry? __result)
+        {
+            try
+            {
+                if (__instance != null && __instance.CurrentActIndex >= 0 && __instance.CurrentActIndex < __instance.MapPointHistory.Count)
+                {
+                    var actEntries = __instance.MapPointHistory[__instance.CurrentActIndex];
+                    if (actEntries != null && actEntries.Count > 0)
+                    {
+                        __result = actEntries[actEntries.Count - 1];
+                        return false;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error("Error in RunStateCurrentMapPointHistoryEntryPatch", ex);
+            }
+            return true;
         }
     }
 

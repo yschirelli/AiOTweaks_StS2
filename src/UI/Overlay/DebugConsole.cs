@@ -6,6 +6,7 @@ using AIOTweaks.Core.Config;
 using AIOTweaks.Core.Logging;
 using AIOTweaks.Core.State;
 using AIOTweaks.Cheats;
+using AIOTweaks.Hooks;
 using AIOTweaks.UI.Menu;
 using MegaCrit.Sts2.Core.Nodes;
 using MegaCrit.Sts2.Core.Nodes.CommonUi;
@@ -31,6 +32,7 @@ public partial class DebugConsole : CanvasLayer
     public override void _Ready()
     {
         ModLogger.Verbose("DebugConsole", "_Ready called: setting Layer=128, constructing UI...");
+        ProcessMode = ProcessModeEnum.Always;
         Layer = 128;
         SetupUI();
 
@@ -380,7 +382,7 @@ public partial class DebugConsole : CanvasLayer
                              "  god, infenergy, onehitkill, killall, endturn\n" +
                              "  gold <amount>, setgold <amount>, heal <amount>, damage <amount>, setmaxhp <amount>\n" +
                              "  relic <id>, rmrelic <id>, card <id> [upgraded=true/false], handcard <id>\n" +
-                             "  event <id>, clearevent\n" +
+                             "  event <id>, clearevent, endless [on/off/loop <n>/status]\n" +
                              "  draw <count>, energy <amount>, verbose [on/off], clear, reset[/color]");
                 break;
 
@@ -609,6 +611,70 @@ public partial class DebugConsole : CanvasLayer
                 {
                     LogToConsole($"[color=yellow]Current Max Energy: {GameHelper.GetPlayerMaxEnergy()}[/color]");
                     LogToConsole("[color=red]Usage: maxenergy <amount>[/color]");
+                }
+                break;
+
+            case "endless":
+                if (parts.Length > 1)
+                {
+                    string sub = parts[1].ToLowerInvariant();
+                    if (sub == "on" || sub == "true" || sub == "enable")
+                    {
+                        if (ConfigManager.Current.PreRunTweaks.EndlessMode != null)
+                            ConfigManager.Current.PreRunTweaks.EndlessMode.Enabled = true;
+
+                        var snap = RunTweaksSaveManager.ActiveSnapshot;
+                        if (snap?.PreRunTweaks?.EndlessMode != null)
+                        {
+                            snap.PreRunTweaks.EndlessMode.Enabled = true;
+                            RunTweaksSaveManager.SaveActiveSnapshot();
+                        }
+                        ConfigManager.SaveConfig();
+                        LogToConsole("[color=green]Endless Mode ENABLED for current run and future runs.[/color]");
+                    }
+                    else if (sub == "off" || sub == "false" || sub == "disable")
+                    {
+                        if (ConfigManager.Current.PreRunTweaks.EndlessMode != null)
+                            ConfigManager.Current.PreRunTweaks.EndlessMode.Enabled = false;
+
+                        var snap = RunTweaksSaveManager.ActiveSnapshot;
+                        if (snap?.PreRunTweaks?.EndlessMode != null)
+                        {
+                            snap.PreRunTweaks.EndlessMode.Enabled = false;
+                            RunTweaksSaveManager.SaveActiveSnapshot();
+                        }
+                        ConfigManager.SaveConfig();
+                        LogToConsole("[color=yellow]Endless Mode DISABLED.[/color]");
+                    }
+                    else if (sub == "loop" && parts.Length > 2 && int.TryParse(parts[2], out int targetLoop))
+                    {
+                        RuntimeStateManager.CurrentEndlessLoopCount = Math.Max(0, targetLoop);
+                        var snap = RunTweaksSaveManager.ActiveSnapshot;
+                        if (snap != null)
+                        {
+                            snap.EndlessLoopCount = RuntimeStateManager.CurrentEndlessLoopCount;
+                            RunTweaksSaveManager.SaveActiveSnapshot();
+                        }
+                        LogToConsole($"[color=cyan]Endless Loop Count set to {RuntimeStateManager.CurrentEndlessLoopCount}.[/color]");
+                    }
+                    else if (sub == "status")
+                    {
+                        bool active = RunTweaksSaveManager.IsEndlessModeActive();
+                        int loop = RuntimeStateManager.CurrentEndlessLoopCount;
+                        float mult = RunTweaksSaveManager.ActiveSnapshot?.PreRunTweaks?.EndlessMode?.EnemyScalingMultiplier ?? ConfigManager.Current.PreRunTweaks.EndlessMode.EnemyScalingMultiplier;
+                        double scale = Math.Pow(mult, loop);
+                        LogToConsole($"[color=cyan]Endless Mode: {(active ? "ACTIVE" : "INACTIVE")} | Loop #{loop} | Multiplier: {mult:F1}x (Current Enemy Scale: {scale:F2}x)[/color]");
+                    }
+                    else
+                    {
+                        LogToConsole("[color=red]Usage: endless <on|off|loop <count>|status>[/color]");
+                    }
+                }
+                else
+                {
+                    bool active = RunTweaksSaveManager.IsEndlessModeActive();
+                    int loop = RuntimeStateManager.CurrentEndlessLoopCount;
+                    LogToConsole($"[color=cyan]Endless Mode is {(active ? "ENABLED" : "DISABLED")} (Current Loop: {loop}). Usage: endless <on|off|loop <count>|status>[/color]");
                 }
                 break;
 
