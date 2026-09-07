@@ -1512,7 +1512,7 @@ public static class MapGenerationHooks
             if (RunTweaksSaveManager.IsFreeMapNavigationActive())
             {
                 var screen = AccessTools.Field(typeof(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapPoint), "_screen")?.GetValue(__instance)
-                    as MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen;
+                    as MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen ?? MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen.Instance;
                 if (screen != null && (screen.IsTraveling || !screen.IsTravelEnabled))
                 {
                     __result = false;
