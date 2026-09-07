@@ -157,7 +157,16 @@ public partial class PreRunSettingsMenu : Control
         vbox.AddChild(_forceNeowCheck);
 
         vbox.AddChild(new HSeparator());
-        vbox.AddChild(new Label { Text = "--- Run Seed & Randomization ---", Modulate = new Color(0.3f, 0.85f, 1f) });
+        var seedHeaderRow = new HBoxContainer();
+        seedHeaderRow.AddThemeConstantOverride("separation", 8);
+        seedHeaderRow.AddChild(new Label { Text = "--- Run Seed & Randomization ---", Modulate = new Color(0.3f, 0.85f, 1f) });
+        seedHeaderRow.AddChild(new Label 
+        { 
+            Text = "[BETA]", 
+            Modulate = new Color(1f, 0.75f, 0.25f),
+            TooltipText = "The seeding system is currently in beta." 
+        });
+        vbox.AddChild(seedHeaderRow);
 
         var seedRow = new HBoxContainer();
         seedRow.AddChild(new Label { Text = "Custom Run Seed: ", CustomMinimumSize = new Vector2(170, 0) });

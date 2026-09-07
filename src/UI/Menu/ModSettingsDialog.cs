@@ -1010,7 +1010,16 @@ public partial class ModSettingsDialog : CanvasLayer
         preRunBox.AddChild(_forceNeowCheck);
 
         preRunBox.AddChild(new HSeparator());
-        preRunBox.AddChild(new Label { Text = "--- Run Seed & Procedural Variety ---", Modulate = new Color(0.3f, 0.85f, 1f) });
+        var seedHeaderRow = new HBoxContainer();
+        seedHeaderRow.AddThemeConstantOverride("separation", 8);
+        seedHeaderRow.AddChild(new Label { Text = "--- Run Seed & Procedural Variety ---", Modulate = new Color(0.3f, 0.85f, 1f) });
+        seedHeaderRow.AddChild(new Label 
+        { 
+            Text = "[BETA]", 
+            Modulate = new Color(1f, 0.75f, 0.25f),
+            TooltipText = "The seeding system is currently in beta." 
+        });
+        preRunBox.AddChild(seedHeaderRow);
 
         var seedRow = new HBoxContainer();
         seedRow.AddChild(new Label { Text = "Custom Run Seed: ", CustomMinimumSize = new Vector2(230, 0) });
