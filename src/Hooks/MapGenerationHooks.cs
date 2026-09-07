@@ -40,6 +40,7 @@ using MegaCrit.Sts2.Core.Nodes.Screens;
 using MegaCrit.Sts2.Core.Nodes.Screens.Overlays;
 using MegaCrit.Sts2.Core.Nodes.CommonUi;
 using MegaCrit.Sts2.Core.Entities.Players;
+using MegaCrit.Sts2.Core.Entities.Rngs;
 
 namespace AIOTweaks.Hooks;
 
@@ -248,6 +249,7 @@ public static class RunTweaksSaveManager
         ActiveSnapshot = snapshot;
         RuntimeStateManager.CurrentEndlessLoopCount = 0;
         RuntimeStateManager.FreeMapNavigationEnabled = snapshot.PreRunTweaks.FreeMapNavigation;
+        MapGenerationHooks.ResetEventVisitCounts();
         SaveActiveSnapshot();
 
         ModLogger.Info($"RunTweaksSaveManager: Started NEW run snapshot (Profile={profileId}, IsCustom={isCustom}, RoomCount={snapshot.PreRunTweaks.MapRoomCount}, Endless={snapshot.PreRunTweaks.EndlessMode.Enabled})");
@@ -280,6 +282,7 @@ public static class RunTweaksSaveManager
             RuntimeStateManager.CurrentEndlessLoopCount = ActiveSnapshot.EndlessLoopCount;
             RuntimeStateManager.FreeMapNavigationEnabled = ActiveSnapshot.PreRunTweaks.FreeMapNavigation;
         }
+        MapGenerationHooks.ResetEventVisitCounts();
     }
 
     public static void ClearActiveRun(string reason)
@@ -289,6 +292,7 @@ public static class RunTweaksSaveManager
         ActiveSnapshot = null;
         RuntimeStateManager.CurrentEndlessLoopCount = 0;
         RuntimeStateManager.FreeMapNavigationEnabled = false;
+        MapGenerationHooks.ResetEventVisitCounts();
 
         lock (FileLock)
         {
@@ -1038,7 +1042,15 @@ public static class MapGenerationHooks
                 {
                     act.GenerateRooms(loopRng, state.UnlockState, state.Players.Count > 1);
                 }
-                ModLogger.Info($"Endless Mode: Regenerated fresh rooms, encounters, and bosses for loop #{loop}.");
+
+                // Also re-seed all sub-RNGs in RunRngSet so combat rewards, monsters, drops, and treasures advance for the new loop!
+                foreach (RunRngType rngType in Enum.GetValues<RunRngType>())
+                {
+                    ulong typeSeed = loopSeed + StringHelper.GetDeterministicHashCode(rngType.ToString());
+                    state.Rng.MockRng(rngType, typeSeed);
+                }
+
+                ModLogger.Info($"Endless Mode: Regenerated fresh rooms, encounters, bosses, and sub-RNGs for loop #{loop}.");
 
                 // Ensure combat and action queues are cleanly reset before entering Act 0
                 CombatManager.Instance?.Reset(graceful: true);
@@ -2643,6 +2655,120 @@ public static class MapGenerationHooks
             {
                 ModLogger.Error("Error in RoomSetGetBossPatch", ex);
                 return true; // Let original run if reflection fails
+            }
+        }
+    }
+
+    private static readonly Dictionary<string, int> _eventVisitCounts = new();
+
+    public static void ResetEventVisitCounts()
+    {
+        lock (_eventVisitCounts)
+        {
+            _eventVisitCounts.Clear();
+        }
+    }
+
+    private static void ApplyEventRngSeed(EventModel eventModel)
+    {
+        try
+        {
+            if (eventModel?.Owner?.RunState?.Rng == null) return;
+
+            int loop = RuntimeStateManager.CurrentEndlessLoopCount;
+            int slot = eventModel.IsShared ? 0 : eventModel.Owner.RunState.GetPlayerSlotIndex(eventModel.Owner);
+            string eventId = eventModel.Id?.Entry ?? "EVENT";
+            string key = $"{eventId}_slot{slot}";
+
+            int visitCount;
+            lock (_eventVisitCounts)
+            {
+                _eventVisitCounts.TryGetValue(key, out visitCount);
+                _eventVisitCounts[key] = visitCount + 1;
+            }
+
+            // On loop 0, visit 0, preserve vanilla deterministic seed
+            if (loop == 0 && visitCount == 0)
+            {
+                return;
+            }
+
+            ulong baseSeed = eventModel.Owner.RunState.Rng.Seed;
+            ulong eventHash = StringHelper.GetDeterministicHashCode(eventId);
+
+            ulong seed = (ulong)((long)baseSeed + (long)slot) + eventHash;
+            if (loop > 0)
+            {
+                seed ^= ((ulong)loop * 0x9E3779B97F4A7C15uL);
+            }
+            if (visitCount > 0)
+            {
+                seed ^= ((ulong)visitCount * 0xBF58476D1CE4E5B9uL);
+            }
+            int floor = eventModel.Owner.RunState.TotalFloor;
+            if (floor > 0)
+            {
+                seed ^= ((ulong)floor * 0xD1B54A32D192ED03uL);
+            }
+
+            var newRng = new MegaCrit.Sts2.Core.Random.Rng(seed, $"{eventId}_loop{loop}_v{visitCount}");
+            var rngProp = typeof(EventModel).GetProperty("Rng", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            rngProp?.GetSetMethod(true)?.Invoke(eventModel, new object[] { newRng });
+
+            ModLogger.Info($"MapGenerationHooks: Re-seeded {eventId} for Loop #{loop}, Visit #{visitCount}, Floor #{floor} -> Seed: {seed}");
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Error("Error in ApplyEventRngSeed", ex);
+        }
+    }
+
+    /// <summary>
+    /// Re-seeds Ancient events (Neow, Pael, Tezcatara, etc.) dynamically during Endless Mode loops
+    /// and repeated visits so each loop rolls fresh, distinct relics/options instead of repeating identically.
+    /// </summary>
+    [HarmonyPatch(typeof(AncientEventModel), "GenerateInitialOptionsWrapper")]
+    public static class AncientEventModelGenerateInitialOptionsWrapperPatch
+    {
+        [HarmonyPrefix]
+        public static void Prefix(AncientEventModel __instance)
+        {
+            ApplyEventRngSeed(__instance);
+        }
+    }
+
+    /// <summary>
+    /// Re-seeds standard events dynamically during Endless Mode loops and repeated visits.
+    /// </summary>
+    [HarmonyPatch(typeof(EventModel), "GenerateInitialOptionsWrapper")]
+    public static class EventModelGenerateInitialOptionsWrapperPatch
+    {
+        [HarmonyPrefix]
+        public static void Prefix(EventModel __instance)
+        {
+            if (!(__instance is AncientEventModel))
+            {
+                ApplyEventRngSeed(__instance);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Ensures Neow does not offer duplicate relics on subsequent loops unless 'Allow Multiple Relics' is explicitly enabled.
+    /// </summary>
+    [HarmonyPatch(typeof(RelicModel), "IsAllowedAtNeow")]
+    public static class RelicModelIsAllowedAtNeowPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(RelicModel __instance, Player player, ref bool __result)
+        {
+            if (!__result) return;
+            var tweaks = RunTweaksSaveManager.GetEffectivePreRunTweaks();
+            if (tweaks.AllowMultipleRelics) return;
+
+            if (player?.Relics != null && player.Relics.Any(r => r.Id == __instance.Id))
+            {
+                __result = false;
             }
         }
     }
