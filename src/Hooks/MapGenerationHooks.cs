@@ -41,6 +41,9 @@ using MegaCrit.Sts2.Core.Nodes.Screens.Overlays;
 using MegaCrit.Sts2.Core.Nodes.CommonUi;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Entities.Rngs;
+using MegaCrit.Sts2.Core.Saves;
+using MegaCrit.Sts2.Core.Nodes.Screens.MainMenu;
+using MegaCrit.Sts2.Core.Nodes.Screens.ScreenContext;
 
 namespace AIOTweaks.Hooks;
 
@@ -884,29 +887,31 @@ public static class MapGenerationHooks
     }
 
     /// <summary>
-    /// Intercepts TheArchitect cutscene options in Endless Mode.
-    /// Replaces the single "PROCEED" button with choices:
-    /// Option 1: Continue (Victory) - proceeds as normal with the Architect cutscene and dialog killing you and then the Victory screen.
+    /// Intercepts NEventRoom.SetOptions in Endless Mode for TheArchitect.
+    /// Replaces the vanilla proceed option (which would kill the player and end the run) with choices:
+    /// Option 1: Continue (Victory) - proceeds as normal with the Architect cutscene killing you and the Victory screen.
     /// Option 2: [Endless] Continue Run (Loop to Act 1) - loops back to Act 1 keeping cards, stats, relics, gold, with compounding scaling and cumulative score.
     /// </summary>
-    [HarmonyPatch(typeof(EventModel), "SetEventState")]
-    public static class EventModelSetEventStatePatch
+    [HarmonyPatch(typeof(NEventRoom), "SetOptions")]
+    public static class NEventRoomSetOptionsPatch
     {
         [HarmonyPrefix]
-        public static void Prefix(EventModel __instance, LocString description, ref IEnumerable<EventOption> eventOptions)
+        public static void Prefix(NEventRoom __instance, EventModel eventModel)
         {
             try
             {
-                if (__instance is TheArchitect architect && RunTweaksSaveManager.IsEndlessModeActive())
+                if (eventModel is TheArchitect architect && RunTweaksSaveManager.IsEndlessModeActive())
                 {
-                    var optionsList = eventOptions as IList<EventOption> ?? eventOptions.ToList();
-                    var vanillaProceed = optionsList.FirstOrDefault(o => o.TextKey.Equals("PROCEED", StringComparison.OrdinalIgnoreCase) || o.IsProceed);
-                    if (vanillaProceed != null)
+                    bool hasProceed = architect.IsFinished ||
+                        (architect.CurrentOptions != null && architect.CurrentOptions.Any(o => o.TextKey.Equals("PROCEED", StringComparison.OrdinalIgnoreCase) || o.IsProceed));
+
+                    if (hasProceed)
                     {
-                        ModLogger.Info("TheArchitect cutscene reached final option in Endless Mode. Presenting Loop vs Victory choice.");
+                        ModLogger.Info("TheArchitect reached final proceed option in Endless Mode. Presenting Loop vs Victory choice.");
                         ModEntry.RegisterLocalizationStrings();
 
-                        // Option 1: Continue (Victory) - proceeds with vanilla cutscene killing you and opening the victory screen
+                        var vanillaProceed = architect.CurrentOptions?.FirstOrDefault(o => o.TextKey.Equals("PROCEED", StringComparison.OrdinalIgnoreCase) || o.IsProceed);
+
                         var endlessLeave = new EventOption(
                             architect,
                             () => OnEndlessLeaveChosen(architect, vanillaProceed),
@@ -915,7 +920,6 @@ public static class MapGenerationHooks
                             isProceed: false
                         ).ThatWontSaveToChoiceHistory();
 
-                        // Option 2: [Endless] Continue Run (Loop to Act 1) - loops back to Act 1 with all stats and cumulative score
                         var endlessProceed = new EventOption(
                             architect,
                             () => OnEndlessProceedChosen(architect),
@@ -924,13 +928,24 @@ public static class MapGenerationHooks
                             isProceed: false
                         ).ThatWontSaveToChoiceHistory();
 
-                        eventOptions = new List<EventOption> { endlessLeave, endlessProceed };
+                        // Reset _isFinished to false so NEventRoom populates our custom options
+                        var isFinishedField = typeof(EventModel).GetField("_isFinished", BindingFlags.Instance | BindingFlags.NonPublic);
+                        isFinishedField?.SetValue(architect, false);
+
+                        // Inject choices into architect's private _currentOptions list
+                        var currentOptionsField = typeof(EventModel).GetField("_currentOptions", BindingFlags.Instance | BindingFlags.NonPublic);
+                        if (currentOptionsField?.GetValue(architect) is List<EventOption> optionsList)
+                        {
+                            optionsList.Clear();
+                            optionsList.Add(endlessLeave);
+                            optionsList.Add(endlessProceed);
+                        }
                     }
                 }
             }
             catch (Exception ex)
             {
-                ModLogger.Error("Error in EventModelSetEventStatePatch for Endless Mode", ex);
+                ModLogger.Error("Error in NEventRoomSetOptionsPatch for Endless Mode", ex);
             }
         }
     }
@@ -996,22 +1011,52 @@ public static class MapGenerationHooks
                 ModLogger.Warn($"Failed to increment global Architect damage: {ex.Message}");
             }
 
-            // 3. Clear event options to dismiss buttons
-            var emptyLocString = new LocString("ancients", "PROCEED.description");
-            var setEventStateMethod = typeof(EventModel).GetMethod("SetEventState", BindingFlags.Instance | BindingFlags.NonPublic);
-            setEventStateMethod?.Invoke(architect, new object[] { emptyLocString, Array.Empty<EventOption>() });
+            // 3. Clear speech bubble if active
+            try
+            {
+                var speechBubbleProp = typeof(TheArchitect).GetProperty("SpeechBubble", BindingFlags.Instance | BindingFlags.NonPublic);
+                var speechBubble = speechBubbleProp?.GetValue(architect);
+                if (speechBubble != null)
+                {
+                    var animOutMethod = speechBubble.GetType().GetMethod("AnimOut");
+                    if (animOutMethod != null && animOutMethod.Invoke(speechBubble, null) is Task task)
+                    {
+                        await task;
+                    }
+                    speechBubbleProp?.SetValue(architect, null);
+                }
+            }
+            catch { }
 
-            // 4. Ensure player health is alive and healthy
+            // 4. Reset TheArchitect state cleanly for future loops
+            try
+            {
+                var currentLineIndexProp = typeof(TheArchitect).GetProperty("CurrentLineIndex", BindingFlags.Instance | BindingFlags.NonPublic);
+                currentLineIndexProp?.SetValue(architect, 0);
+
+                var isFinishedField = typeof(EventModel).GetField("_isFinished", BindingFlags.Instance | BindingFlags.NonPublic);
+                isFinishedField?.SetValue(architect, false);
+
+                var currentOptionsField = typeof(EventModel).GetField("_currentOptions", BindingFlags.Instance | BindingFlags.NonPublic);
+                var optionsList = currentOptionsField?.GetValue(architect) as List<EventOption>;
+                optionsList?.Clear();
+
+                var layout = NEventRoom.Instance?.Layout;
+                layout?.ClearOptions();
+            }
+            catch { }
+
+            // 5. Ensure player health is alive and healthy
             if (architect.Owner?.Creature != null)
             {
                 architect.Owner.Creature.SetCurrentHpInternal(Math.Max(1, architect.Owner.Creature.CurrentHp));
             }
 
-            // 5. Increment endless loop count and persist snapshot
+            // 6. Increment endless loop count and persist snapshot
             RunTweaksSaveManager.IncrementEndlessLoop();
             ModLogger.Info($"Endless Mode looping back to Act 1 (Loop #{RuntimeStateManager.CurrentEndlessLoopCount}) with preserved cards, relics, gold, and cumulative score.");
 
-            // 6. Execute EnterAct deferred so this option task completes immediately,
+            // 7. Execute EnterAct deferred so this option task completes immediately,
             // avoiding the deadlock with EventSynchronizer.AwaitPendingOptionTasks()!
             Callable.From(() =>
             {
@@ -1172,6 +1217,156 @@ public static class MapGenerationHooks
         }
     }
 
+    #endregion
+
+    #region Abandon Run & File Deletion Failsafes
+
+    /// <summary>
+    /// Forcefully deletes all current run save files from the local filesystem and Steam Remote Storage.
+    /// Works around Godot's DirAccess.RemoveAbsolute failures on Linux.
+    /// </summary>
+    public static void ForceDeleteCurrentRunSaves()
+    {
+        try
+        {
+            int currentProfile = 1;
+            try
+            {
+                if (MegaCrit.Sts2.Core.Saves.SaveManager.Instance?.IsProfileInitialized == true)
+                {
+                    currentProfile = MegaCrit.Sts2.Core.Saves.SaveManager.Instance.CurrentProfileId;
+                }
+            }
+            catch { }
+
+            var profilesToCheck = new HashSet<int> { currentProfile, 1, 2, 3 };
+
+            foreach (int p in profilesToCheck)
+            {
+                try
+                {
+                    string[] relativeFiles = new[]
+                    {
+                        "current_run.save",
+                        "current_run.save.backup",
+                        "current_run_mp.save",
+                        "current_run_mp.save.backup"
+                    };
+
+                    foreach (var file in relativeFiles)
+                    {
+                        // 1. Through UserDataPathProvider paths
+                        try
+                        {
+                            string pModded = MegaCrit.Sts2.Core.Saves.UserDataPathProvider.GetProfileScopedPath(p, $"saves/{file}", null, null);
+                            DeletePhysicalFile(pModded);
+                        }
+                        catch { }
+
+                        // 2. Direct OS filesystem paths under .local/share/SlayTheSpire2/steam
+                        try
+                        {
+                            string localBasePath = Path.Combine(
+                                System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile),
+                                ".local/share/SlayTheSpire2/steam"
+                            );
+                            if (Directory.Exists(localBasePath))
+                            {
+                                foreach (var userDir in Directory.GetDirectories(localBasePath))
+                                {
+                                    string moddedPath = Path.Combine(userDir, $"modded/profile{p}/saves/{file}");
+                                    DeletePhysicalFile(moddedPath);
+                                    string unmoddedPath = Path.Combine(userDir, $"profile{p}/saves/{file}");
+                                    DeletePhysicalFile(unmoddedPath);
+                                }
+                            }
+                        }
+                        catch { }
+
+                        // 3. Direct Steam userdata remote storage on disk
+                        try
+                        {
+                            string steamUserdataPath = Path.Combine(
+                                System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile),
+                                ".local/share/Steam/userdata"
+                            );
+                            if (Directory.Exists(steamUserdataPath))
+                            {
+                                foreach (var uDir in Directory.GetDirectories(steamUserdataPath))
+                                {
+                                    string sts2RemoteDir = Path.Combine(uDir, "2868840/remote");
+                                    if (Directory.Exists(sts2RemoteDir))
+                                    {
+                                        string mSave = Path.Combine(sts2RemoteDir, $"modded/profile{p}/saves/{file}");
+                                        DeletePhysicalFile(mSave);
+                                        string uSave = Path.Combine(sts2RemoteDir, $"profile{p}/saves/{file}");
+                                        DeletePhysicalFile(uSave);
+                                    }
+                                }
+                            }
+                        }
+                        catch { }
+
+                        // 4. SaveManager Store / Steam Remote Storage deletion
+                        try
+                        {
+                            if (MegaCrit.Sts2.Core.Saves.SaveManager.Instance != null)
+                            {
+                                var saveStoreField = typeof(MegaCrit.Sts2.Core.Saves.SaveManager).GetField("_saveStore", BindingFlags.Instance | BindingFlags.NonPublic);
+                                if (saveStoreField?.GetValue(MegaCrit.Sts2.Core.Saves.SaveManager.Instance) is ISaveStore store)
+                                {
+                                    store.DeleteFile(MegaCrit.Sts2.Core.Saves.Managers.RunSaveManager.GetRunSavePath(p, file, forceModState: true));
+                                    store.DeleteFile(MegaCrit.Sts2.Core.Saves.Managers.RunSaveManager.GetRunSavePath(p, file, forceModState: false));
+                                }
+                            }
+                        }
+                        catch { }
+                    }
+                }
+                catch { }
+            }
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Error("Error in ForceDeleteCurrentRunSaves", ex);
+        }
+    }
+
+    public static void DeletePhysicalFile(string? godotOrOsPath)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(godotOrOsPath)) return;
+            string globalPath = ProjectSettings.GlobalizePath(godotOrOsPath);
+            if (File.Exists(globalPath))
+            {
+                File.Delete(globalPath);
+                ModLogger.Info($"DeletePhysicalFile: Deleted {globalPath}");
+            }
+            if (File.Exists(godotOrOsPath))
+            {
+                File.Delete(godotOrOsPath);
+                ModLogger.Info($"DeletePhysicalFile: Deleted {godotOrOsPath}");
+            }
+        }
+        catch { }
+    }
+
+    [HarmonyPatch(typeof(GodotFileIo), nameof(GodotFileIo.DeleteFile))]
+    public static class GodotFileIoDeleteFilePatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(GodotFileIo __instance, string path)
+        {
+            try
+            {
+                string fullPath = __instance.GetFullPath(path);
+                DeletePhysicalFile(fullPath);
+            }
+            catch { }
+        }
+    }
+
     [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Saves.SaveManager), nameof(MegaCrit.Sts2.Core.Saves.SaveManager.DeleteCurrentRun))]
     public static class SaveManagerDeleteCurrentRunPatch
     {
@@ -1180,6 +1375,7 @@ public static class MapGenerationHooks
         {
             try
             {
+                ForceDeleteCurrentRunSaves();
                 RunTweaksSaveManager.ClearActiveRun("DeleteCurrentRun");
             }
             catch (Exception ex)
@@ -1197,11 +1393,97 @@ public static class MapGenerationHooks
         {
             try
             {
+                ForceDeleteCurrentRunSaves();
                 RunTweaksSaveManager.ClearActiveRun("DeleteCurrentMultiplayerRun");
             }
             catch (Exception ex)
             {
                 ModLogger.Error("Error in SaveManagerDeleteCurrentMultiplayerRunPatch clearing active run snapshot", ex);
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Nodes.CommonUi.NAbandonRunConfirmPopup), "OnYesButtonPressed")]
+    public static class NAbandonRunConfirmPopupOnYesButtonPressedPatch
+    {
+        [HarmonyPrefix]
+        public static void Prefix()
+        {
+            try
+            {
+                ForceDeleteCurrentRunSaves();
+                RunTweaksSaveManager.ClearActiveRun("PopupYesButtonPressed");
+            }
+            catch { }
+        }
+    }
+
+    [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Nodes.Screens.MainMenu.NMainMenu), nameof(MegaCrit.Sts2.Core.Nodes.Screens.MainMenu.NMainMenu.AbandonRun))]
+    public static class NMainMenuAbandonRunPatch
+    {
+        [HarmonyPrefix]
+        public static void Prefix(MegaCrit.Sts2.Core.Nodes.Screens.MainMenu.NMainMenu __instance)
+        {
+            try
+            {
+                ForceDeleteCurrentRunSaves();
+                RunTweaksSaveManager.ClearActiveRun("AbandonRun_Prefix");
+            }
+            catch { }
+        }
+
+        [HarmonyPostfix]
+        public static void Postfix(MegaCrit.Sts2.Core.Nodes.Screens.MainMenu.NMainMenu __instance)
+        {
+            try
+            {
+                ForceDeleteCurrentRunSaves();
+                RunTweaksSaveManager.ClearActiveRun("AbandonRun_Postfix");
+
+                // Ensure UI state reflects abandoned run even if RefreshButtons encountered an error
+                var readRunSaveResultField = typeof(MegaCrit.Sts2.Core.Nodes.Screens.MainMenu.NMainMenu).GetField("_readRunSaveResult", BindingFlags.Instance | BindingFlags.NonPublic);
+                readRunSaveResultField?.SetValue(__instance, null);
+
+                var singleplayerButtonField = typeof(MegaCrit.Sts2.Core.Nodes.Screens.MainMenu.NMainMenu).GetField("_singleplayerButton", BindingFlags.Instance | BindingFlags.NonPublic);
+                var singleplayerButton = singleplayerButtonField?.GetValue(__instance) as Control;
+                if (singleplayerButton != null)
+                {
+                    singleplayerButton.Visible = true;
+                    (singleplayerButton as MegaCrit.Sts2.Core.Nodes.GodotExtensions.NButton)?.Enable();
+                }
+
+                var abandonRunButtonField = typeof(MegaCrit.Sts2.Core.Nodes.Screens.MainMenu.NMainMenu).GetField("_abandonRunButton", BindingFlags.Instance | BindingFlags.NonPublic);
+                var abandonRunButton = abandonRunButtonField?.GetValue(__instance) as Control;
+                if (abandonRunButton != null)
+                {
+                    abandonRunButton.Visible = false;
+                }
+
+                var continueButtonField = typeof(MegaCrit.Sts2.Core.Nodes.Screens.MainMenu.NMainMenu).GetField("_continueButton", BindingFlags.Instance | BindingFlags.NonPublic);
+                var continueButton = continueButtonField?.GetValue(__instance) as Control;
+                if (continueButton != null)
+                {
+                    continueButton.Visible = false;
+                    (continueButton as MegaCrit.Sts2.Core.Nodes.GodotExtensions.NButton)?.Disable();
+                }
+
+                var runInfoField = typeof(MegaCrit.Sts2.Core.Nodes.Screens.MainMenu.NMainMenu).GetField("_runInfo", BindingFlags.Instance | BindingFlags.NonPublic);
+                var runInfo = runInfoField?.GetValue(__instance);
+                if (runInfo != null)
+                {
+                    var setResultMethod = runInfo.GetType().GetMethod("SetResult");
+                    setResultMethod?.Invoke(runInfo, new object?[] { null });
+                }
+
+                var updateTimelineMethod = typeof(MegaCrit.Sts2.Core.Nodes.Screens.MainMenu.NMainMenu).GetMethod("UpdateTimelineButtonBehavior", BindingFlags.Instance | BindingFlags.NonPublic);
+                updateTimelineMethod?.Invoke(__instance, null);
+
+                ActiveScreenContext.Instance?.Update();
+                ModLogger.Info("NMainMenuAbandonRunPatch: Main menu successfully forced to clean state.");
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error("Error in NMainMenuAbandonRunPatch.Postfix", ex);
             }
         }
     }
@@ -1216,20 +1498,19 @@ public static class MapGenerationHooks
     public static class ActModelGetNumberOfRoomsPatch
     {
         [HarmonyPostfix]
-        public static void Postfix(bool isMultiplayer, ref int __result)
+        public static void Postfix(MegaCrit.Sts2.Core.Models.ActModel __instance, bool isMultiplayer, ref int __result)
         {
             try
             {
-                int desiredRooms = Math.Max(15, RunTweaksSaveManager.GetEffectivePreRunTweaks().MapRoomCount);
-                if (desiredRooms > 15)
+                var preRun = RunTweaksSaveManager.GetEffectivePreRunTweaks();
+                if (preRun != null && preRun.MapRoomCount > 15)
                 {
-                    __result = isMultiplayer ? Math.Max(1, desiredRooms - 1) : desiredRooms;
-                    ModLogger.Info($"ActModel.GetNumberOfRooms: Custom MapRoomCount applied -> {__result} rooms for act (configured: {desiredRooms}).");
+                    __result = isMultiplayer ? Math.Max(1, preRun.MapRoomCount - 1) : preRun.MapRoomCount;
                 }
             }
-            catch (Exception ex)
+            catch
             {
-                ModLogger.Error("Error in ActModelGetNumberOfRoomsPatch setting map room count", ex);
+                // Never throw or crash inside room count calculation
             }
         }
     }
