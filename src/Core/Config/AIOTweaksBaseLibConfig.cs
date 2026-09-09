@@ -9,6 +9,7 @@ namespace AIOTweaks.Core.Config;
 /// <summary>
 /// Registers AIOTweaks directly with BaseLib's Mod Configuration screen so it appears
 /// natively in the in-game Mod Configuration menu with full toggleable settings, sliders, and buttons.
+/// Note: BaseLib requires all exposed configuration properties to be static.
 /// </summary>
 public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
 {
@@ -18,7 +19,7 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
     }
 
     [ConfigSection("General Settings")]
-    public bool ModEnabled
+    public static bool ModEnabled
     {
         get => ConfigManager.Current.General.Enabled;
         set
@@ -28,7 +29,7 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
         }
     }
 
-    public bool DebugLogging
+    public static bool DebugLogging
     {
         get => ConfigManager.Current.General.DebugLogging;
         set
@@ -41,7 +42,7 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
 
     [ConfigSection("Keybindings & Overlay")]
     [ConfigTextInput(TextInputPreset.Alphanumeric)]
-    public string ConsoleHotkey
+    public static string ConsoleHotkey
     {
         get => ConfigManager.Current.General.ConsoleHotkey;
         set
@@ -55,7 +56,7 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
     }
 
     [ConfigTextInput(TextInputPreset.Alphanumeric)]
-    public string GuiOverlayHotkey
+    public static string GuiOverlayHotkey
     {
         get => ConfigManager.Current.General.GuiOverlayHotkey;
         set
@@ -69,7 +70,7 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
     }
 
     [ConfigTextInput(TextInputPreset.Alphanumeric)]
-    public string QuickOpenShopKey
+    public static string QuickOpenShopKey
     {
         get => ConfigManager.Current.General.QuickOpenShopKey;
         set
@@ -80,7 +81,7 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
     }
 
     [ConfigTextInput(TextInputPreset.Alphanumeric)]
-    public string QuickGodModeKey
+    public static string QuickGodModeKey
     {
         get => ConfigManager.Current.General.QuickGodModeKey;
         set
@@ -91,7 +92,7 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
     }
 
     [ConfigTextInput(TextInputPreset.Alphanumeric)]
-    public string QuickKillEnemiesKey
+    public static string QuickKillEnemiesKey
     {
         get => ConfigManager.Current.General.QuickKillEnemiesKey;
         set
@@ -102,14 +103,14 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
     }
 
     [ConfigButton("Open GUI Menu Overlay")]
-    public void OpenOverlayAction()
+    public static void OpenOverlayAction()
     {
         ModLogger.Verbose("AIOTweaksBaseLibConfig", "OpenOverlayAction clicked. Opening ModSettingsDialog...");
         ModSettingsDialog.ShowDialog();
     }
 
     [ConfigButton("Reset GUI Position & Height")]
-    public void ResetGuiLayoutAction()
+    public static void ResetGuiLayoutAction()
     {
         ModLogger.Verbose("AIOTweaksBaseLibConfig", "ResetGuiLayoutAction clicked.");
         ModSettingsDialog.ResetWindowLayout();
@@ -117,7 +118,7 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
     }
 
     [ConfigSection("God Mode & Combat Cheats")]
-    public bool GodMode
+    public static bool GodMode
     {
         get => RuntimeStateManager.GodModeEnabled || ConfigManager.Current.CombatSandbox.GodMode;
         set
@@ -129,7 +130,7 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
         }
     }
 
-    public bool OneHitKill
+    public static bool OneHitKill
     {
         get => RuntimeStateManager.OneHitKillEnabled || ConfigManager.Current.CombatSandbox.OneHitKill;
         set
@@ -141,7 +142,7 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
         }
     }
 
-    public bool InfiniteEnergy
+    public static bool InfiniteEnergy
     {
         get => RuntimeStateManager.InfiniteEnergyEnabled || ConfigManager.Current.CombatSandbox.InfiniteEnergy;
         set
@@ -153,7 +154,7 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
         }
     }
 
-    public bool InfinitePotions
+    public static bool InfinitePotions
     {
         get => RuntimeStateManager.InfinitePotionsEnabled || ConfigManager.Current.CombatSandbox.InfinitePotions;
         set
@@ -165,7 +166,7 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
         }
     }
 
-    public bool NoCardExhaust
+    public static bool NoCardExhaust
     {
         get => RuntimeStateManager.NoCardExhaustEnabled || ConfigManager.Current.CombatSandbox.NoCardExhaust;
         set
@@ -178,7 +179,7 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
     }
 
     [ConfigSlider(0, 10, 1)]
-    public int ExtraCardsDrawnPerTurn
+    public static int ExtraCardsDrawnPerTurn
     {
         get => ConfigManager.Current.CombatSandbox.BonusDrawPerTurn;
         set
@@ -190,7 +191,7 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
 
     [ConfigSection("Economy & Multipliers")]
     [ConfigSlider(1.0, 10.0, 0.5)]
-    public double GoldRewardMultiplier
+    public static double GoldRewardMultiplier
     {
         get => ConfigManager.Current.PreRunTweaks.GoldRewardMultiplier;
         set
@@ -201,7 +202,7 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
     }
 
     [ConfigSlider(0.1, 1.0, 0.05)]
-    public double ShopDiscountMultiplier
+    public static double ShopDiscountMultiplier
     {
         get => ConfigManager.Current.PreRunTweaks.ShopDiscountMultiplier;
         set
@@ -212,7 +213,7 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
     }
 
     [ConfigSlider(1, 10, 1)]
-    public int CardRewardCount
+    public static int CardRewardCount
     {
         get => ConfigManager.Current.PreRunTweaks.CardRewardCount;
         set
@@ -223,7 +224,7 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
     }
 
     [ConfigSlider(0, 1000, 50)]
-    public int StartingGoldBonus
+    public static int StartingGoldBonus
     {
         get => ConfigManager.Current.PreRunTweaks.StartingGoldBonus;
         set
@@ -234,7 +235,7 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
     }
 
     [ConfigSlider(0, 200, 10)]
-    public int StartingMaxHpBonus
+    public static int StartingMaxHpBonus
     {
         get => ConfigManager.Current.PreRunTweaks.StartingMaxHpBonus;
         set
@@ -245,7 +246,7 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
     }
 
     [ConfigSlider(1, 10, 1)]
-    public int PotionSlots
+    public static int PotionSlots
     {
         get => ConfigManager.Current.PreRunTweaks.PotionSlots;
         set
@@ -255,7 +256,7 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
         }
     }
 
-    public bool AllowMultipleRelics
+    public static bool AllowMultipleRelics
     {
         get => ConfigManager.Current.PreRunTweaks.AllowMultipleRelics;
         set
@@ -266,7 +267,7 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
     }
 
     [ConfigSection("Map & Spire Utilities")]
-    public bool ForceNeowBonus
+    public static bool ForceNeowBonus
     {
         get => ConfigManager.Current.PreRunTweaks.ForceNeowBonus;
         set
@@ -277,7 +278,7 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
     }
 
     [ConfigSlider(1.0, 5.0, 0.5)]
-    public double EliteNodeEncounterRate
+    public static double EliteNodeEncounterRate
     {
         get => ConfigManager.Current.PreRunTweaks.MapNodeDistribution.EliteWeightMultiplier;
         set
@@ -288,7 +289,7 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
     }
 
     [ConfigSlider(0.0, 5.0, 0.5)]
-    public double ShopNodeRate
+    public static double ShopNodeRate
     {
         get => ConfigManager.Current.PreRunTweaks.MapNodeDistribution.ShopWeightMultiplier;
         set
@@ -299,7 +300,7 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
     }
 
     [ConfigSlider(0.0, 5.0, 0.5)]
-    public double EventNodeRate
+    public static double EventNodeRate
     {
         get => ConfigManager.Current.PreRunTweaks.MapNodeDistribution.EventWeightMultiplier;
         set
@@ -310,7 +311,7 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
     }
 
     [ConfigSlider(1.0, 5.0, 0.5)]
-    public double RestSiteRate
+    public static double RestSiteRate
     {
         get => ConfigManager.Current.PreRunTweaks.MapNodeDistribution.RestSiteWeightMultiplier;
         set
@@ -321,7 +322,7 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
     }
 
     [ConfigSlider(0.0, 5.0, 0.5)]
-    public double CombatNodeRate
+    public static double CombatNodeRate
     {
         get => ConfigManager.Current.PreRunTweaks.MapNodeDistribution.CombatWeightMultiplier;
         set
@@ -332,7 +333,7 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
     }
 
     [ConfigSlider(0.0, 5.0, 0.5)]
-    public double TreasureRoomRate
+    public static double TreasureRoomRate
     {
         get => ConfigManager.Current.PreRunTweaks.MapNodeDistribution.TreasureRoomMultiplier;
         set
@@ -343,7 +344,7 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
     }
 
     [ConfigButton("Reset All Cheats & State")]
-    public void ResetStateAction()
+    public static void ResetStateAction()
     {
         ModLogger.Verbose("AIOTweaksBaseLibConfig", "ResetStateAction clicked.");
         RuntimeStateManager.ResetSessionState();

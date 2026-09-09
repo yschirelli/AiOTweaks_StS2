@@ -7,7 +7,9 @@ using AIOTweaks.Core.State;
 using Godot;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Entities.Creatures;
+using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Nodes.Combat;
+using MegaCrit.Sts2.Core.ValueProps;
 
 namespace AIOTweaks.Hooks;
 
@@ -140,48 +142,61 @@ public static class CombatHooks
     public static class HookModifyDamagePatch
     {
         [HarmonyPostfix]
-        public static void Postfix(Creature? target, Creature? dealer, ref decimal __result)
+        public static void Postfix(Creature? target, Creature? dealer, ValueProp props, CardModel? cardSource, ref decimal __result)
         {
             try
             {
-                if (__result > 0)
+                if (__result <= 0) return;
+
+                // 1. Guard against self-damage (Breakthrough, Offering, Bloodletting, Hemokinesis, Pain curse, etc.)
+                // Offensive damage multipliers only apply to attacks dealt to opposing combatants, never self-harm.
+                if (target != null && dealer != null)
                 {
-                    if (dealer != null)
+                    if (target == dealer || (target.IsPlayer && dealer.IsPlayer))
                     {
-                        if (dealer.IsPlayer)
+                        return;
+                    }
+                }
+
+                // 2. Guard against pure unblockable HP loss (Poison, card self-harm costs, curses, event ticks)
+                if (props.HasFlag(ValueProp.Unblockable))
+                {
+                    return;
+                }
+
+                // 3. Multipliers apply strictly to powered attacks (attack cards and monster attack moves).
+                // MegaCrit's IsPoweredAttack() checks: props.HasFlag(ValueProp.Move) && !props.HasFlag(ValueProp.Unpowered)
+                // This ensures flat relic damage (Mercury Hourglass, Bronze Scales thorns) and unpowered powers do not get scaled.
+                if (!props.IsPoweredAttack())
+                {
+                    return;
+                }
+
+                // 4. Player attacking enemy
+                if (dealer != null && dealer.IsPlayer)
+                {
+                    if (target == null || !target.IsPlayer)
+                    {
+                        float mult = RuntimeStateManager.GetEffectivePlayerDamageMultiplier();
+                        if (Math.Abs(mult - 1.0f) > 0.001f)
                         {
-                            float mult = RuntimeStateManager.GetEffectivePlayerDamageMultiplier();
-                            if (Math.Abs(mult - 1.0f) > 0.001f)
-                            {
-                                __result = Math.Max(0, (decimal)Math.Round((double)__result * mult));
-                            }
-                        }
-                        else
-                        {
-                            float mult = RuntimeStateManager.GetEffectiveEnemyDamageMultiplier();
-                            if (Math.Abs(mult - 1.0f) > 0.001f)
-                            {
-                                __result = Math.Max(0, (decimal)Math.Round((double)__result * mult));
-                            }
+                            decimal original = __result;
+                            __result = Math.Max(0, (decimal)Math.Round((double)__result * mult));
+                            ModLogger.Verbose("CombatHooks", $"Player attack damage modified ({target?.GetType().Name ?? "All"}): {original} -> {__result} (x{mult:F2})");
                         }
                     }
-                    else if (target != null)
+                }
+                // 5. Enemy attacking player
+                else if (dealer != null && !dealer.IsPlayer)
+                {
+                    if (target == null || target.IsPlayer)
                     {
-                        if (target.IsPlayer)
+                        float mult = RuntimeStateManager.GetEffectiveEnemyDamageMultiplier();
+                        if (Math.Abs(mult - 1.0f) > 0.001f)
                         {
-                            float mult = RuntimeStateManager.GetEffectiveEnemyDamageMultiplier();
-                            if (Math.Abs(mult - 1.0f) > 0.001f)
-                            {
-                                __result = Math.Max(0, (decimal)Math.Round((double)__result * mult));
-                            }
-                        }
-                        else
-                        {
-                            float mult = RuntimeStateManager.GetEffectivePlayerDamageMultiplier();
-                            if (Math.Abs(mult - 1.0f) > 0.001f)
-                            {
-                                __result = Math.Max(0, (decimal)Math.Round((double)__result * mult));
-                            }
+                            decimal original = __result;
+                            __result = Math.Max(0, (decimal)Math.Round((double)__result * mult));
+                            ModLogger.Verbose("CombatHooks", $"Enemy attack damage modified ({dealer.GetType().Name}): {original} -> {__result} (x{mult:F2})");
                         }
                     }
                 }
@@ -197,36 +212,48 @@ public static class CombatHooks
     public static class HookModifyBlockPatch
     {
         [HarmonyPostfix]
-        public static void Postfix(Creature? target, MegaCrit.Sts2.Core.Models.CardModel? cardSource, ref decimal __result)
+        public static void Postfix(Creature? target, MegaCrit.Sts2.Core.Models.CardModel? cardSource, ValueProp props, ref decimal __result)
         {
             try
             {
-                if (__result > 0)
-                {
-                    Creature? effectiveTarget = target ?? cardSource?.Owner?.Creature;
-                    if (effectiveTarget != null)
-                    {
-                        float defMult = effectiveTarget.IsPlayer
-                            ? RuntimeStateManager.GetEffectivePlayerDefendMultiplier()
-                            : RuntimeStateManager.GetEffectiveEnemyDefendMultiplier();
+                if (__result <= 0) return;
 
-                        if (Math.Abs(defMult - 1.0f) > 0.001f)
-                        {
-                            decimal original = __result;
-                            __result = Math.Max(0, (decimal)Math.Round((double)__result * defMult));
-                            string creatureType = effectiveTarget.IsPlayer ? "Player" : "Enemy";
-                            ModLogger.Verbose("CombatHooks", $"{creatureType} HookModifyBlock ({effectiveTarget.GetType().Name}): {original} -> {__result} (x{defMult:F2})");
-                        }
-                    }
-                    else if (cardSource != null)
+                // 1. Guard against unpowered block (Status powers like Plating, Relics like Anchor / Orichalcum, Potions)
+                // Defend multipliers are meant for active block actions (Cards and Monster moves), not fixed status/relic values.
+                if (props.HasFlag(ValueProp.Unpowered))
+                {
+                    return;
+                }
+
+                // 2. Only scale powered block from cards or monster defend moves
+                if (!props.IsPoweredCardOrMonsterMoveBlock() && cardSource == null)
+                {
+                    return;
+                }
+
+                Creature? effectiveTarget = target ?? cardSource?.Owner?.Creature;
+                if (effectiveTarget != null)
+                {
+                    float defMult = effectiveTarget.IsPlayer
+                        ? RuntimeStateManager.GetEffectivePlayerDefendMultiplier()
+                        : RuntimeStateManager.GetEffectiveEnemyDefendMultiplier();
+
+                    if (Math.Abs(defMult - 1.0f) > 0.001f)
                     {
-                        float defMult = RuntimeStateManager.GetEffectivePlayerDefendMultiplier();
-                        if (Math.Abs(defMult - 1.0f) > 0.001f)
-                        {
-                            decimal original = __result;
-                            __result = Math.Max(0, (decimal)Math.Round((double)__result * defMult));
-                            ModLogger.Verbose("CombatHooks", $"Player Card HookModifyBlock ({cardSource.GetType().Name}): {original} -> {__result} (x{defMult:F2})");
-                        }
+                        decimal original = __result;
+                        __result = Math.Max(0, (decimal)Math.Round((double)__result * defMult));
+                        string creatureType = effectiveTarget.IsPlayer ? "Player" : "Enemy";
+                        ModLogger.Verbose("CombatHooks", $"{creatureType} HookModifyBlock ({effectiveTarget.GetType().Name}): {original} -> {__result} (x{defMult:F2})");
+                    }
+                }
+                else if (cardSource != null)
+                {
+                    float defMult = RuntimeStateManager.GetEffectivePlayerDefendMultiplier();
+                    if (Math.Abs(defMult - 1.0f) > 0.001f)
+                    {
+                        decimal original = __result;
+                        __result = Math.Max(0, (decimal)Math.Round((double)__result * defMult));
+                        ModLogger.Verbose("CombatHooks", $"Player Card HookModifyBlock ({cardSource.GetType().Name}): {original} -> {__result} (x{defMult:F2})");
                     }
                 }
             }
@@ -378,9 +405,12 @@ public static class CombatHooks
     {
         if (RuntimeStateManager.OneHitKillEnabled || ConfigManager.Current.CombatSandbox.OneHitKill)
         {
-            int lethal = Math.Max(incomingDamage, 99999);
-            ModLogger.Info($"CombatHook: OneHitKill modified damage {incomingDamage} -> {lethal}");
-            return lethal;
+            if (incomingDamage > 0)
+            {
+                int lethal = Math.Max(incomingDamage, 99999);
+                ModLogger.Info($"CombatHook: OneHitKill modified damage {incomingDamage} -> {lethal}");
+                return lethal;
+            }
         }
 
         return incomingDamage;

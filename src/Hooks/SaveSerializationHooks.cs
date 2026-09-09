@@ -29,12 +29,19 @@ public static class SaveSerializationHooks
 
         try
         {
-            JsonSerializationUtility.AddTypeInfoResolver(new BaseLibExtendedSaveResolver());
-            ModLogger.Info("[SaveSerializationHooks] Successfully registered BaseLibExtendedSaveResolver with JsonSerializationUtility.");
+            if (!JsonSerializationUtility.Options.IsReadOnly)
+            {
+                JsonSerializationUtility.AddTypeInfoResolver(new BaseLibExtendedSaveResolver());
+                ModLogger.Info("[SaveSerializationHooks] Successfully registered BaseLibExtendedSaveResolver with JsonSerializationUtility.");
+            }
+            else
+            {
+                ModLogger.Verbose("SaveSerializationHooks", "JsonSerializationUtility.Options is read-only. Save serialization resolver handled via BaseLib.");
+            }
         }
         catch (Exception ex)
         {
-            ModLogger.Error("[SaveSerializationHooks] Failed to register BaseLibExtendedSaveResolver with JsonSerializationUtility.", ex);
+            ModLogger.Debug($"[SaveSerializationHooks] Note: JsonSerializationUtility registration skipped ({ex.Message})");
         }
     }
 
