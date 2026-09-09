@@ -148,32 +148,40 @@ public static class CombatHooks
             {
                 if (__result <= 0) return;
 
-                // 1. Guard against self-damage (Breakthrough, Offering, Bloodletting, Hemokinesis, Pain curse, etc.)
+                // 1. Resolve effective dealer (target attack dealer or card owner creature)
+                Creature? effectiveDealer = dealer ?? cardSource?.Owner?.Creature;
+
+                // 2. Guard against self-damage (Breakthrough, Offering, Bloodletting, Hemokinesis, Pain curse, etc.)
                 // Offensive damage multipliers only apply to attacks dealt to opposing combatants, never self-harm.
-                if (target != null && dealer != null)
+                if (target != null && effectiveDealer != null)
                 {
-                    if (target == dealer || (target.IsPlayer && dealer.IsPlayer))
+                    if (target == effectiveDealer || (target.IsPlayer && effectiveDealer.IsPlayer))
                     {
                         return;
                     }
                 }
 
-                // 2. Guard against pure unblockable HP loss (Poison, card self-harm costs, curses, event ticks)
+                // 3. Guard against pure unblockable HP loss (Poison, card self-harm costs, curses, event ticks)
                 if (props.HasFlag(ValueProp.Unblockable))
                 {
                     return;
                 }
 
-                // 3. Multipliers apply strictly to powered attacks (attack cards and monster attack moves).
+                // 4. Multipliers apply strictly to powered attacks (attack cards and monster attack moves).
                 // MegaCrit's IsPoweredAttack() checks: props.HasFlag(ValueProp.Move) && !props.HasFlag(ValueProp.Unpowered)
-                // This ensures flat relic damage (Mercury Hourglass, Bronze Scales thorns) and unpowered powers do not get scaled.
-                if (!props.IsPoweredAttack())
+                // If cardSource is present, it is an active card attack and allowed through unless flagged unpowered.
+                if (props.HasFlag(ValueProp.Unpowered))
                 {
                     return;
                 }
 
-                // 4. Player attacking enemy
-                if (dealer != null && dealer.IsPlayer)
+                if (!props.IsPoweredAttack() && cardSource == null)
+                {
+                    return;
+                }
+
+                // 5. Player attacking enemy
+                if (effectiveDealer != null && effectiveDealer.IsPlayer)
                 {
                     if (target == null || !target.IsPlayer)
                     {
@@ -186,8 +194,8 @@ public static class CombatHooks
                         }
                     }
                 }
-                // 5. Enemy attacking player
-                else if (dealer != null && !dealer.IsPlayer)
+                // 6. Enemy attacking player
+                else if (effectiveDealer != null && !effectiveDealer.IsPlayer)
                 {
                     if (target == null || target.IsPlayer)
                     {
@@ -196,7 +204,7 @@ public static class CombatHooks
                         {
                             decimal original = __result;
                             __result = Math.Max(0, (decimal)Math.Round((double)__result * mult));
-                            ModLogger.Verbose("CombatHooks", $"Enemy attack damage modified ({dealer.GetType().Name}): {original} -> {__result} (x{mult:F2})");
+                            ModLogger.Verbose("CombatHooks", $"Enemy attack damage modified ({effectiveDealer.GetType().Name}): {original} -> {__result} (x{mult:F2})");
                         }
                     }
                 }

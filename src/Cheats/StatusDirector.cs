@@ -48,14 +48,7 @@ public static class StatusDirector
                     ModLogger.Verbose("StatusDirector", $"Calling PowerCmd.Apply for '{mutable.GetType().Name}' on target...");
                     try
                     {
-                        var task = PowerCmd.Apply(null!, mutable, target, (decimal)amount, applier ?? target, null!, false);
-                        task.ContinueWith(t =>
-                        {
-                            if (t.IsFaulted && t.Exception != null)
-                            {
-                                ModLogger.Warn($"PowerCmd.Apply async notice: {t.Exception.InnerException?.Message ?? t.Exception.Message}");
-                            }
-                        });
+                        TaskHelper.RunSafely(PowerCmd.Apply(null!, mutable, target, (decimal)amount, applier ?? target, null!, false));
                     }
                     catch (Exception ex)
                     {
@@ -105,14 +98,7 @@ public static class StatusDirector
             ModLogger.Verbose("StatusDirector", $"Removing power '{pName}' from creature...");
             try
             {
-                var task = PowerCmd.Remove(power);
-                task.ContinueWith(t =>
-                {
-                    if (t.IsFaulted && t.Exception != null)
-                    {
-                        ModLogger.Warn($"PowerCmd.Remove async notice: {t.Exception.InnerException?.Message ?? t.Exception.Message}");
-                    }
-                });
+                TaskHelper.RunSafely(PowerCmd.Remove(power));
             }
             catch
             {
@@ -176,14 +162,7 @@ public static class StatusDirector
             ModLogger.Verbose("StatusDirector", $"Modifying amount of power '{power.GetType().Name}' by {delta} (current={power.Amount})...");
             try
             {
-                var task = PowerCmd.ModifyAmount(null!, power, (decimal)delta, applier ?? target, null!, false);
-                task.ContinueWith(t =>
-                {
-                    if (t.IsFaulted && t.Exception != null)
-                    {
-                        ModLogger.Warn($"PowerCmd.ModifyAmount async notice: {t.Exception.InnerException?.Message ?? t.Exception.Message}");
-                    }
-                });
+                TaskHelper.RunSafely(PowerCmd.ModifyAmount(null!, power, (decimal)delta, applier ?? target, null!, false));
             }
             catch
             {
@@ -228,7 +207,7 @@ public static class StatusDirector
             {
                 try
                 {
-                    PowerCmd.Remove(p);
+                    TaskHelper.RunSafely(PowerCmd.Remove(p));
                 }
                 catch { }
             }

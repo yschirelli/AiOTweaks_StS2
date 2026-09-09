@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using AIOTweaks.Core;
+using AIOTweaks.Core.Config;
 using AIOTweaks.Core.Logging;
 using AIOTweaks.Core.State;
 using MegaCrit.Sts2.Core.ValueProps;
@@ -18,34 +19,45 @@ public static class CombatDirector
 
     public static void ToggleGodMode()
     {
-        bool oldVal = RuntimeStateManager.GodModeEnabled;
-        RuntimeStateManager.GodModeEnabled = !oldVal;
-        RuntimeStateManager.SetCheatFlag("GodMode", RuntimeStateManager.GodModeEnabled);
-        ModLogger.Verbose("CombatDirector", $"ToggleGodMode: {oldVal} -> {RuntimeStateManager.GodModeEnabled}");
-        ModLogger.Info($"God Mode: {(RuntimeStateManager.GodModeEnabled ? "ENABLED" : "DISABLED")}");
+        bool currentState = RuntimeStateManager.GodModeEnabled || ConfigManager.Current.CombatSandbox.GodMode;
+        bool newState = !currentState;
+        RuntimeStateManager.GodModeEnabled = newState;
+        ConfigManager.Current.CombatSandbox.GodMode = newState;
+        ConfigManager.SaveConfig();
 
-        GameHelper.ExecuteConsoleCommand("god");
-        OnGodModeToggled?.Invoke(RuntimeStateManager.GodModeEnabled);
+        RuntimeStateManager.SetCheatFlag("GodMode", newState);
+        ModLogger.Verbose("CombatDirector", $"ToggleGodMode: {currentState} -> {newState}");
+        ModLogger.Info($"God Mode: {(newState ? "ENABLED" : "DISABLED")}");
+
+        OnGodModeToggled?.Invoke(newState);
     }
 
     public static void ToggleInfiniteEnergy()
     {
-        bool oldVal = RuntimeStateManager.InfiniteEnergyEnabled;
-        RuntimeStateManager.InfiniteEnergyEnabled = !oldVal;
-        RuntimeStateManager.SetCheatFlag("InfiniteEnergy", RuntimeStateManager.InfiniteEnergyEnabled);
-        ModLogger.Verbose("CombatDirector", $"ToggleInfiniteEnergy: {oldVal} -> {RuntimeStateManager.InfiniteEnergyEnabled}");
-        ModLogger.Info($"Infinite Energy: {(RuntimeStateManager.InfiniteEnergyEnabled ? "ENABLED" : "DISABLED")}");
-        OnInfiniteEnergyToggled?.Invoke(RuntimeStateManager.InfiniteEnergyEnabled);
+        bool currentState = RuntimeStateManager.InfiniteEnergyEnabled || ConfigManager.Current.CombatSandbox.InfiniteEnergy;
+        bool newState = !currentState;
+        RuntimeStateManager.InfiniteEnergyEnabled = newState;
+        ConfigManager.Current.CombatSandbox.InfiniteEnergy = newState;
+        ConfigManager.SaveConfig();
+
+        RuntimeStateManager.SetCheatFlag("InfiniteEnergy", newState);
+        ModLogger.Verbose("CombatDirector", $"ToggleInfiniteEnergy: {currentState} -> {newState}");
+        ModLogger.Info($"Infinite Energy: {(newState ? "ENABLED" : "DISABLED")}");
+        OnInfiniteEnergyToggled?.Invoke(newState);
     }
 
     public static void ToggleOneHitKill()
     {
-        bool oldVal = RuntimeStateManager.OneHitKillEnabled;
-        RuntimeStateManager.OneHitKillEnabled = !oldVal;
-        RuntimeStateManager.SetCheatFlag("OneHitKill", RuntimeStateManager.OneHitKillEnabled);
-        ModLogger.Verbose("CombatDirector", $"ToggleOneHitKill: {oldVal} -> {RuntimeStateManager.OneHitKillEnabled}");
-        ModLogger.Info($"One Hit Kill: {(RuntimeStateManager.OneHitKillEnabled ? "ENABLED" : "DISABLED")}");
-        OnOneHitKillToggled?.Invoke(RuntimeStateManager.OneHitKillEnabled);
+        bool currentState = RuntimeStateManager.OneHitKillEnabled || ConfigManager.Current.CombatSandbox.OneHitKill;
+        bool newState = !currentState;
+        RuntimeStateManager.OneHitKillEnabled = newState;
+        ConfigManager.Current.CombatSandbox.OneHitKill = newState;
+        ConfigManager.SaveConfig();
+
+        RuntimeStateManager.SetCheatFlag("OneHitKill", newState);
+        ModLogger.Verbose("CombatDirector", $"ToggleOneHitKill: {currentState} -> {newState}");
+        ModLogger.Info($"One Hit Kill: {(newState ? "ENABLED" : "DISABLED")}");
+        OnOneHitKillToggled?.Invoke(newState);
     }
 
     public static void KillAllEnemies()

@@ -575,16 +575,51 @@ public static class RunTweaksSaveManager
     {
         if (ActiveSnapshot != null)
         {
+            bool snapshotChanged = false;
             // Sync EndlessMode if user enabled it in current config
             if (ConfigManager.Current?.PreRunTweaks?.EndlessMode?.Enabled == true && !ActiveSnapshot.PreRunTweaks.EndlessMode.Enabled)
             {
                 ActiveSnapshot.PreRunTweaks.EndlessMode.Enabled = true;
                 ActiveSnapshot.PreRunTweaks.EndlessMode.EnemyScalingMultiplier = ConfigManager.Current.PreRunTweaks.EndlessMode.EnemyScalingMultiplier;
-                SaveActiveSnapshot();
+                snapshotChanged = true;
             }
-            if (ConfigManager.Current?.PreRunTweaks != null && ConfigManager.Current.PreRunTweaks.FreeMapNavigation != ActiveSnapshot.PreRunTweaks.FreeMapNavigation)
+            if (ConfigManager.Current?.PreRunTweaks != null)
             {
-                ActiveSnapshot.PreRunTweaks.FreeMapNavigation = ConfigManager.Current.PreRunTweaks.FreeMapNavigation;
+                var cur = ConfigManager.Current.PreRunTweaks;
+                var snap = ActiveSnapshot.PreRunTweaks;
+                if (cur.FreeMapNavigation != snap.FreeMapNavigation)
+                {
+                    snap.FreeMapNavigation = cur.FreeMapNavigation;
+                    snapshotChanged = true;
+                }
+                if (Math.Abs(cur.PlayerDamageMultiplier - snap.PlayerDamageMultiplier) > 0.001f)
+                {
+                    snap.PlayerDamageMultiplier = cur.PlayerDamageMultiplier;
+                    snapshotChanged = true;
+                }
+                if (Math.Abs(cur.PlayerDefendMultiplier - snap.PlayerDefendMultiplier) > 0.001f)
+                {
+                    snap.PlayerDefendMultiplier = cur.PlayerDefendMultiplier;
+                    snapshotChanged = true;
+                }
+                if (Math.Abs(cur.EnemyHealthMultiplier - snap.EnemyHealthMultiplier) > 0.001f)
+                {
+                    snap.EnemyHealthMultiplier = cur.EnemyHealthMultiplier;
+                    snapshotChanged = true;
+                }
+                if (Math.Abs(cur.EnemyDamageMultiplier - snap.EnemyDamageMultiplier) > 0.001f)
+                {
+                    snap.EnemyDamageMultiplier = cur.EnemyDamageMultiplier;
+                    snapshotChanged = true;
+                }
+                if (Math.Abs(cur.EnemyDefendMultiplier - snap.EnemyDefendMultiplier) > 0.001f)
+                {
+                    snap.EnemyDefendMultiplier = cur.EnemyDefendMultiplier;
+                    snapshotChanged = true;
+                }
+            }
+            if (snapshotChanged)
+            {
                 SaveActiveSnapshot();
             }
             return ActiveSnapshot.PreRunTweaks;

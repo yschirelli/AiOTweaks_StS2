@@ -2,6 +2,7 @@ using System;
 using BaseLib.Config;
 using AIOTweaks.Core.Logging;
 using AIOTweaks.Core.State;
+using AIOTweaks.Hooks;
 using AIOTweaks.UI.Menu;
 
 namespace AIOTweaks.Core.Config;
@@ -186,6 +187,96 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
         {
             ConfigManager.Current.CombatSandbox.BonusDrawPerTurn = value;
             ConfigManager.SaveConfig();
+        }
+    }
+
+    [ConfigSection("Combat Scaling & Multipliers")]
+    [ConfigSlider(0.0, 10.0, 0.1)]
+    public static double PlayerDamageMultiplier
+    {
+        get => RunTweaksSaveManager.GetEffectivePreRunTweaks().PlayerDamageMultiplier;
+        set
+        {
+            float val = (float)value;
+            ConfigManager.Current.PreRunTweaks.PlayerDamageMultiplier = val;
+            if (RunTweaksSaveManager.ActiveSnapshot?.PreRunTweaks != null)
+            {
+                RunTweaksSaveManager.ActiveSnapshot.PreRunTweaks.PlayerDamageMultiplier = val;
+                RunTweaksSaveManager.SaveActiveSnapshot();
+            }
+            ConfigManager.SaveConfig();
+            GameHelper.RefreshAllVisibleCards();
+        }
+    }
+
+    [ConfigSlider(0.0, 10.0, 0.1)]
+    public static double PlayerDefendMultiplier
+    {
+        get => RunTweaksSaveManager.GetEffectivePreRunTweaks().PlayerDefendMultiplier;
+        set
+        {
+            float val = (float)value;
+            ConfigManager.Current.PreRunTweaks.PlayerDefendMultiplier = val;
+            if (RunTweaksSaveManager.ActiveSnapshot?.PreRunTweaks != null)
+            {
+                RunTweaksSaveManager.ActiveSnapshot.PreRunTweaks.PlayerDefendMultiplier = val;
+                RunTweaksSaveManager.SaveActiveSnapshot();
+            }
+            ConfigManager.SaveConfig();
+            GameHelper.RefreshAllVisibleCards();
+        }
+    }
+
+    [ConfigSlider(0.1, 10.0, 0.1)]
+    public static double EnemyHealthMultiplier
+    {
+        get => RunTweaksSaveManager.GetEffectivePreRunTweaks().EnemyHealthMultiplier;
+        set
+        {
+            float val = (float)value;
+            ConfigManager.Current.PreRunTweaks.EnemyHealthMultiplier = val;
+            if (RunTweaksSaveManager.ActiveSnapshot?.PreRunTweaks != null)
+            {
+                RunTweaksSaveManager.ActiveSnapshot.PreRunTweaks.EnemyHealthMultiplier = val;
+                RunTweaksSaveManager.SaveActiveSnapshot();
+            }
+            ConfigManager.SaveConfig();
+        }
+    }
+
+    [ConfigSlider(0.0, 10.0, 0.1)]
+    public static double EnemyDamageMultiplier
+    {
+        get => RunTweaksSaveManager.GetEffectivePreRunTweaks().EnemyDamageMultiplier;
+        set
+        {
+            float val = (float)value;
+            ConfigManager.Current.PreRunTweaks.EnemyDamageMultiplier = val;
+            if (RunTweaksSaveManager.ActiveSnapshot?.PreRunTweaks != null)
+            {
+                RunTweaksSaveManager.ActiveSnapshot.PreRunTweaks.EnemyDamageMultiplier = val;
+                RunTweaksSaveManager.SaveActiveSnapshot();
+            }
+            ConfigManager.SaveConfig();
+            GameHelper.RefreshAllVisibleCards();
+        }
+    }
+
+    [ConfigSlider(0.0, 10.0, 0.1)]
+    public static double EnemyDefendMultiplier
+    {
+        get => RunTweaksSaveManager.GetEffectivePreRunTweaks().EnemyDefendMultiplier;
+        set
+        {
+            float val = (float)value;
+            ConfigManager.Current.PreRunTweaks.EnemyDefendMultiplier = val;
+            if (RunTweaksSaveManager.ActiveSnapshot?.PreRunTweaks != null)
+            {
+                RunTweaksSaveManager.ActiveSnapshot.PreRunTweaks.EnemyDefendMultiplier = val;
+                RunTweaksSaveManager.SaveActiveSnapshot();
+            }
+            ConfigManager.SaveConfig();
+            GameHelper.RefreshAllVisibleCards();
         }
     }
 

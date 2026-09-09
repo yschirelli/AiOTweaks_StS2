@@ -86,13 +86,6 @@ public partial class DebugConsole : CanvasLayer
         {
             HandleHotkeyEvent(keyEvent);
         }
-        else if (@event is InputEventMouseButton mouseEvent && mouseEvent.Pressed)
-        {
-            if (!ModSettingsDialog.IsAssigningHotkey())
-            {
-                HandleHotkeyEvent(mouseEvent);
-            }
-        }
 
         if (_isConsoleVisible)
         {
@@ -384,22 +377,25 @@ public partial class DebugConsole : CanvasLayer
 
     private void UpdateStatusButtons()
     {
+        bool godMode = RuntimeStateManager.GodModeEnabled || ConfigManager.Current.CombatSandbox.GodMode;
         if (_godModeBtn != null)
         {
-            _godModeBtn.Text = $"God Mode: {(RuntimeStateManager.GodModeEnabled ? "ON" : "OFF")}";
-            _godModeBtn.Modulate = RuntimeStateManager.GodModeEnabled ? new Color(0.2f, 1f, 0.4f) : Colors.White;
+            _godModeBtn.Text = $"God Mode: {(godMode ? "ON" : "OFF")}";
+            _godModeBtn.Modulate = godMode ? new Color(0.2f, 1f, 0.4f) : Colors.White;
         }
 
+        bool infEnergy = RuntimeStateManager.InfiniteEnergyEnabled || ConfigManager.Current.CombatSandbox.InfiniteEnergy;
         if (_infEnergyBtn != null)
         {
-            _infEnergyBtn.Text = $"Inf Energy: {(RuntimeStateManager.InfiniteEnergyEnabled ? "ON" : "OFF")}";
-            _infEnergyBtn.Modulate = RuntimeStateManager.InfiniteEnergyEnabled ? new Color(0.2f, 1f, 0.4f) : Colors.White;
+            _infEnergyBtn.Text = $"Inf Energy: {(infEnergy ? "ON" : "OFF")}";
+            _infEnergyBtn.Modulate = infEnergy ? new Color(0.2f, 1f, 0.4f) : Colors.White;
         }
 
+        bool oneHit = RuntimeStateManager.OneHitKillEnabled || ConfigManager.Current.CombatSandbox.OneHitKill;
         if (_oneHitKillBtn != null)
         {
-            _oneHitKillBtn.Text = $"1-Hit Kill: {(RuntimeStateManager.OneHitKillEnabled ? "ON" : "OFF")}";
-            _oneHitKillBtn.Modulate = RuntimeStateManager.OneHitKillEnabled ? new Color(1f, 0.4f, 0.4f) : Colors.White;
+            _oneHitKillBtn.Text = $"1-Hit Kill: {(oneHit ? "ON" : "OFF")}";
+            _oneHitKillBtn.Modulate = oneHit ? new Color(1f, 0.4f, 0.4f) : Colors.White;
         }
     }
 
