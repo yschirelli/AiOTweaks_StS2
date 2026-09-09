@@ -1115,7 +1115,7 @@ public static class MapGenerationHooks
                 int loop = RuntimeStateManager.CurrentEndlessLoopCount;
 
                 // Re-seed and regenerate fresh rooms for all acts for the new endless loop
-                ulong loopSeed = state.Rng.Seed ^ ((ulong)loop * 0x9E3779B97F4A7C15uL);
+                uint loopSeed = (uint)(state.Rng.Seed ^ ((uint)loop * 0x9E3779B9u));
                 var loopRng = new MegaCrit.Sts2.Core.Random.Rng(loopSeed, $"endless_loop_{loop}");
 
                 foreach (var act in state.Acts)
@@ -1126,7 +1126,7 @@ public static class MapGenerationHooks
                 // Also re-seed all sub-RNGs in RunRngSet so combat rewards, monsters, drops, and treasures advance for the new loop!
                 foreach (RunRngType rngType in Enum.GetValues<RunRngType>())
                 {
-                    ulong typeSeed = loopSeed + StringHelper.GetDeterministicHashCode(rngType.ToString());
+                    uint typeSeed = (uint)(loopSeed + (uint)StringHelper.GetDeterministicHashCode(rngType.ToString()));
                     state.Rng.MockRng(rngType, typeSeed);
                 }
 
@@ -1192,7 +1192,11 @@ public static class MapGenerationHooks
                     await PlayArchitectAttackAnimationsAsync(architect, includeArchitectAttack: true);
                     if (RunManager.Instance != null)
                     {
-                        await RunManager.Instance.WinRun();
+                        var runMgrWinMethod = AccessTools.Method(typeof(RunManager), "WinRun");
+                        if (runMgrWinMethod?.Invoke(RunManager.Instance, null) is System.Threading.Tasks.Task task)
+                        {
+                            await task;
+                        }
                     }
                 }
             }
@@ -1235,7 +1239,7 @@ public static class MapGenerationHooks
         }
     }
 
-    [HarmonyPatch(typeof(RunManager), nameof(RunManager.WinRun))]
+    [HarmonyPatch(typeof(RunManager), "WinRun")]
     public static class RunManagerWinRunPatch
     {
         [HarmonyPostfix]
@@ -1350,8 +1354,7 @@ public static class MapGenerationHooks
                                 var saveStoreField = typeof(MegaCrit.Sts2.Core.Saves.SaveManager).GetField("_saveStore", BindingFlags.Instance | BindingFlags.NonPublic);
                                 if (saveStoreField?.GetValue(MegaCrit.Sts2.Core.Saves.SaveManager.Instance) is ISaveStore store)
                                 {
-                                    store.DeleteFile(MegaCrit.Sts2.Core.Saves.Managers.RunSaveManager.GetRunSavePath(p, file, forceModState: true));
-                                    store.DeleteFile(MegaCrit.Sts2.Core.Saves.Managers.RunSaveManager.GetRunSavePath(p, file, forceModState: false));
+                                    store.DeleteFile(MegaCrit.Sts2.Core.Saves.Managers.RunSaveManager.GetRunSavePath(p, file));
                                 }
                             }
                         }
@@ -2038,7 +2041,7 @@ public static class MapGenerationHooks
             int loop = RuntimeStateManager.CurrentEndlessLoopCount;
             if (loop > 0)
             {
-                ulong loopSeed = runState.Rng.Seed ^ ((ulong)loop * 0x9E3779B97F4A7C15uL);
+                uint loopSeed = (uint)(runState.Rng.Seed ^ ((uint)loop * 0x9E3779B9u));
                 var rng = new MegaCrit.Sts2.Core.Random.Rng(loopSeed, $"act_{runState.CurrentActIndex + 1}_loop_{loop}_map");
                 __result = new StandardActMap(rng, runState.Act, runState.Players.Count > 1, replaceTreasureWithElites, runState.Act.HasSecondBoss);
                 return false;
@@ -2489,7 +2492,7 @@ public static class MapGenerationHooks
         private static readonly MethodInfo RefreshAllPointVisualsMethod = AccessTools.Method(typeof(NMapScreen), "RefreshAllPointVisuals");
 
         [HarmonyPrefix]
-        public static bool Prefix(NMapScreen __instance, ActMap map, ulong seed, bool clearDrawings)
+        public static bool Prefix(NMapScreen __instance, ActMap map, uint seed, bool clearDrawings)
         {
             try
             {
@@ -3042,22 +3045,22 @@ public static class MapGenerationHooks
                 return;
             }
 
-            ulong baseSeed = eventModel.Owner.RunState.Rng.Seed;
-            ulong eventHash = StringHelper.GetDeterministicHashCode(eventId);
+            uint baseSeed = eventModel.Owner.RunState.Rng.Seed;
+            uint eventHash = (uint)StringHelper.GetDeterministicHashCode(eventId);
 
-            ulong seed = (ulong)((long)baseSeed + (long)slot) + eventHash;
+            uint seed = (uint)(baseSeed + (uint)slot + eventHash);
             if (loop > 0)
             {
-                seed ^= ((ulong)loop * 0x9E3779B97F4A7C15uL);
+                seed ^= ((uint)loop * 0x9E3779B9u);
             }
             if (visitCount > 0)
             {
-                seed ^= ((ulong)visitCount * 0xBF58476D1CE4E5B9uL);
+                seed ^= ((uint)visitCount * 0xBF58476Du);
             }
             int floor = eventModel.Owner.RunState.TotalFloor;
             if (floor > 0)
             {
-                seed ^= ((ulong)floor * 0xD1B54A32D192ED03uL);
+                seed ^= ((uint)floor * 0xD1B54A32u);
             }
 
             var newRng = new MegaCrit.Sts2.Core.Random.Rng(seed, $"{eventId}_loop{loop}_v{visitCount}");

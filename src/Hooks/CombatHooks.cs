@@ -121,6 +121,9 @@ public static class CombatHooks
             decimal originalAmount = amount;
             if (__instance.IsPlayer)
             {
+#if DEBUG
+                AIOTweaks.Core.Diagnostics.TurnMetricsTracker.RecordDirectDamage(amount);
+#endif
                 amount = ProcessPlayerIncomingDamage((int)amount);
                 if (amount != originalAmount)
                 {
@@ -183,6 +186,13 @@ public static class CombatHooks
                 // 5. Player attacking enemy
                 if (effectiveDealer != null && effectiveDealer.IsPlayer)
                 {
+#if DEBUG
+                    if (cardSource != null)
+                    {
+                        string cardName = !string.IsNullOrWhiteSpace(cardSource.Title) ? cardSource.Title : cardSource.GetType().Name;
+                        AIOTweaks.Core.Diagnostics.TurnMetricsTracker.RecordCardPlayed(cardName);
+                    }
+#endif
                     if (target == null || !target.IsPlayer)
                     {
                         float mult = RuntimeStateManager.GetEffectivePlayerDamageMultiplier();
@@ -191,6 +201,9 @@ public static class CombatHooks
                             decimal original = __result;
                             __result = Math.Max(0, (decimal)Math.Round((double)__result * mult));
                             ModLogger.Verbose("CombatHooks", $"Player attack damage modified ({target?.GetType().Name ?? "All"}): {original} -> {__result} (x{mult:F2})");
+#if DEBUG
+                            AIOTweaks.Core.Diagnostics.FormulaAuditor.AuditDamageCalculation(effectiveDealer, target, original, mult, __result, "PlayerAttackHookModifyDamage");
+#endif
                         }
                     }
                 }
@@ -205,6 +218,9 @@ public static class CombatHooks
                             decimal original = __result;
                             __result = Math.Max(0, (decimal)Math.Round((double)__result * mult));
                             ModLogger.Verbose("CombatHooks", $"Enemy attack damage modified ({effectiveDealer.GetType().Name}): {original} -> {__result} (x{mult:F2})");
+#if DEBUG
+                            AIOTweaks.Core.Diagnostics.FormulaAuditor.AuditDamageCalculation(effectiveDealer, target, original, mult, __result, "EnemyAttackHookModifyDamage");
+#endif
                         }
                     }
                 }
@@ -240,6 +256,13 @@ public static class CombatHooks
                 }
 
                 Creature? effectiveTarget = target ?? cardSource?.Owner?.Creature;
+#if DEBUG
+                if (cardSource != null && (effectiveTarget?.IsPlayer == true || cardSource.Owner?.Creature?.IsPlayer == true))
+                {
+                    string cardName = !string.IsNullOrWhiteSpace(cardSource.Title) ? cardSource.Title : cardSource.GetType().Name;
+                    AIOTweaks.Core.Diagnostics.TurnMetricsTracker.RecordCardPlayed(cardName);
+                }
+#endif
                 if (effectiveTarget != null)
                 {
                     float defMult = effectiveTarget.IsPlayer
@@ -252,7 +275,17 @@ public static class CombatHooks
                         __result = Math.Max(0, (decimal)Math.Round((double)__result * defMult));
                         string creatureType = effectiveTarget.IsPlayer ? "Player" : "Enemy";
                         ModLogger.Verbose("CombatHooks", $"{creatureType} HookModifyBlock ({effectiveTarget.GetType().Name}): {original} -> {__result} (x{defMult:F2})");
+#if DEBUG
+                        AIOTweaks.Core.Diagnostics.FormulaAuditor.AuditBlockCalculation(effectiveTarget, original, defMult, __result, "HookModifyBlockPatch");
+#endif
                     }
+
+#if DEBUG
+                    if (effectiveTarget.IsPlayer)
+                    {
+                        AIOTweaks.Core.Diagnostics.TurnMetricsTracker.RecordBlockGained(__result);
+                    }
+#endif
                 }
                 else if (cardSource != null)
                 {
@@ -262,7 +295,14 @@ public static class CombatHooks
                         decimal original = __result;
                         __result = Math.Max(0, (decimal)Math.Round((double)__result * defMult));
                         ModLogger.Verbose("CombatHooks", $"Player Card HookModifyBlock ({cardSource.GetType().Name}): {original} -> {__result} (x{defMult:F2})");
+#if DEBUG
+                        AIOTweaks.Core.Diagnostics.FormulaAuditor.AuditBlockCalculation(null, original, defMult, __result, "PlayerCardHookModifyBlockPatch");
+#endif
                     }
+
+#if DEBUG
+                    AIOTweaks.Core.Diagnostics.TurnMetricsTracker.RecordBlockGained(__result);
+#endif
                 }
             }
             catch (Exception ex)
@@ -278,6 +318,12 @@ public static class CombatHooks
         [HarmonyPrefix]
         public static void Prefix(MegaCrit.Sts2.Core.Entities.Creatures.Creature __instance, ref decimal amount)
         {
+#if DEBUG
+            if (__instance.IsPlayer)
+            {
+                AIOTweaks.Core.Diagnostics.TurnMetricsTracker.RecordBlockDamage(amount);
+            }
+#endif
             if (__instance.IsPlayer && (RuntimeStateManager.GodModeEnabled || ConfigManager.Current.CombatSandbox.GodMode))
             {
                 ModLogger.Verbose("CombatHooks", $"GodMode prevented {amount} block damage on player.");
@@ -330,6 +376,10 @@ public static class CombatHooks
         {
             try
             {
+#if DEBUG
+                AIOTweaks.Core.Diagnostics.TurnMetricsTracker.OnTurnStart();
+                AIOTweaks.Core.Diagnostics.GameplayInvariantMonitor.CheckInvariants("TurnStart");
+#endif
                 int maxEnergy = RunTweaksSaveManager.GetEffectivePreRunTweaks().MaxEnergy;
                 var player = GameHelper.GetActivePlayer();
                 if (player != null && maxEnergy > 0 && player.MaxEnergy != maxEnergy)
@@ -350,6 +400,12 @@ public static class CombatHooks
         [HarmonyPostfix]
         public static void Postfix(ref int __result)
         {
+#if DEBUG
+            if (__result > 0 && !ShouldBypassEnergyCost())
+            {
+                AIOTweaks.Core.Diagnostics.TurnMetricsTracker.RecordEnergySpent(__result);
+            }
+#endif
             if (ShouldBypassEnergyCost())
             {
                 if (__result > 0)
@@ -455,4 +511,17 @@ public static class CombatHooks
         bool bypass = RuntimeStateManager.InfiniteEnergyEnabled || ConfigManager.Current.CombatSandbox.InfiniteEnergy;
         return bypass;
     }
+
+#if DEBUG
+    [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Combat.CombatManager), nameof(MegaCrit.Sts2.Core.Combat.CombatManager.Reset))]
+    public static class CombatManagerResetPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix()
+        {
+            AIOTweaks.Core.Diagnostics.TurnMetricsTracker.OnCombatEnd();
+            AIOTweaks.Core.Diagnostics.GameplayInvariantMonitor.ResetCombatTracking();
+        }
+    }
+#endif
 }

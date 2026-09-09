@@ -98,6 +98,12 @@ public static class ModLogger
         if (MinimumLevel <= LogLevel.Error)
         {
             string fullMessage = ex != null ? $"{message} | Exception: {ex.Message}\n{ex.StackTrace}" : message;
+#if DEBUG
+            if (ex != null)
+            {
+                fullMessage += "\n" + AIOTweaks.Core.Diagnostics.BreadcrumbTracker.DumpTrail();
+            }
+#endif
             Log(LogLevel.Error, fullMessage);
         }
     }

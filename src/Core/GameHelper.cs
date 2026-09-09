@@ -1416,16 +1416,11 @@ public static class GameHelper
         try
         {
             if (potion.Image != null) return potion.Image;
-            if (potion.LargeImage != null) return potion.LargeImage;
             if (potion.Outline != null) return potion.Outline;
 
             if (!string.IsNullOrEmpty(potion.ImagePath))
             {
                 try { var t = GD.Load<Texture2D>(potion.ImagePath); if (t != null) return t; } catch { }
-            }
-            if (!string.IsNullOrEmpty(potion.LargeImagePath))
-            {
-                try { var t = GD.Load<Texture2D>(potion.LargeImagePath); if (t != null) return t; } catch { }
             }
         }
         catch { }
@@ -3185,14 +3180,14 @@ public static class GameHelper
 
             try
             {
-                var clone = canonical.CreateCloneForPlayer(player);
+                var clone = canonical.CreateClone();
                 if (clone != null)
                 {
                     if (player.RunState != null && !player.RunState.ContainsCard(clone))
                     {
                         player.RunState.AddCard(clone, player);
                     }
-                    ModLogger.Verbose("GameHelper", "Created card via canonical.CreateCloneForPlayer.");
+                    ModLogger.Verbose("GameHelper", "Created card via canonical.CreateClone.");
                     return clone;
                 }
             }
@@ -3266,7 +3261,7 @@ public static class GameHelper
 
             try
             {
-                var clone = canonical.CreateCloneForPlayer(player);
+                var clone = canonical.CreateClone();
                 if (clone != null)
                 {
                     if (!combatState.ContainsCard(clone))

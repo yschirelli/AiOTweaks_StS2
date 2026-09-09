@@ -22,7 +22,7 @@ public partial class ModEntry : Node
 {
     public const string ModId = "AIOTweaks";
     public const string ModName = "AIOTweaks";
-    public const string ModVersion = "1.1.0";
+    public const string ModVersion = "1.1.1";
 
 #if DEBUG
     public const string BuildConfiguration = "DEBUG";
@@ -146,8 +146,18 @@ public partial class ModEntry : Node
             }
 
             InitializeHarmony();
+#if DEBUG
+            AIOTweaks.Core.Diagnostics.HarmonyPatchAuditor.AuditPatches(ModId);
+#endif
             AttachUIComponents();
             RegisterLocalizationStrings();
+
+#if DEBUG
+            AIOTweaks.Core.Diagnostics.CrashDumpHandler.Initialize();
+            var watchdog = new AIOTweaks.Core.Diagnostics.CombatWatchdog { Name = "AIOTweaksCombatWatchdog" };
+            AddChild(watchdog);
+            ModLogger.Verbose("ModEntry", "CombatWatchdog child node attached to ModEntry.");
+#endif
 
             try
             {
