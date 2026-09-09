@@ -19,11 +19,13 @@ public static class FormulaAuditor
         {
             if (originalBlock <= 0) return;
 
+            string targetType = target?.IsPlayer == true ? "Player" : target?.GetType().Name ?? "Target";
+            RunDiagnosticLogger.RecordCombatCalculationAudit("Block", "Action", targetType, originalBlock, multiplier, calculatedBlock, sourceName);
+
             decimal expected = Math.Max(0, (decimal)Math.Round((double)originalBlock * multiplier));
 
             if (Math.Abs(calculatedBlock - expected) > 0.001m)
             {
-                string targetType = target?.IsPlayer == true ? "Player" : target?.GetType().Name ?? "Unknown";
                 string violation = $"[FORMULA AUDIT MISMATCH] Block calculation mismatch for {targetType} via '{sourceName}'!\n" +
                                    $"  Original: {originalBlock} | Multiplier: {multiplier:F2}x\n" +
                                    $"  Expected: {expected} | Actual: {calculatedBlock}\n" +
@@ -45,13 +47,14 @@ public static class FormulaAuditor
         {
             if (originalDamage <= 0) return;
 
+            string dealerType = dealer?.IsPlayer == true ? "Player" : dealer?.GetType().Name ?? "Dealer";
+            string targetType = target?.IsPlayer == true ? "Player" : target?.GetType().Name ?? "Target";
+            RunDiagnosticLogger.RecordCombatCalculationAudit("Damage", dealerType, targetType, originalDamage, multiplier, calculatedDamage, sourceName);
+
             decimal expected = Math.Max(0, (decimal)Math.Round((double)originalDamage * multiplier));
 
             if (Math.Abs(calculatedDamage - expected) > 0.001m)
             {
-                string dealerType = dealer?.IsPlayer == true ? "Player" : dealer?.GetType().Name ?? "Unknown";
-                string targetType = target?.IsPlayer == true ? "Player" : target?.GetType().Name ?? "Unknown";
-
                 string violation = $"[FORMULA AUDIT MISMATCH] Damage calculation mismatch ({dealerType} -> {targetType}) via '{sourceName}'!\n" +
                                    $"  Original: {originalDamage} | Multiplier: {multiplier:F2}x\n" +
                                    $"  Expected: {expected} | Actual: {calculatedDamage}\n" +

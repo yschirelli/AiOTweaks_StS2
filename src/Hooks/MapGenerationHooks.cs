@@ -255,6 +255,10 @@ public static class RunTweaksSaveManager
         MapGenerationHooks.ResetEventVisitCounts();
         SaveActiveSnapshot();
 
+#if DEBUG
+        AIOTweaks.Core.Diagnostics.RunDiagnosticLogger.StartRunSession(runState, snapshot, ConfigManager.Current);
+#endif
+
         ModLogger.Info($"RunTweaksSaveManager: Started NEW run snapshot (Profile={profileId}, IsCustom={isCustom}, RoomCount={snapshot.PreRunTweaks.MapRoomCount}, Endless={snapshot.PreRunTweaks.EndlessMode.Enabled})");
     }
 
@@ -286,12 +290,21 @@ public static class RunTweaksSaveManager
             RuntimeStateManager.FreeMapNavigationEnabled = ActiveSnapshot.PreRunTweaks.FreeMapNavigation;
         }
         MapGenerationHooks.ResetEventVisitCounts();
+
+#if DEBUG
+        AIOTweaks.Core.Diagnostics.RunDiagnosticLogger.StartRunSession(runState, ActiveSnapshot, ConfigManager.Current);
+#endif
     }
 
     public static void ClearActiveRun(string reason)
     {
         int profileId = ActiveSnapshot?.ProfileId ?? GetCurrentProfileId();
         ModLogger.Info($"RunTweaksSaveManager: Clearing active run snapshot (Reason: {reason}, Profile: {profileId}).");
+
+#if DEBUG
+        AIOTweaks.Core.Diagnostics.RunDiagnosticLogger.CloseRunSession(reason);
+#endif
+
         ActiveSnapshot = null;
         RuntimeStateManager.CurrentEndlessLoopCount = 0;
         RuntimeStateManager.FreeMapNavigationEnabled = false;

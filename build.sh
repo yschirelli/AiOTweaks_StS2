@@ -6,31 +6,103 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Parse build arguments
 CONFIG="Release"
 DEPLOY=false
+NUKE_LOGS=false
+EXPLICIT_BUILD_ACTION=false
+
+# Candidate search directories for game assemblies and log cleanup
+STEAM_CANDIDATE_PATHS=(
+    "/mnt/data/SteamLibrary"
+    "$HOME/.local/share/Steam"
+    "$HOME/.steam/steam"
+    "$HOME/.steam/root"
+    "$HOME/.var/app/com.valvesoftware.Steam/.local/share/Steam"
+)
+
+nuke_debug_logs() {
+    echo "========================================="
+    echo " Nuking debug log files and crash dumps..."
+    echo "========================================="
+    local count=0
+
+    local SEARCH_DIRS=(
+        "$SCRIPT_DIR"
+        "$SCRIPT_DIR/src"
+        "$SCRIPT_DIR/src/.godot/mono/temp/bin/Debug"
+        "$SCRIPT_DIR/src/.godot/mono/temp/bin/Release"
+        "$HOME/.local/share/godot/app_userdata/Slay the Spire 2"
+        "$HOME/.local/share/godot/app_userdata/sts2"
+    )
+
+    if [ -n "$STS2_MOD_DIR" ] && [ -d "$STS2_MOD_DIR" ]; then
+        SEARCH_DIRS+=("$STS2_MOD_DIR")
+    fi
+
+    for base in "${STEAM_CANDIDATE_PATHS[@]}"; do
+        SEARCH_DIRS+=(
+            "$base/steamapps/common/Slay the Spire 2"
+            "$base/steamapps/common/Slay the Spire 2/mods/AIOTweaks"
+            "$base/steamapps/workshop/content/2868840/3795280483"
+        )
+    done
+
+    for dir in "${SEARCH_DIRS[@]}"; do
+        if [ -d "$dir" ]; then
+            while IFS= read -r -d '' file; do
+                echo " [Nuke] Removing: $file"
+                rm -f "$file"
+                count=$((count + 1))
+            done < <(find "$dir" -maxdepth 4 \( -name "aiotweaks_debug.log*" -o -name "aiotweaks_crash_*.txt" -o -name "aiotweaks_crash*.log" -o -name "aiotweaks_run_*.log" \) -print0 2>/dev/null)
+
+            # Clean up empty logs/runs directory if left over
+            if [ -d "$dir/logs/runs" ]; then
+                rmdir "$dir/logs/runs" 2>/dev/null || true
+            fi
+            if [ -d "$dir/logs" ]; then
+                rmdir "$dir/logs" 2>/dev/null || true
+            fi
+        fi
+    done
+
+    if [ "$count" -eq 0 ]; then
+        echo " [Nuke] No stale log or crash dump files found."
+    else
+        echo " [Nuke] Successfully nuked $count log/crash dump file(s)!"
+    fi
+    echo "========================================="
+}
 
 for arg in "$@"; do
     case "${arg,,}" in
         debug|-d|--debug)
             CONFIG="Debug"
+            EXPLICIT_BUILD_ACTION=true
             ;;
         release|-r|--release)
             CONFIG="Release"
+            EXPLICIT_BUILD_ACTION=true
             ;;
         deploy|-dp|--deploy)
             DEPLOY=true
+            EXPLICIT_BUILD_ACTION=true
+            ;;
+        nuke-logs|--nuke-logs|-nl)
+            NUKE_LOGS=true
             ;;
         -h|--help|help)
             echo "========================================="
             echo " AIOTweaks Build Script"
             echo "========================================="
-            echo "Usage: ./build.sh [Configuration] [--deploy]"
+            echo "Usage: ./build.sh [Configuration] [--deploy] [--nuke-logs]"
             echo ""
             echo "Options:"
-            echo "  Release, -r,  --release  (Default) Build optimized Release binary."
-            echo "  Debug,   -d,  --debug    Build Debug binary (forcefully enables verbose"
-            echo "                           logging and saves logs to aiotweaks_debug.log"
-            echo "                           in the mod's root folder)."
-            echo "  Deploy,  -dp, --deploy   Deploy built DLLs to the game mod folder if found."
-            echo "  -h,           --help     Display this help message."
+            echo "  Release, -r,  --release      (Default) Build optimized Release binary."
+            echo "  Debug,   -d,  --debug        Build Debug binary (forcefully enables verbose"
+            echo "                               logging and saves logs to aiotweaks_debug.log"
+            echo "                               in the mod's root folder)."
+            echo "  Deploy,  -dp, --deploy       Deploy built DLLs to the game mod folder if found."
+            echo "  Nuke,    -nl, --nuke-logs    Nuke/delete all aiotweaks_debug.log and"
+            echo "                               crash dump text files from build and game folders."
+            echo "  -h,           --help         Display this help message."
             echo ""
             echo "Environment Variables (Optional):"
             echo "  STS2_PATH      Explicit path to sts2.dll"
@@ -43,10 +115,19 @@ for arg in "$@"; do
             # Allow positional configuration if it doesn't start with -
             if [[ "$arg" != -* ]]; then
                 CONFIG="$arg"
+                EXPLICIT_BUILD_ACTION=true
             fi
             ;;
     esac
 done
+
+if [ "$NUKE_LOGS" = true ]; then
+    nuke_debug_logs
+    # If the user only called nuke-logs without requesting a build or deploy, exit cleanly
+    if [ "$EXPLICIT_BUILD_ACTION" = false ] && [ "$#" -eq 1 ]; then
+        exit 0
+    fi
+fi
 
 echo "========================================="
 if [ "$CONFIG" = "Debug" ]; then
@@ -58,6 +139,9 @@ if [ "$DEPLOY" = true ]; then
     echo " Deployment: Enabled (--deploy)"
 else
     echo " Deployment: Disabled (pass --deploy or -dp to copy DLLs to game folder)"
+fi
+if [ "$NUKE_LOGS" = true ]; then
+    echo " Log Cleanup: Executed (--nuke-logs)"
 fi
 echo "========================================="
 
@@ -78,15 +162,6 @@ if [ -z "$DOTNET_BIN" ]; then
 fi
 
 echo "Using .NET CLI: $($DOTNET_BIN --version 2>/dev/null || echo "$DOTNET_BIN")"
-
-# Candidate search directories for game assemblies
-STEAM_CANDIDATE_PATHS=(
-    "/mnt/data/SteamLibrary"
-    "$HOME/.local/share/Steam"
-    "$HOME/.steam/steam"
-    "$HOME/.steam/root"
-    "$HOME/.var/app/com.valvesoftware.Steam/.local/share/Steam"
-)
 
 MSBUILD_PROPS=""
 
@@ -171,23 +246,11 @@ if [ -n "$OUTPUT_DIR" ] && [ -d "$OUTPUT_DIR" ]; then
             DEPLOYED_COUNT=$((DEPLOYED_COUNT + 1))
         fi
 
-        # Also deploy to active Workshop item folder if present
-        for base in "${STEAM_CANDIDATE_PATHS[@]}"; do
-            workshop_dir="$base/steamapps/workshop/content/2868840/3795280483"
-            if [ -d "$workshop_dir" ]; then
-                echo " [Deploy] Active Steam Workshop mod folder verified: $workshop_dir"
-                echo " [Deploy] Deploying built DLLs to workshop folder..."
-                cp -vf "$OUTPUT_DIR"/AIOTweaks.* "$workshop_dir/"
-                DEPLOYED_COUNT=$((DEPLOYED_COUNT + 1))
-                break
-            fi
-        done
-
         if [ "$DEPLOYED_COUNT" -gt 0 ]; then
-            echo " [Deploy] Deployment completed successfully ($DEPLOYED_COUNT destination(s))!"
+            echo " [Deploy] Deployment completed successfully to game mods folder!"
         else
             echo " [Deploy] Warning: Target game mod folder not found."
-            echo "          Expected: .../Slay the Spire 2/mods/AIOTweaks or .../workshop/content/2868840/3795280483"
+            echo "          Expected: .../Slay the Spire 2/mods/AIOTweaks"
             echo "          Please ensure the game and mods/AIOTweaks folder exist, or set STS2_MOD_DIR."
         fi
     fi

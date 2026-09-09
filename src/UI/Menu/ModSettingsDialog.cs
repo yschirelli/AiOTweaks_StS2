@@ -667,14 +667,17 @@ public partial class ModSettingsDialog : CanvasLayer
 
         var footer = new HBoxContainer();
 
-        var defaultBtn = new Button { Text = " Reset to Game Defaults " };
+        var defaultBtn = new Button 
+        { 
+            Text = " Reset to Game Defaults ",
+            TooltipText = "Resets gameplay tweaks, multipliers, and sandbox cheats back to vanilla game defaults. Your hotkeys and keybindings are preserved."
+        };
         defaultBtn.Pressed += () =>
         {
-            ConfigManager.Current.General.ConsoleHotkey = GeneralConfig.DefaultConsoleHotkey;
-            ConfigManager.Current.General.GuiOverlayHotkey = GeneralConfig.DefaultGuiOverlayHotkey;
-            ConfigManager.Current.General.QuickGodModeKey = "";
-            ConfigManager.Current.General.QuickKillEnemiesKey = "";
-            ConfigManager.Current.General.QuickOpenShopKey = "";
+            if (_activeAssignButton != null)
+            {
+                CancelHotkeyAssignment();
+            }
 
             ConfigManager.Current.PreRunTweaks.MapRoomCount = 15;
             ConfigManager.Current.PreRunTweaks.GoldRewardMultiplier = 1.0f;
@@ -683,6 +686,9 @@ public partial class ModSettingsDialog : CanvasLayer
             ConfigManager.Current.PreRunTweaks.StartingGoldBonus = 0;
             ConfigManager.Current.PreRunTweaks.StartingMaxHpBonus = 0;
             ConfigManager.Current.PreRunTweaks.ForceNeowBonus = true;
+            ConfigManager.Current.PreRunTweaks.AllowMultipleRelics = false;
+            ConfigManager.Current.PreRunTweaks.PotionSlots = 3;
+            ConfigManager.Current.PreRunTweaks.FreeMapNavigation = false;
 
             ConfigManager.Current.PreRunTweaks.MapNodeDistribution.EliteWeightMultiplier = 1.0f;
             ConfigManager.Current.PreRunTweaks.MapNodeDistribution.ShopWeightMultiplier = 1.0f;
@@ -705,6 +711,23 @@ public partial class ModSettingsDialog : CanvasLayer
             ConfigManager.Current.PreRunTweaks.PlayerDefendMultiplier = 1.0f;
             ConfigManager.Current.PreRunTweaks.MaxEnergy = 3;
 
+            var snap = RunTweaksSaveManager.ActiveSnapshot;
+            if (snap?.PreRunTweaks != null)
+            {
+                snap.PreRunTweaks.EnemyHealthMultiplier = 1.0f;
+                snap.PreRunTweaks.EnemyDamageMultiplier = 1.0f;
+                snap.PreRunTweaks.EnemyDefendMultiplier = 1.0f;
+                snap.PreRunTweaks.PlayerDamageMultiplier = 1.0f;
+                snap.PreRunTweaks.PlayerDefendMultiplier = 1.0f;
+                snap.PreRunTweaks.FreeMapNavigation = false;
+                if (snap.PreRunTweaks.EndlessMode != null)
+                {
+                    snap.PreRunTweaks.EndlessMode.Enabled = false;
+                    snap.PreRunTweaks.EndlessMode.EnemyScalingMultiplier = 2.0f;
+                }
+                RunTweaksSaveManager.SaveActiveSnapshot();
+            }
+
             ConfigManager.Current.CombatSandbox.GodMode = false;
             ConfigManager.Current.CombatSandbox.InfiniteEnergy = false;
             ConfigManager.Current.CombatSandbox.OneHitKill = false;
@@ -715,13 +738,16 @@ public partial class ModSettingsDialog : CanvasLayer
 
             RuntimeStateManager.ResetSessionState();
             GameHelper.SetPlayerMaxEnergy(3);
+            GameHelper.RescaleActiveMonstersHp();
             GameHelper.RefreshCombatIntents();
             GameHelper.RefreshAllVisibleCards();
             RunTweaksSaveManager.RefreshMapNavigationState(false);
 
+            ConfigManager.ResetRunSettingsToDefault();
+
             LoadSettingsValues();
             ConfigManager.SaveConfig();
-            ModLogger.Info("Reset all tweaks and settings to game defaults.");
+            ModLogger.Info("Reset all tweaks and settings to game defaults (hotkeys preserved).");
         };
 
         var doneBtn = new Button { Text = " Return to Game " };

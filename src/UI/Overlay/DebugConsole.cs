@@ -28,6 +28,7 @@ public partial class DebugConsole : CanvasLayer
     private Button? _godModeBtn;
     private Button? _infEnergyBtn;
     private Button? _oneHitKillBtn;
+    private Button? _lagBtn;
     private bool _isConsoleVisible = false;
 
     private readonly List<string> _commandHistory = new();
@@ -286,6 +287,8 @@ public partial class DebugConsole : CanvasLayer
         var dmgBtn = CreateActionButton("Dmg 25", () => InventoryDirector.DamagePlayer(25));
         var drawBtn = CreateActionButton("Draw 3", () => CombatDirector.DrawCards(3));
         var clearLogBtn = CreateActionButton("Clear Log", ClearLog);
+        _lagBtn = CreateActionButton(ModLogger.LagDeduplicationEnabled ? "Lag: ON" : "Lag: OFF", ToggleLagFilter);
+        var groupByBtn = CreateActionButton("Group By", () => ShowSqlGroupBySummary(20));
 
         fastBar.AddChild(_godModeBtn);
         fastBar.AddChild(_infEnergyBtn);
@@ -296,6 +299,8 @@ public partial class DebugConsole : CanvasLayer
         fastBar.AddChild(dmgBtn);
         fastBar.AddChild(drawBtn);
         fastBar.AddChild(clearLogBtn);
+        fastBar.AddChild(_lagBtn);
+        fastBar.AddChild(groupByBtn);
         vbox.AddChild(fastBar);
 
         _logLabel = new RichTextLabel
@@ -422,7 +427,8 @@ public partial class DebugConsole : CanvasLayer
                              "  gold <amount>, setgold <amount>, heal <amount>, damage <amount>, setmaxhp <amount>\n" +
                              "  relic <id>, rmrelic <id>, card <id> [upgraded=true/false], handcard <id>\n" +
                              "  event <id>, clearevent, endless [on/off/loop <n>/status], freeroam [on/off]\n" +
-                              "  seed [val/clear/roll/status], proceed, nextact, draw <count>, energy <amount>, verbose, clear, reset[/color]");
+                             "  seed [val/clear/roll/status], proceed, nextact, draw <count>, energy <amount>, verbose, clear, reset\n" +
+                             "  lag [on/off/status], groupby [limit] (or 'sql')[/color]");
                 break;
 
             case "proceed":
@@ -846,6 +852,38 @@ public partial class DebugConsole : CanvasLayer
                 ClearLog();
                 break;
 
+            case "lag":
+                if (parts.Length > 1)
+                {
+                    if (parts[1].Equals("on", StringComparison.OrdinalIgnoreCase))
+                        ModLogger.LagDeduplicationEnabled = true;
+                    else if (parts[1].Equals("off", StringComparison.OrdinalIgnoreCase))
+                        ModLogger.LagDeduplicationEnabled = false;
+                    else if (parts[1].Equals("status", StringComparison.OrdinalIgnoreCase))
+                    {
+                        LogToConsole($"[color=cyan]Lag deduplication filter is currently {(ModLogger.LagDeduplicationEnabled ? "ENABLED" : "DISABLED")}.[/color]");
+                        break;
+                    }
+                }
+                else
+                {
+                    ModLogger.LagDeduplicationEnabled = !ModLogger.LagDeduplicationEnabled;
+                }
+                UpdateLagButton();
+                LogToConsole($"[color=cyan]Lag deduplication filter is now {(ModLogger.LagDeduplicationEnabled ? "ENABLED (consecutive duplicate logs collapsed)" : "DISABLED (all raw logs emitted)")}.[/color]");
+                break;
+
+            case "groupby":
+            case "group":
+            case "sql":
+                int limit = 20;
+                if (parts.Length > 1 && int.TryParse(parts[1], out int parsedLimit) && parsedLimit > 0)
+                {
+                    limit = Math.Min(parsedLimit, 100);
+                }
+                ShowSqlGroupBySummary(limit);
+                break;
+
             case "reset":
                 RuntimeStateManager.ResetSessionState();
                 UpdateStatusButtons();
@@ -867,11 +905,33 @@ public partial class DebugConsole : CanvasLayer
 
     private void ClearLog()
     {
+        ModLogger.Flush();
         if (_logLabel != null)
         {
             _logLabel.Clear();
             _logLabel.AppendText("[color=gray]--- Log Cleared ---[/color]\n");
         }
+    }
+
+    private void ToggleLagFilter()
+    {
+        ModLogger.LagDeduplicationEnabled = !ModLogger.LagDeduplicationEnabled;
+        UpdateLagButton();
+        LogToConsole($"[color=cyan]Lag deduplication filter is now {(ModLogger.LagDeduplicationEnabled ? "ENABLED (consecutive duplicate logs collapsed)" : "DISABLED (all raw logs emitted)")}.[/color]");
+    }
+
+    private void UpdateLagButton()
+    {
+        if (_lagBtn != null)
+        {
+            _lagBtn.Text = ModLogger.LagDeduplicationEnabled ? "Lag: ON" : "Lag: OFF";
+        }
+    }
+
+    private void ShowSqlGroupBySummary(int limit = 20)
+    {
+        string summary = ModLogger.GetSqlGroupBySummary(limit);
+        LogToConsole($"[color=cyan]{summary}[/color]");
     }
 
     private void OnLogReceived(LogLevel level, string message)

@@ -88,7 +88,6 @@ public static class GameHelper
                     var player = LocalContext.GetMe(runPlayers) ?? runPlayers[0];
                     if (player != null)
                     {
-                        ModLogger.Verbose("GameHelper", $"GetActivePlayer: Resolved via RunManager.Instance.State (Player: {player.GetType().Name})");
                         return player;
                     }
                 }
@@ -102,7 +101,6 @@ public static class GameHelper
                     var player = LocalContext.GetMe(combatPlayers) ?? combatPlayers[0];
                     if (player != null)
                     {
-                        ModLogger.Verbose("GameHelper", $"GetActivePlayer: Resolved via CombatManager.Instance.StateTracker (Player: {player.GetType().Name})");
                         return player;
                     }
                 }
@@ -117,7 +115,6 @@ public static class GameHelper
                     var player = LocalContext.GetMe(handPlayers) ?? handPlayers[0];
                     if (player != null)
                     {
-                        ModLogger.Verbose("GameHelper", $"GetActivePlayer: Resolved via NPlayerHand combat state (Player: {player.GetType().Name})");
                         return player;
                     }
                 }
@@ -131,7 +128,6 @@ public static class GameHelper
                     var player = LocalContext.GetMe(nrunPlayers) ?? nrunPlayers[0];
                     if (player != null)
                     {
-                        ModLogger.Verbose("GameHelper", $"GetActivePlayer: Resolved via NRun._state (Player: {player.GetType().Name})");
                         return player;
                     }
                 }
@@ -142,7 +138,6 @@ public static class GameHelper
             ModLogger.Debug($"GetActivePlayer notice: {ex.Message}");
         }
 
-        ModLogger.Verbose("GameHelper", "GetActivePlayer: No active player found across all engine singletons.");
         return null;
     }
 

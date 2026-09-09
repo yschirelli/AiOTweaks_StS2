@@ -139,7 +139,9 @@ Open the console with your configured keybind (`F1`) and execute any of the foll
 | `playerdmg` / `dmgmult` | `playerdmg 2.5` | Sets or displays the player damage multiplier. |
 | `playerdef` / `defmult` | `playerdef 2.0` | Sets or displays the player defend/block multiplier. |
 | `verbose` / `debuglog` | `verbose` | Checks verbose diagnostic logging status (configured in `config.json`). |
-| `clear` | `clear` | Clears text from the console log window. |
+| `lag` | `lag on`, `lag off`, `lag` | Toggles or checks the Lag-1 log deduplication engine. Collapses repeating spam into `↳ [Lag Group] (xN)`. |
+| `groupby` / `sql` | `groupby 20` | Generates a SQL-style GROUP BY summary of recent logs ordered by frequency. |
+| `clear` | `clear` | Clears text from the console log window (flushing active lag buffer first). |
 | `reset` | `reset` | Clears all transient cheats and resets state to default. |
 
 ---
@@ -225,6 +227,12 @@ Run the root build script, which automatically detects your .NET SDK, locates St
 
 # Compile Debug build (forcefully enables verbose logging and writes to aiotweaks_debug.log in mod root)
 ./build.sh debug --deploy
+
+# Clean up / nuke all stale debug logs and crash dump snapshots
+./build.sh --nuke-logs
+
+# Clean previous logs, compile fresh Debug build, and deploy to game
+./build.sh debug --deploy --nuke-logs
 ```
 
 ### Manual Build
@@ -254,6 +262,41 @@ Run the root build script, which automatically detects your .NET SDK, locates St
 
 > [!NOTE]
 > **Logging Behavior**: When built in `Debug` configuration, verbose logging is forcefully enabled by default regardless of config file settings, and all real-time diagnostics are written to `aiotweaks_debug.log` directly in the mod's root folder. In `Release` builds, verbose logging is turned off by default and can only be turned on or off in `config.json` (`"debugLogging": true` / `false`).
+
+---
+
+## Debugging Routine & Fast Bug Fixing
+
+The mod includes an autonomous diagnostic pipeline designed for rapid bug triage and development reproduction.
+
+### 1. The Debugging Routine Workflow
+When investigating runtime errors, broken combat states, or game crashes:
+
+```bash
+# Step 1: Clean out all previous logs and crash dumps, build a fresh Debug DLL, and deploy to the game
+./build.sh debug --deploy --nuke-logs
+
+# Step 2: Launch Slay the Spire 2 and reproduce the issue or run with your test tweaks.
+
+# Step 3: Inspect the generated log files and crash reports for rapid diagnosis.
+```
+
+If you only need to clean up accumulated logs without recompiling:
+```bash
+./build.sh --nuke-logs
+```
+
+### 2. Generated Diagnostics
+- **Per-Run Isolated Logs (`logs/runs/aiotweaks_run_<character>_<seed>_<timestamp>.log`)**:
+  - **Organized in Folders:** Stored cleanly under `<ModRootDirectory>/logs/runs/`.
+  - **Full Run Metadata:** Captures character name, string seed, numeric seed, profile ID, and room count.
+  - **Snapshot Tweaks Header:** Logs the exact parameters used during run creation (gold bonuses, HP bonuses, damage/defend multipliers, node distribution weights, endless loop scaling).
+  - **Audited Post-Hook Calculations:** Every damage and block modification streams audited game values (`[CALC_AUDIT] Pre-Hook: X | Mult: Y | Post-Hook: Z`) comparing the original game engine calculation against the post-hook result.
+  - **Cleaned Automatically:** Nuked completely when running `./build.sh --nuke-logs`.
+- **Global Debug Log (`aiotweaks_debug.log`)**: Written to mod root (`mods/AIOTweaks/aiotweaks_debug.log`). In debug builds, auto-flushes every event with microsecond timestamps (`[HH:mm:ss.fff]`) and includes verbose function traces, hook calls, and state transitions.
+- **Crash Dump Snapshots (`aiotweaks_crash_YYYYMMDD_HHmmss.txt`)**: Generated automatically upon any fatal unhandled AppDomain or task exception by `CrashDumpHandler`. Captures full thread exception stack traces, active player state, floor number, and active mod settings.
+- **Breadcrumb Tracker Ring-Buffer**: Tracks recent state transitions (scenes, combat turn starts, card spawns, director invocations). Attached automatically to any caught exception logged via `ModLogger.Error(...)`.
+- **Combat Watchdog**: Runs autonomously during combat and logs warnings if the combat state becomes stalled/softlocked (>15 seconds without action progress).
 
 ---
 
@@ -340,8 +383,8 @@ Settings persist directly inside the mod root directory (`mods/AIOTweaks/config.
 ## Troubleshooting
 
 - **Opening Mod Settings or Console:** Press `F3` for Mod Settings or `F1` for Debug Console. You can also access settings directly from the in-game **Mods** menu, **Character Select** screen, or customize keybindings in `config.json`.
-- **Mod not showing up in Mods list:** Verify `AIOTweaks.json` is located directly in `mods/AIOTweaks/AIOTweaks.json` alongside `AIOTweaks.dll`.
-- **Resetting Window Size / Layout:** If the settings dialog was resized or moved off-screen, click the "Reset to Game Defaults" button inside the dialog or delete the `menuPosX`/`menuPosY`/`menuWidth`/`menuHeight` keys in `config.json`.
+- **Resetting Window Size / Layout:** If the settings dialog was resized or moved off-screen, click the "Reset GUI Position & Height" action in BaseLib Mod Config or delete the `menuPosX`/`menuPosY`/`menuWidth`/`menuHeight` keys in `config.json`.
+- **Resetting to Game Defaults:** The "Reset to Game Defaults" button in the mod settings dialog restores all gameplay tweaks, multipliers, and sandbox cheats back to vanilla game defaults without resetting your hotkeys or window layout.
 - **Build error with missing Godot assemblies:** Ensure the Godot .NET SDK / targeting packs are installed and the .NET 9 SDK is active (`dotnet --version`).
 
 ---
