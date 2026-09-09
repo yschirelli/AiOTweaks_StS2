@@ -138,7 +138,7 @@ Open the console with your configured keybind (`F1`) and execute any of the foll
 | `freeroam` / `freemap` | `freeroam on` | Toggles Free Map Navigation (freely click any room or return to normal pathing). |
 | `playerdmg` / `dmgmult` | `playerdmg 2.5` | Sets or displays the player damage multiplier. |
 | `playerdef` / `defmult` | `playerdef 2.0` | Sets or displays the player defend/block multiplier. |
-| `verbose` / `debuglog` | `verbose on` | Toggles verbose diagnostic logging. |
+| `verbose` / `debuglog` | `verbose` | Checks verbose diagnostic logging status (configured in `config.json`). |
 | `clear` | `clear` | Clears text from the console log window. |
 | `reset` | `reset` | Clears all transient cheats and resets state to default. |
 
@@ -253,7 +253,7 @@ Run the root build script, which automatically detects your .NET SDK, locates St
    ```
 
 > [!NOTE]
-> **Debug Builds**: When built in `Debug` configuration, verbose logging is forcefully enabled by default regardless of config file settings, and all real-time diagnostics are written to `aiotweaks_debug.log` directly in the mod's root folder.
+> **Logging Behavior**: When built in `Debug` configuration, verbose logging is forcefully enabled by default regardless of config file settings, and all real-time diagnostics are written to `aiotweaks_debug.log` directly in the mod's root folder. In `Release` builds, verbose logging is turned off by default and can only be turned on or off in `config.json` (`"debugLogging": true` / `false`).
 
 ---
 

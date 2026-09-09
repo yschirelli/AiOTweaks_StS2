@@ -30,17 +30,6 @@ public sealed class AIOTweaksBaseLibConfig : SimpleModConfig
         }
     }
 
-    public static bool DebugLogging
-    {
-        get => ConfigManager.Current.General.DebugLogging;
-        set
-        {
-            ConfigManager.Current.General.DebugLogging = value;
-            ModLogger.MinimumLevel = value ? LogLevel.Debug : LogLevel.Info;
-            ConfigManager.SaveConfig();
-        }
-    }
-
     [ConfigSection("Keybindings & Overlay")]
     [ConfigTextInput(TextInputPreset.Alphanumeric)]
     public static string ConsoleHotkey

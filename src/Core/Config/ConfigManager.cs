@@ -140,6 +140,8 @@ public static class ConfigManager
             Current.General.DebugLogging = true;
             ModLogger.MinimumLevel = LogLevel.Debug;
             ModLogger.FileLoggingEnabled = true;
+#else
+            ModLogger.MinimumLevel = Current.General.DebugLogging ? LogLevel.Debug : LogLevel.Info;
 #endif
             SaveConfig();
         }
@@ -152,6 +154,8 @@ public static class ConfigManager
             Current.General.DebugLogging = true;
             ModLogger.MinimumLevel = LogLevel.Debug;
             ModLogger.FileLoggingEnabled = true;
+#else
+            ModLogger.MinimumLevel = Current.General.DebugLogging ? LogLevel.Debug : LogLevel.Info;
 #endif
             OnConfigChanged?.Invoke(Current);
         }

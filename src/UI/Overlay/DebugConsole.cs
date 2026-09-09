@@ -422,7 +422,7 @@ public partial class DebugConsole : CanvasLayer
                              "  gold <amount>, setgold <amount>, heal <amount>, damage <amount>, setmaxhp <amount>\n" +
                              "  relic <id>, rmrelic <id>, card <id> [upgraded=true/false], handcard <id>\n" +
                              "  event <id>, clearevent, endless [on/off/loop <n>/status], freeroam [on/off]\n" +
-                             "  seed [val/clear/roll/status], proceed, nextact, draw <count>, energy <amount>, verbose [on/off], clear, reset[/color]");
+                              "  seed [val/clear/roll/status], proceed, nextact, draw <count>, energy <amount>, verbose, clear, reset[/color]");
                 break;
 
             case "proceed":
@@ -447,30 +447,11 @@ public partial class DebugConsole : CanvasLayer
 
             case "verbose":
             case "debuglog":
-                if (parts.Length > 1)
-                {
-                    bool enable = parts[1].Equals("on", StringComparison.OrdinalIgnoreCase) || parts[1].Equals("true", StringComparison.OrdinalIgnoreCase) || parts[1] == "1";
-                    ConfigManager.Current.General.DebugLogging = enable;
 #if DEBUG
-                    ModLogger.MinimumLevel = LogLevel.Debug;
-                    LogToConsole($"[color=green]Debug Build: Verbose debugging is forcefully ENABLED by default (Log: {ModLogger.LogFilePath}).[/color]");
+                LogToConsole($"[color=green]Debug Build: Verbose debugging is forcefully ENABLED by default (Log: {ModLogger.LogFilePath}).[/color]");
 #else
-                    ModLogger.MinimumLevel = enable ? LogLevel.Debug : LogLevel.Info;
-                    LogToConsole($"[color=green]Verbose debugging log is now {(enable ? "ENABLED" : "DISABLED")}.[/color]");
+                LogToConsole($"[color=yellow]Verbose logging is {(ModLogger.MinimumLevel <= LogLevel.Debug ? "ENABLED" : "DISABLED")}. Verbose logging can only be turned on or off in config.json (\"debugLogging\": true/false).[/color]");
 #endif
-                }
-                else
-                {
-                    bool toggle = !ConfigManager.Current.General.DebugLogging;
-                    ConfigManager.Current.General.DebugLogging = toggle;
-#if DEBUG
-                    ModLogger.MinimumLevel = LogLevel.Debug;
-                    LogToConsole($"[color=green]Debug Build: Verbose debugging is forcefully ENABLED by default (Log: {ModLogger.LogFilePath}).[/color]");
-#else
-                    ModLogger.MinimumLevel = toggle ? LogLevel.Debug : LogLevel.Info;
-                    LogToConsole($"[color=green]Verbose debugging log toggled to {(toggle ? "ENABLED" : "DISABLED")}.[/color]");
-#endif
-                }
                 break;
 
             case "god":

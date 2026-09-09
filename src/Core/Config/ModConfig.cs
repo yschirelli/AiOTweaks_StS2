@@ -30,7 +30,7 @@ public sealed class GeneralConfig
     public bool Enabled { get; set; } = true;
 
     [JsonPropertyName("debugLogging")]
-    public bool DebugLogging { get; set; } = true;
+    public bool DebugLogging { get; set; } = false;
 
     [JsonPropertyName("consoleHotkey")]
     public string ConsoleHotkey { get; set; } = DefaultConsoleHotkey;
