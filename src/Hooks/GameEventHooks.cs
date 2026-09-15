@@ -837,7 +837,7 @@ public static class GameEventHooks
         }
     }
 
-    [HarmonyPatch(typeof(Hook), nameof(Hook.AfterTurnEnd))]
+    [HarmonyPatch(typeof(Hook), nameof(Hook.AfterSideTurnEnd))]
     public static class AfterTurnEndPatch
     {
         [HarmonyPostfix]

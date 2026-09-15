@@ -3058,7 +3058,7 @@ public static class MapGenerationHooks
                 return;
             }
 
-            uint baseSeed = eventModel.Owner.RunState.Rng.Seed;
+            uint baseSeed = (uint)eventModel.Owner.RunState.Rng.Seed;
             uint eventHash = (uint)StringHelper.GetDeterministicHashCode(eventId);
 
             uint seed = (uint)(baseSeed + (uint)slot + eventHash);

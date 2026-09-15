@@ -41,6 +41,7 @@ public partial class ModSettingsDialog : CanvasLayer
     private bool _isResizing = false;
     private Vector2 _resizeStartMousePos;
     private Vector2 _resizeStartPanelSize;
+    private bool _hasUserAdjustedLayout = false;
 
     private Button? _consoleHotkeyBtn;
     private Button? _guiHotkeyBtn;
@@ -154,6 +155,11 @@ public partial class ModSettingsDialog : CanvasLayer
         PotionDirector.OnPotionsChanged += OnPotionsModified;
         PotionDirector.OnPotionSlotsChanged += OnPotionSlotsModified;
         StatusDirector.OnStatusesChanged += OnStatusesModified;
+        if (ConfigManager.Current.UI.MenuPosX.HasValue || ConfigManager.Current.UI.MenuPosY.HasValue ||
+            ConfigManager.Current.UI.MenuWidth.HasValue || ConfigManager.Current.UI.MenuHeight.HasValue)
+        {
+            _hasUserAdjustedLayout = true;
+        }
         LoadSettingsValues();
         HideDialog();
     }
@@ -388,9 +394,13 @@ public partial class ModSettingsDialog : CanvasLayer
         ConfigManager.Current.UI.MenuWidth = null;
         ConfigManager.Current.UI.MenuHeight = null;
         ConfigManager.SaveConfig();
-        if (_instance != null && _instance._dialogPanel != null)
+        if (_instance != null && GodotObject.IsInstanceValid(_instance))
         {
-            _instance.ApplyOrRestoreWindowLayout();
+            _instance._hasUserAdjustedLayout = false;
+            if (_instance._dialogPanel != null && GodotObject.IsInstanceValid(_instance._dialogPanel))
+            {
+                _instance.ApplyOrRestoreWindowLayout();
+            }
         }
         ModLogger.Info("ModSettingsDialog: GUI window position and size reset to defaults.");
     }
@@ -403,6 +413,8 @@ public partial class ModSettingsDialog : CanvasLayer
             if (_dialogPanel != null && GodotObject.IsInstanceValid(_dialogPanel))
             {
                 LoadSettingsValues();
+                if (_backdrop != null && GodotObject.IsInstanceValid(_backdrop)) _backdrop.Visible = true;
+                _dialogPanel.Visible = true;
                 ApplyOrRestoreWindowLayout();
                 
                 bool inRun = GameHelper.GetActivePlayer() != null;
@@ -414,8 +426,6 @@ public partial class ModSettingsDialog : CanvasLayer
                 }
                 UpdateTweaksRunLockState(inRun);
 
-                if (_backdrop != null && GodotObject.IsInstanceValid(_backdrop)) _backdrop.Visible = true;
-                _dialogPanel.Visible = true;
                 UpdateBlockingState(true);
                 RefreshTab(_tabs?.CurrentTab ?? 0);
             }
@@ -428,6 +438,11 @@ public partial class ModSettingsDialog : CanvasLayer
 
     public void CloseDialog()
     {
+        if (_dialogPanel == null || !GodotObject.IsInstanceValid(_dialogPanel) || !_dialogPanel.Visible)
+        {
+            return;
+        }
+
         ModLogger.Verbose("ModSettingsDialog", "CloseDialog called.");
         _isDragging = false;
         _isResizing = false;
@@ -525,12 +540,27 @@ public partial class ModSettingsDialog : CanvasLayer
 
     private void ApplyOrRestoreWindowLayout()
     {
-        if (_dialogPanel == null) return;
+        if (_dialogPanel == null || !GodotObject.IsInstanceValid(_dialogPanel)) return;
 
         Vector2 viewportSize = GetViewport()?.GetVisibleRect().Size ?? new Vector2(1920, 1080);
         if (viewportSize.X <= 200 || viewportSize.Y <= 200)
         {
-            viewportSize = new Vector2(1920, 1080);
+            try
+            {
+                var winSize = DisplayServer.WindowGetSize();
+                if (winSize.X > 200 && winSize.Y > 200)
+                {
+                    viewportSize = new Vector2(winSize.X, winSize.Y);
+                }
+                else
+                {
+                    viewportSize = new Vector2(1920, 1080);
+                }
+            }
+            catch
+            {
+                viewportSize = new Vector2(1920, 1080);
+            }
         }
 
         // Proportional initial size: 85% width, 85% height of active game resolution
@@ -553,6 +583,8 @@ public partial class ModSettingsDialog : CanvasLayer
         posX = Mathf.Clamp(posX, 0f, Math.Max(0f, viewportSize.X - width));
         posY = Mathf.Clamp(posY, 0f, Math.Max(0f, viewportSize.Y - height));
 
+        _dialogPanel.SetAnchorsPreset(Control.LayoutPreset.TopLeft);
+        _dialogPanel.ResetSize();
         _dialogPanel.Position = new Vector2(posX, posY);
         _dialogPanel.Size = new Vector2(width, height);
     }
@@ -618,6 +650,7 @@ public partial class ModSettingsDialog : CanvasLayer
             }
             else if (@event is InputEventMouseMotion motion && _isDragging && _dialogPanel != null)
             {
+                _hasUserAdjustedLayout = true;
                 Vector2 newPos = motion.GlobalPosition - _dragOffset;
                 Vector2 viewportSize = GetViewport()?.GetVisibleRect().Size ?? new Vector2(1920, 1080);
                 float maxX = Math.Max(0f, viewportSize.X - _dialogPanel.Size.X);
@@ -790,6 +823,7 @@ public partial class ModSettingsDialog : CanvasLayer
             }
             else if (@event is InputEventMouseMotion motion && _isResizing && _dialogPanel != null)
             {
+                _hasUserAdjustedLayout = true;
                 Vector2 delta = motion.GlobalPosition - _resizeStartMousePos;
                 Vector2 newSize = _resizeStartPanelSize + delta;
                 Vector2 viewportSize = GetViewport()?.GetVisibleRect().Size ?? new Vector2(1920, 1080);
@@ -4896,12 +4930,15 @@ public partial class ModSettingsDialog : CanvasLayer
                 RunTweaksSaveManager.SaveActiveSnapshot();
             }
 
-            if (_dialogPanel != null && GodotObject.IsInstanceValid(_dialogPanel))
+            if (_dialogPanel != null && GodotObject.IsInstanceValid(_dialogPanel) && _dialogPanel.Visible)
             {
-                ConfigManager.Current.UI.MenuPosX = _dialogPanel.Position.X;
-                ConfigManager.Current.UI.MenuPosY = _dialogPanel.Position.Y;
-                ConfigManager.Current.UI.MenuWidth = _dialogPanel.Size.X;
-                ConfigManager.Current.UI.MenuHeight = _dialogPanel.Size.Y;
+                if (_hasUserAdjustedLayout)
+                {
+                    ConfigManager.Current.UI.MenuPosX = _dialogPanel.Position.X;
+                    ConfigManager.Current.UI.MenuPosY = _dialogPanel.Position.Y;
+                    ConfigManager.Current.UI.MenuWidth = _dialogPanel.Size.X;
+                    ConfigManager.Current.UI.MenuHeight = _dialogPanel.Size.Y;
+                }
             }
 
             ConfigManager.SaveConfig();

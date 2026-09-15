@@ -383,7 +383,7 @@ Settings persist directly inside the mod root directory (`mods/AIOTweaks/config.
 ## Troubleshooting
 
 - **Opening Mod Settings or Console:** Press `F3` for Mod Settings or `F1` for Debug Console. You can also access settings directly from the in-game **Mods** menu, **Character Select** screen, or customize keybindings in `config.json`.
-- **Resetting Window Size / Layout:** If the settings dialog was resized or moved off-screen, click the "Reset GUI Position & Height" action in BaseLib Mod Config or delete the `menuPosX`/`menuPosY`/`menuWidth`/`menuHeight` keys in `config.json`.
+- **Resetting Window Size / Layout:** If the settings dialog was resized or moved off-screen, click the "Reset GUI Position" action in BaseLib Mod Config or delete the `menuPosX`/`menuPosY`/`menuWidth`/`menuHeight` keys in `config.json`.
 - **Resetting to Game Defaults:** The "Reset to Game Defaults" button in the mod settings dialog restores all gameplay tweaks, multipliers, and sandbox cheats back to vanilla game defaults without resetting your hotkeys or window layout.
 - **Build error with missing Godot assemblies:** Ensure the Godot .NET SDK / targeting packs are installed and the .NET 9 SDK is active (`dotnet --version`).
 
