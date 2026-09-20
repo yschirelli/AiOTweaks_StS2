@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
+using System.Threading.Tasks;
 using HarmonyLib;
 using AIOTweaks.Core.Logging;
 using MegaCrit.Sts2.Core.Rooms;
@@ -36,7 +37,18 @@ public static class SaveSerializationHooks
             }
             else
             {
-                ModLogger.Verbose("SaveSerializationHooks", "JsonSerializationUtility.Options is read-only. Save serialization resolver handled via BaseLib.");
+                var isReadOnlyField = typeof(JsonSerializerOptions).GetField("_isReadOnly", BindingFlags.Instance | BindingFlags.NonPublic);
+                if (isReadOnlyField != null)
+                {
+                    isReadOnlyField.SetValue(JsonSerializationUtility.Options, false);
+                    JsonSerializationUtility.AddTypeInfoResolver(new BaseLibExtendedSaveResolver());
+                    isReadOnlyField.SetValue(JsonSerializationUtility.Options, true);
+                    ModLogger.Info("[SaveSerializationHooks] Successfully registered BaseLibExtendedSaveResolver via reflection override.");
+                }
+                else
+                {
+                    ModLogger.Verbose("SaveSerializationHooks", "JsonSerializationUtility.Options is read-only. Save serialization resolver handled via BaseLib.");
+                }
             }
         }
         catch (Exception ex)
@@ -132,16 +144,25 @@ public static class SaveSerializationHooks
             ModLogger.Info($"[SaveSerializationHooks] SaveManager.SaveRun called (room={preFinishedRoom?.GetType().Name ?? "null"}, saveProgress={saveProgress}).");
         }
 
-        [HarmonyFinalizer]
-        public static Exception? Finalizer(Exception? __exception)
+        [HarmonyPostfix]
+        public static void Postfix(Task? __result, AbstractRoom? preFinishedRoom, bool saveProgress)
         {
-            if (__exception != null)
+            if (__result == null) return;
+            __result.ContinueWith(t =>
             {
-                ModLogger.Error($"[SaveSerializationHooks] Exception in SaveManager.SaveRun: {__exception.Message}", __exception);
-                return __exception;
-            }
-            ModLogger.Info("[SaveSerializationHooks] SaveManager.SaveRun completed.");
-            return null;
+                if (t.IsFaulted)
+                {
+                    ModLogger.Error("[SaveSerializationHooks] SaveManager.SaveRun failed asynchronously!", t.Exception);
+                }
+                else if (t.IsCanceled)
+                {
+                    ModLogger.Warn("[SaveSerializationHooks] SaveManager.SaveRun was canceled.");
+                }
+                else
+                {
+                    ModLogger.Info("[SaveSerializationHooks] SaveManager.SaveRun completed successfully.");
+                }
+            });
         }
     }
 
@@ -157,17 +178,26 @@ public static class SaveSerializationHooks
             ModLogger.Info($"[SaveSerializationHooks] RunSaveManager.SaveRun started (isMultiplayer={isMultiplayer}, floor={save?.FloorReached}, ascension={save?.Ascension}, hasExtraFields={save?.ExtraFields != null}).");
         }
 
-        [HarmonyFinalizer]
-        public static Exception? Finalizer(Exception? __exception)
+        [HarmonyPostfix]
+        public static void Postfix(Task? __result, SerializableRun save, bool isMultiplayer)
         {
-            if (__exception != null)
+            if (__result == null) return;
+            string runType = isMultiplayer ? "Multiplayer" : "Singleplayer";
+            __result.ContinueWith(t =>
             {
-                ModLogger.Error($"[SaveSerializationHooks] CRITICAL: RunSaveManager.SaveRun threw an exception: {__exception.Message}", __exception);
-                return __exception;
-            }
-
-            ModLogger.Info("[SaveSerializationHooks] RunSaveManager.SaveRun completed successfully without errors.");
-            return null;
+                if (t.IsFaulted)
+                {
+                    ModLogger.Error($"[SaveSerializationHooks] CRITICAL: RunSaveManager.SaveRun failed asynchronously ({runType})!", t.Exception);
+                }
+                else if (t.IsCanceled)
+                {
+                    ModLogger.Warn($"[SaveSerializationHooks] RunSaveManager.SaveRun was canceled ({runType}).");
+                }
+                else
+                {
+                    ModLogger.Info($"[SaveSerializationHooks] RunSaveManager.SaveRun completed successfully ({runType}, Floor={save?.FloorReached}). Save file committed.");
+                }
+            });
         }
     }
 }

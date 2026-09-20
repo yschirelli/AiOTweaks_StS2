@@ -1421,9 +1421,23 @@ public static class MapGenerationHooks
     [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Saves.SaveManager), nameof(MegaCrit.Sts2.Core.Saves.SaveManager.DeleteCurrentRun))]
     public static class SaveManagerDeleteCurrentRunPatch
     {
+        [HarmonyPrefix]
+        public static bool Prefix()
+        {
+            if (PauseMenuHooks.IsSavingAndQuitting)
+            {
+                ModLogger.Warn("[SaveManagerDeleteCurrentRunPatch] Suppressed DeleteCurrentRun because Save & Quit is in progress.");
+                return false;
+            }
+            return true;
+        }
+
         [HarmonyPostfix]
         public static void Postfix()
         {
+            if (PauseMenuHooks.IsSavingAndQuitting)
+                return;
+
             try
             {
                 ForceDeleteCurrentRunSaves();
@@ -1439,9 +1453,23 @@ public static class MapGenerationHooks
     [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Saves.SaveManager), nameof(MegaCrit.Sts2.Core.Saves.SaveManager.DeleteCurrentMultiplayerRun))]
     public static class SaveManagerDeleteCurrentMultiplayerRunPatch
     {
+        [HarmonyPrefix]
+        public static bool Prefix()
+        {
+            if (PauseMenuHooks.IsSavingAndQuitting)
+            {
+                ModLogger.Warn("[SaveManagerDeleteCurrentMultiplayerRunPatch] Suppressed DeleteCurrentMultiplayerRun because Save & Quit is in progress.");
+                return false;
+            }
+            return true;
+        }
+
         [HarmonyPostfix]
         public static void Postfix()
         {
+            if (PauseMenuHooks.IsSavingAndQuitting)
+                return;
+
             try
             {
                 ForceDeleteCurrentRunSaves();
