@@ -63,11 +63,6 @@ When diagnosing runtime issues, combat softlocks, or mod errors reported during 
   - `ModLogger` automatically tracks consecutive identical log events via a Lag-1 filter. Repeating logs within the stream (e.g. per-frame game queries, repetitive hook ticks) are collapsed, suppressing repetitive spam and emitting:
     `↳ [Lag Group] Previous message repeated N times (xM total).`
   - Toggleable live in the in-game Debug Console via the **Lag: ON/OFF** button or typing `lag [on/off/status]`.
-- **SQL GROUP BY Analytics:**
-  - `ModLogger` maintains a rolling ring buffer of recent log events and supports SQL-style group-by analytics:
-    `SELECT COUNT(*), LEVEL, SOURCE, MESSAGE ... GROUP BY LEVEL, SOURCE, MESSAGE ORDER BY COUNT(*) DESC`
-  - Run directly in the Debug Console by clicking the **Group By** button or typing `groupby [limit]` (or `sql`).
-  - Automatically appended to the bottom of per-run diagnostic logs (`logs/runs/aiotweaks_run_*.log`) upon run session closure.
 - **Crash Dumps:** Fatal unhandled exceptions (`AppDomain.CurrentDomain.UnhandledException` and `TaskScheduler.UnobservedTaskException`) captured by `CrashDumpHandler` write timestamped crash files to `<ModRootDirectory>/aiotweaks_crash_YYYYMMDD_HHmmss.txt`.
 - **Breadcrumb History:** Ring-buffer trail of recent state events (`BreadcrumbTracker`) captures recent scene transitions, hook executions, card spawns, and combat action steps. Upon any exception in `ModLogger.Error(...)`, the breadcrumb history is automatically attached to the error log.
 - **Combat Watchdog Warnings:** `CombatWatchdog` logs actionable warnings when combat is frozen/stalled without state change for >15 seconds.

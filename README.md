@@ -140,7 +140,6 @@ Open the console with your configured keybind (`F1`) and execute any of the foll
 | `playerdef` / `defmult` | `playerdef 2.0` | Sets or displays the player defend/block multiplier. |
 | `verbose` / `debuglog` | `verbose` | Checks verbose diagnostic logging status (configured in `config.json`). |
 | `lag` | `lag on`, `lag off`, `lag` | Toggles or checks the Lag-1 log deduplication engine. Collapses repeating spam into `↳ [Lag Group] (xN)`. |
-| `groupby` / `sql` | `groupby 20` | Generates a SQL-style GROUP BY summary of recent logs ordered by frequency. |
 | `clear` | `clear` | Clears text from the console log window (flushing active lag buffer first). |
 | `reset` | `reset` | Clears all transient cheats and resets state to default. |
 

@@ -288,7 +288,6 @@ public partial class DebugConsole : CanvasLayer
         var drawBtn = CreateActionButton("Draw 3", () => CombatDirector.DrawCards(3));
         var clearLogBtn = CreateActionButton("Clear Log", ClearLog);
         _lagBtn = CreateActionButton(ModLogger.LagDeduplicationEnabled ? "Lag: ON" : "Lag: OFF", ToggleLagFilter);
-        var groupByBtn = CreateActionButton("Group By", () => ShowSqlGroupBySummary(20));
 
         fastBar.AddChild(_godModeBtn);
         fastBar.AddChild(_infEnergyBtn);
@@ -300,7 +299,6 @@ public partial class DebugConsole : CanvasLayer
         fastBar.AddChild(drawBtn);
         fastBar.AddChild(clearLogBtn);
         fastBar.AddChild(_lagBtn);
-        fastBar.AddChild(groupByBtn);
         vbox.AddChild(fastBar);
 
         _logLabel = new RichTextLabel
@@ -428,7 +426,7 @@ public partial class DebugConsole : CanvasLayer
                              "  relic <id>, rmrelic <id>, card <id> [upgraded=true/false], handcard <id>\n" +
                              "  event <id>, clearevent, endless [on/off/loop <n>/status], freeroam [on/off]\n" +
                              "  seed [val/clear/roll/status], proceed, nextact, draw <count>, energy <amount>, verbose, clear, reset\n" +
-                             "  lag [on/off/status], groupby [limit] (or 'sql')[/color]");
+                             "  lag [on/off/status][/color]");
                 break;
 
             case "proceed":
@@ -447,7 +445,7 @@ public partial class DebugConsole : CanvasLayer
                 }
                 else
                 {
-                    LogToConsole("[color=red]No active RunManager instance found.[/color]");
+                    LogError("No active RunManager instance found.", ErrorType.NotFound);
                 }
                 break;
 
@@ -456,7 +454,7 @@ public partial class DebugConsole : CanvasLayer
 #if DEBUG
                 LogToConsole($"[color=green]Debug Build: Verbose debugging is forcefully ENABLED by default (Log: {ModLogger.LogFilePath}).[/color]");
 #else
-                LogToConsole($"[color=yellow]Verbose logging is {(ModLogger.MinimumLevel <= LogLevel.Debug ? "ENABLED" : "DISABLED")}. Verbose logging can only be turned on or off in config.json (\"debugLogging\": true/false).[/color]");
+                LogToConsole("[color=yellow]Release Build: Debug messages are disabled in release configuration.[/color]");
 #endif
                 break;
 
@@ -488,21 +486,21 @@ public partial class DebugConsole : CanvasLayer
                 if (parts.Length > 1 && int.TryParse(parts[1], out int goldAmt))
                     InventoryDirector.AddGold(goldAmt);
                 else
-                    LogToConsole("[color=red]Usage: gold <amount>[/color]");
+                    LogError("Usage: gold <amount>", ErrorType.Syntax);
                 break;
 
             case "setgold":
                 if (parts.Length > 1 && int.TryParse(parts[1], out int sGold))
                     InventoryDirector.SetGold(sGold);
                 else
-                    LogToConsole("[color=red]Usage: setgold <amount>[/color]");
+                    LogError("Usage: setgold <amount>", ErrorType.Syntax);
                 break;
 
             case "heal":
                 if (parts.Length > 1 && int.TryParse(parts[1], out int healAmt))
                     InventoryDirector.Heal(healAmt);
                 else
-                    LogToConsole("[color=red]Usage: heal <amount>[/color]");
+                    LogError("Usage: heal <amount>", ErrorType.Syntax);
                 break;
 
             case "damage":
@@ -510,28 +508,28 @@ public partial class DebugConsole : CanvasLayer
                 if (parts.Length > 1 && int.TryParse(parts[1], out int dmgAmt))
                     InventoryDirector.DamagePlayer(dmgAmt);
                 else
-                    LogToConsole("[color=red]Usage: damage <amount>[/color]");
+                    LogError("Usage: damage <amount>", ErrorType.Syntax);
                 break;
 
             case "setmaxhp":
                 if (parts.Length > 1 && int.TryParse(parts[1], out int maxHp))
                     InventoryDirector.SetMaxHp(maxHp);
                 else
-                    LogToConsole("[color=red]Usage: setmaxhp <amount>[/color]");
+                    LogError("Usage: setmaxhp <amount>", ErrorType.Syntax);
                 break;
 
             case "relic":
                 if (parts.Length > 1)
                     RelicDirector.AddRelic(parts[1]);
                 else
-                    LogToConsole("[color=red]Usage: relic <relic_id>[/color]");
+                    LogError("Usage: relic <relic_id>", ErrorType.Syntax);
                 break;
 
             case "rmrelic":
                 if (parts.Length > 1)
                     RelicDirector.RemoveRelic(parts[1]);
                 else
-                    LogToConsole("[color=red]Usage: rmrelic <relic_id>[/color]");
+                    LogError("Usage: rmrelic <relic_id>", ErrorType.Syntax);
                 break;
 
             case "card":
@@ -542,7 +540,7 @@ public partial class DebugConsole : CanvasLayer
                 }
                 else
                 {
-                    LogToConsole("[color=red]Usage: card <card_id> [true/false][/color]");
+                    LogError("Usage: card <card_id> [true/false]", ErrorType.Syntax);
                 }
                 break;
 
@@ -550,7 +548,7 @@ public partial class DebugConsole : CanvasLayer
                 if (parts.Length > 1)
                     CardDirector.SpawnCardInHand(parts[1]);
                 else
-                    LogToConsole("[color=red]Usage: handcard <card_id>[/color]");
+                    LogError("Usage: handcard <card_id>", ErrorType.Syntax);
                 break;
 
             case "rmcard":
@@ -558,7 +556,7 @@ public partial class DebugConsole : CanvasLayer
                 if (parts.Length > 1)
                     CardDirector.RemoveCardFromDeck(parts[1]);
                 else
-                    LogToConsole("[color=red]Usage: rmcard <card_id>[/color]");
+                    LogError("Usage: rmcard <card_id>", ErrorType.Syntax);
                 break;
 
             case "upcard":
@@ -566,7 +564,7 @@ public partial class DebugConsole : CanvasLayer
                 if (parts.Length > 1)
                     CardDirector.ToggleUpgradeInDeck(parts[1]);
                 else
-                    LogToConsole("[color=red]Usage: upcard <card_id>[/color]");
+                    LogError("Usage: upcard <card_id>", ErrorType.Syntax);
                 break;
 
             case "exhaustcard":
@@ -574,7 +572,7 @@ public partial class DebugConsole : CanvasLayer
                 if (parts.Length > 1)
                     CardDirector.ExhaustCardFromDeck(parts[1]);
                 else
-                    LogToConsole("[color=red]Usage: exhaustcard <card_id>[/color]");
+                    LogError("Usage: exhaustcard <card_id>", ErrorType.Syntax);
                 break;
 
             case "enchantcard":
@@ -587,7 +585,7 @@ public partial class DebugConsole : CanvasLayer
                 }
                 else
                 {
-                    LogToConsole("[color=red]Usage: enchant <card_id> <enchantment_id> [amount][/color]");
+                    LogError("Usage: enchant <card_id> <enchantment_id> [amount]", ErrorType.Syntax);
                 }
                 break;
 
@@ -596,7 +594,7 @@ public partial class DebugConsole : CanvasLayer
                 if (parts.Length > 1)
                     CardDirector.ClearEnchantmentInDeck(parts[1]);
                 else
-                    LogToConsole("[color=red]Usage: disenchant <card_id>[/color]");
+                    LogError("Usage: disenchant <card_id>", ErrorType.Syntax);
                 break;
 
             case "attr":
@@ -613,12 +611,12 @@ public partial class DebugConsole : CanvasLayer
                     }
                     else
                     {
-                        LogToConsole($"[color=red]Unknown keyword '{parts[2]}'. Valid: {string.Join(", ", GameHelper.GetAllCardKeywords())}[/color]");
+                        LogError($"Unknown keyword '{parts[2]}'. Valid: {string.Join(", ", GameHelper.GetAllCardKeywords())}", ErrorType.Validation);
                     }
                 }
                 else
                 {
-                    LogToConsole("[color=red]Usage: attr <card_id> <keyword> [add|remove|toggle][/color]");
+                    LogError("Usage: attr <card_id> <keyword> [add|remove|toggle]", ErrorType.Syntax);
                 }
                 break;
 
@@ -626,7 +624,7 @@ public partial class DebugConsole : CanvasLayer
                 if (parts.Length > 1)
                     EventDirector.ForceNextEvent(parts[1]);
                 else
-                    LogToConsole("[color=red]Usage: event <event_id>[/color]");
+                    LogError("Usage: event <event_id>", ErrorType.Syntax);
                 break;
 
             case "clearevent":
@@ -637,14 +635,14 @@ public partial class DebugConsole : CanvasLayer
                 if (parts.Length > 1 && int.TryParse(parts[1], out int drawCount))
                     CombatDirector.DrawCards(drawCount);
                 else
-                    LogToConsole("[color=red]Usage: draw <count>[/color]");
+                    LogError("Usage: draw <count>", ErrorType.Syntax);
                 break;
 
             case "energy":
                 if (parts.Length > 1 && int.TryParse(parts[1], out int engAmt))
                     CombatDirector.AddEnergy(engAmt);
                 else
-                    LogToConsole("[color=red]Usage: energy <amount>[/color]");
+                    LogError("Usage: energy <amount>", ErrorType.Syntax);
                 break;
 
             case "maxenergy":
@@ -656,7 +654,7 @@ public partial class DebugConsole : CanvasLayer
                 else
                 {
                     LogToConsole($"[color=yellow]Current Max Energy: {GameHelper.GetPlayerMaxEnergy()}[/color]");
-                    LogToConsole("[color=red]Usage: maxenergy <amount>[/color]");
+                    LogError("Usage: maxenergy <amount>", ErrorType.Syntax);
                 }
                 break;
 
@@ -713,7 +711,7 @@ public partial class DebugConsole : CanvasLayer
                     }
                     else
                     {
-                        LogToConsole("[color=red]Usage: endless <on|off|loop <count>|status>[/color]");
+                        LogError("Usage: endless <on|off|loop <count>|status>", ErrorType.Syntax);
                     }
                 }
                 else
@@ -746,7 +744,7 @@ public partial class DebugConsole : CanvasLayer
                     }
                     else
                     {
-                        LogToConsole("[color=red]Usage: freeroam <on|off>[/color]");
+                        LogError("Usage: freeroam <on|off>", ErrorType.Syntax);
                     }
                 }
                 else
@@ -815,7 +813,7 @@ public partial class DebugConsole : CanvasLayer
                 else
                 {
                     LogToConsole($"[color=yellow]Current Player Damage Multiplier: {ConfigManager.Current.PreRunTweaks.PlayerDamageMultiplier:F2}x[/color]");
-                    LogToConsole("[color=red]Usage: playerdmg <multiplier>[/color]");
+                    LogError("Usage: playerdmg <multiplier>", ErrorType.Syntax);
                 }
                 break;
 
@@ -830,7 +828,7 @@ public partial class DebugConsole : CanvasLayer
                 else
                 {
                     LogToConsole($"[color=yellow]Current Player Defend Multiplier: {ConfigManager.Current.PreRunTweaks.PlayerDefendMultiplier:F2}x[/color]");
-                    LogToConsole("[color=red]Usage: playerdef <multiplier>[/color]");
+                    LogError("Usage: playerdef <multiplier>", ErrorType.Syntax);
                 }
                 break;
 
@@ -844,7 +842,7 @@ public partial class DebugConsole : CanvasLayer
                 }
                 else
                 {
-                    LogToConsole("[color=red]Failed to open shop overlay. Ensure you are in an active run.[/color]");
+                    LogError("Failed to open shop overlay. Ensure you are in an active run.", ErrorType.NotFound);
                 }
                 break;
 
@@ -873,17 +871,6 @@ public partial class DebugConsole : CanvasLayer
                 LogToConsole($"[color=cyan]Lag deduplication filter is now {(ModLogger.LagDeduplicationEnabled ? "ENABLED (consecutive duplicate logs collapsed)" : "DISABLED (all raw logs emitted)")}.[/color]");
                 break;
 
-            case "groupby":
-            case "group":
-            case "sql":
-                int limit = 20;
-                if (parts.Length > 1 && int.TryParse(parts[1], out int parsedLimit) && parsedLimit > 0)
-                {
-                    limit = Math.Min(parsedLimit, 100);
-                }
-                ShowSqlGroupBySummary(limit);
-                break;
-
             case "reset":
                 RuntimeStateManager.ResetSessionState();
                 UpdateStatusButtons();
@@ -901,6 +888,12 @@ public partial class DebugConsole : CanvasLayer
     {
         if (_logLabel == null) return;
         _logLabel.AppendText($"{text}\n");
+    }
+
+    private void LogError(string text, ErrorType type = ErrorType.General)
+    {
+        string color = ModLogger.GetErrorColor(text, type);
+        LogToConsole($"[color={color}]{text}[/color]");
     }
 
     private void ClearLog()
@@ -928,20 +921,17 @@ public partial class DebugConsole : CanvasLayer
         }
     }
 
-    private void ShowSqlGroupBySummary(int limit = 20)
-    {
-        string summary = ModLogger.GetSqlGroupBySummary(limit);
-        LogToConsole($"[color=cyan]{summary}[/color]");
-    }
-
     private void OnLogReceived(LogLevel level, string message)
     {
+#if !DEBUG
+        if (level == LogLevel.Debug) return;
+#endif
         string color = level switch
         {
             LogLevel.Debug => "gray",
             LogLevel.Info => "white",
             LogLevel.Warn => "yellow",
-            LogLevel.Error => "red",
+            LogLevel.Error => ModLogger.GetErrorColor(message),
             _ => "white"
         };
 
