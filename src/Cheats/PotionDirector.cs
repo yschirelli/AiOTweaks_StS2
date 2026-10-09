@@ -69,7 +69,6 @@ public static class PotionDirector
                     ModLogger.Verbose("PotionDirector", $"Calling PotionCmd.TryToProcure for '{mutable.GetType().Name}'...");
                     var procureTask = PotionCmd.TryToProcure(mutable, player, slotIndex);
                     
-                    // Direct fallback if TryToProcure didn't place it
                     if (player.GetPotionSlotIndex(mutable) == -1 && player.HasOpenPotionSlots)
                     {
                         player.AddPotionInternal(mutable, slotIndex, false);
@@ -85,7 +84,6 @@ public static class PotionDirector
                 }
             }
 
-            // Fallback via DevConsole
             ModLogger.Verbose("PotionDirector", $"Dispatching DevConsole command 'potion {potionId}'");
             GameHelper.ExecuteConsoleCommand($"potion {potionId}");
             OnPotionAdded?.Invoke(potionId);

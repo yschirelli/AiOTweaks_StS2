@@ -76,10 +76,6 @@ public static class GameEventHooks
         return creature.ModelId.Entry ?? creature.GetType().Name;
     }
 
-    // =========================================================================
-    // 1. MENUS & SCREENS (Open / Close)
-    // =========================================================================
-
     [HarmonyPatch(typeof(NSubmenu), nameof(NSubmenu.OnSubmenuOpened))]
     public static class SubmenuOpenedPatch
     {
@@ -222,10 +218,6 @@ public static class GameEventHooks
         }
     }
 
-    // =========================================================================
-    // 2. POTIONS (Drink / Procure / Discard)
-    // =========================================================================
-
     [HarmonyPatch(typeof(Hook), nameof(Hook.AfterPotionUsed))]
     public static class AfterPotionUsedPatch
     {
@@ -280,10 +272,6 @@ public static class GameEventHooks
             }
         }
     }
-
-    // =========================================================================
-    // 3. MAP NAVIGATION & ROOM NODES
-    // =========================================================================
 
     [HarmonyPatch(typeof(NMapScreen), nameof(NMapScreen.OnMapPointSelectedLocally))]
     public static class MapPointSelectedLocallyPatch
@@ -378,10 +366,6 @@ public static class GameEventHooks
             }
         }
     }
-
-    // =========================================================================
-    // 4. CARDS & MASTER DECK (Add / Remove / Upgrade / Transform / Enchant)
-    // =========================================================================
 
     [HarmonyPatch(typeof(CardPile), nameof(CardPile.AddInternal))]
     public static class CardPileAddInternalPatch
@@ -515,10 +499,6 @@ public static class GameEventHooks
         }
     }
 
-    // =========================================================================
-    // 5. RELICS (Obtain / Remove / Flash)
-    // =========================================================================
-
     [HarmonyPatch(typeof(Player), nameof(Player.AddRelicInternal))]
     public static class PlayerAddRelicInternalPatch
     {
@@ -573,10 +553,6 @@ public static class GameEventHooks
             }
         }
     }
-
-    // =========================================================================
-    // 6. NARRATIVE EVENTS
-    // =========================================================================
 
     [HarmonyPatch(typeof(EventModel), nameof(EventModel.BeginEvent))]
     public static class EventModelBeginEventPatch
@@ -635,10 +611,6 @@ public static class GameEventHooks
         }
     }
 
-    // =========================================================================
-    // 7. REST SITES / CAMPFIRE
-    // =========================================================================
-
     [HarmonyPatch(typeof(NRestSiteRoom), nameof(NRestSiteRoom.AfterSelectingOption))]
     public static class RestSiteRoomAfterSelectingOptionPatch
     {
@@ -692,10 +664,6 @@ public static class GameEventHooks
             }
         }
     }
-
-    // =========================================================================
-    // 8. SHOPS & ECONOMY
-    // =========================================================================
 
     [HarmonyPatch(typeof(Hook), nameof(Hook.AfterItemPurchased))]
     public static class AfterItemPurchasedPatch
@@ -754,10 +722,6 @@ public static class GameEventHooks
         }
     }
 
-    // =========================================================================
-    // 9. TREASURE & REWARDS
-    // =========================================================================
-
     [HarmonyPatch(typeof(NTreasureRoom), "OpenChest")]
     public static class TreasureRoomOpenChestPatch
     {
@@ -812,10 +776,6 @@ public static class GameEventHooks
             }
         }
     }
-
-    // =========================================================================
-    // 10. COMBAT LIFECYCLE
-    // =========================================================================
 
     [HarmonyPatch(typeof(Hook), nameof(Hook.AfterPlayerTurnStart))]
     public static class AfterPlayerTurnStartPatch

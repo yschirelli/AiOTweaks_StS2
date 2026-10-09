@@ -36,25 +36,23 @@ public static class GameplayInvariantMonitor
             var creature = player?.Creature;
             if (creature == null) return;
 
-            // Invariant 1: Player Block must be >= 0
+            // Player Block must be >= 0
             if (creature.Block < 0)
             {
                 ReportViolation(eventContext, $"Player Block is negative: {creature.Block}");
             }
 
-            // Invariant 2: Player HP sanity
             if (creature.CurrentHp > creature.MaxHp)
             {
                 ReportViolation(eventContext, $"Player HP exceeded MaxHP: {creature.CurrentHp}/{creature.MaxHp}");
             }
 
-            // Invariant 3: Player Energy must be >= 0
+            // Player Energy must be >= 0
             if (player?.PlayerCombatState != null && player.PlayerCombatState.Energy < 0)
             {
                 ReportViolation(eventContext, $"Player Energy is negative: {player.PlayerCombatState.Energy}");
             }
 
-            // Invariant 4: Status power stacks sanity
             var powers = GameHelper.GetCreatureActivePowers(creature);
             if (powers != null)
             {
@@ -67,7 +65,6 @@ public static class GameplayInvariantMonitor
                 }
             }
 
-            // Invariant 5: Enemy health bounds
             var enemies = GameHelper.GetActiveCombatEnemies();
             if (enemies != null)
             {

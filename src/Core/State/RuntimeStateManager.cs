@@ -12,7 +12,6 @@ public static class RuntimeStateManager
 {
     private static readonly object LockObject = new();
 
-    // Cheat toggles
     public static bool GodModeEnabled { get; set; } = false;
     public static bool InfiniteEnergyEnabled { get; set; } = false;
     public static bool OneHitKillEnabled { get; set; } = false;
@@ -20,16 +19,13 @@ public static class RuntimeStateManager
     public static bool NoCardExhaustEnabled { get; set; } = false;
     public static bool FreeMapNavigationEnabled { get; set; } = false;
 
-    // Endless mode state
     public static int CurrentEndlessLoopCount { get; set; } = 0;
 
-    // Director transient overrides
     public static string? ForcedNextEventId { get; set; } = null;
     public static int? ForcedGoldDropAmount { get; set; } = null;
     public static int? OverrideBonusEnergy { get; set; } = null;
     public static int? OverrideCardDrawCount { get; set; } = null;
 
-    // Custom runtime modifiers and active cheats log
     private static readonly HashSet<string> ActiveCheatFlags = new();
 
     public static event Action? OnStateReset;

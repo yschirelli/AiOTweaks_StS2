@@ -51,10 +51,8 @@ public static class RunDiagnosticLogger
                     Directory.CreateDirectory(logsDir);
                 }
 
-                // Resolve character name / ID from game state
                 string charName = ResolveCharacterName(runState);
 
-                // Resolve seed values
                 string stringSeed = runState?.Rng?.StringSeed ?? "UNKNOWN";
                 string numericSeed = runState?.Rng?.Seed.ToString() ?? "0";
 
@@ -66,10 +64,8 @@ public static class RunDiagnosticLogger
                 _currentRunWriter = new StreamWriter(fs, Encoding.UTF8) { AutoFlush = true };
                 _isRunActive = true;
 
-                // Subscribe to ModLogger stream for this run session
                 ModLogger.OnLogged += OnGlobalModLogged;
 
-                // Build header
                 string header = BuildRunHeader(runState, snapshot, config, charName, stringSeed, numericSeed, _currentRunLogPath);
                 _currentRunWriter.WriteLine(header);
 
@@ -96,9 +92,6 @@ public static class RunDiagnosticLogger
             try
             {
                 ModLogger.Flush();
-
-                string sqlSummary = ModLogger.GetSqlGroupBySummary(30);
-                _currentRunWriter.WriteLine("\n" + sqlSummary);
 
                 string footer =
                     "\n================================================================================\n" +
@@ -172,7 +165,6 @@ public static class RunDiagnosticLogger
         sb.AppendLine("================================================================================");
         sb.AppendLine();
 
-        // 1. Run Metadata
         int profileId = snapshot?.ProfileId ?? RunTweaksSaveManager.GetCurrentProfileId();
         int roomCount = snapshot?.PreRunTweaks?.MapRoomCount ?? config.PreRunTweaks.MapRoomCount;
         bool isCustom = snapshot?.IsCustom ?? RunTweaksSaveManager.IsCustomRun(config.PreRunTweaks, ConfigManager.ActiveRunSettings);
@@ -191,7 +183,6 @@ public static class RunDiagnosticLogger
         sb.AppendLine($"Free Map Nav    : {(freeMapNav ? "Enabled (Flying Boots Mode)" : "Disabled")}");
         sb.AppendLine();
 
-        // 2. Snapshot Tweaks Used to Generate This Run
         var tweaks = snapshot?.PreRunTweaks ?? config.PreRunTweaks;
         sb.AppendLine("[SNAPSHOT TWEAKS USED TO GENERATE THIS RUN]");
         sb.AppendLine($"  - Map Room Count Override       : {tweaks.MapRoomCount}");
@@ -217,7 +208,6 @@ public static class RunDiagnosticLogger
         sb.AppendLine($"      * Treasure Rooms            : {tweaks.MapNodeDistribution.TreasureRoomMultiplier:F2}x");
         sb.AppendLine();
 
-        // 3. Mod Configuration Snapshot
         sb.AppendLine("[MOD CONFIGURATION SNAPSHOT]");
         sb.AppendLine($"  - General Enabled               : {config.General.Enabled}");
         sb.AppendLine($"  - Hotkeys                       : Console={config.General.ConsoleHotkey} | Settings={config.General.GuiOverlayHotkey} | Shop={config.General.QuickOpenShopKey}");

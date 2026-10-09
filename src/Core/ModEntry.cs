@@ -52,7 +52,6 @@ public partial class ModEntry : Node
         }
         catch
         {
-            // Fallback to static constant
         }
         return ModVersion;
     }
@@ -81,7 +80,6 @@ public partial class ModEntry : Node
 
             _instance = new ModEntry { Name = "AIOTweaksModEntry" };
 
-            // Attach ModEntry node to the running Godot SceneTree root
             if (Engine.GetMainLoop() is SceneTree sceneTree && sceneTree.Root != null)
             {
                 sceneTree.Root.CallDeferred("add_child", _instance);

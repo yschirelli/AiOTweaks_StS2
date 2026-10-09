@@ -66,7 +66,6 @@ public static class StatusDirector
                 }
             }
 
-            // Fallback via DevConsole (if player creature)
             if (target.IsPlayer)
             {
                 ModLogger.Verbose("StatusDirector", $"Dispatching DevConsole command 'power {powerId} {amount}'");

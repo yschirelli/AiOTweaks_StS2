@@ -30,7 +30,6 @@ public static class TurnMetricsTracker
 
     public static void OnTurnStart()
     {
-        // If we were already in a turn, finish and report that turn first
         if (_inTurn)
         {
             EmitTurnReport();
@@ -125,7 +124,6 @@ public static class TurnMetricsTracker
         sb.AppendLine($"║ Energy:    Spent: {_totalEnergySpent}");
         sb.AppendLine($"║ Cards:     Count: {_cardsPlayedThisTurn.Count} [{( _cardsPlayedThisTurn.Count > 0 ? string.Join(", ", _cardsPlayedThisTurn) : "None" )}]");
 
-        // Format active status powers
         var powers = GameHelper.GetCreatureActivePowers(creature);
         if (powers != null && powers.Count > 0)
         {

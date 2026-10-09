@@ -58,10 +58,9 @@ public static class PauseMenuHooks
         {
             ModLogger.Info("[PauseMenuHooks] 'Save and Quit' triggered. Intercepting CloseToMenu...");
 
-            // 1. Disable pause menu buttons to prevent double interactions
+            // Disable pause menu buttons to prevent double interactions
             DisablePauseMenuButtons(menu);
 
-            // 2. Stop in-game music and debug audio
             try
             {
                 NRunMusicController.Instance?.StopMusic();
@@ -72,7 +71,6 @@ public static class PauseMenuHooks
                 ModLogger.Warn($"[PauseMenuHooks] Non-fatal audio stop warning: {ex.Message}");
             }
 
-            // 3. Save run state and tweaks snapshot if a run is active
             var runManager = RunManager.Instance;
             var runState = MapGenerationHooks.GetRunState(runManager);
 
@@ -115,7 +113,6 @@ public static class PauseMenuHooks
                 ModLogger.Warn($"[PauseMenuHooks] Run cannot be saved: RunManager={runManager != null}, RunState={runState != null}");
             }
 
-            // 4. Return to main menu
             ModLogger.Info("[PauseMenuHooks] Returning to main menu...");
             if (NGame.Instance != null)
             {

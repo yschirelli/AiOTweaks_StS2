@@ -73,7 +73,6 @@ public static class CombatDirector
                 return;
             }
 
-            // Fallback to dev console if combat state not resolved
             GameHelper.ExecuteConsoleCommand("kill all");
             ModLogger.Info("Executed 'kill all' command via DevConsole (fallback).");
         }

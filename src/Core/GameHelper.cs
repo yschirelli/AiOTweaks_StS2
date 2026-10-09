@@ -80,7 +80,6 @@ public static class GameHelper
     {
         try
         {
-            // 1. Primary core engine singleton (RunManager.Instance.State)
             if (RunManager.Instance != null && RunManagerStateProp != null)
             {
                 if (RunManagerStateProp.GetValue(RunManager.Instance) is RunState runState && runState.Players is { Count: > 0 } runPlayers)
@@ -93,7 +92,6 @@ public static class GameHelper
                 }
             }
 
-            // 2. CombatManager singleton (CombatManager.Instance.StateTracker._state)
             if (CombatManager.Instance?.StateTracker != null && CombatTrackerStateField != null)
             {
                 if (CombatTrackerStateField.GetValue(CombatManager.Instance.StateTracker) is CombatState combatState && combatState.Players is { Count: > 0 } combatPlayers)
@@ -106,7 +104,6 @@ public static class GameHelper
                 }
             }
 
-            // 3. NPlayerHand combat UI fallback
             if (MegaCrit.Sts2.Core.Nodes.Combat.NPlayerHand.Instance != null)
             {
                 var handStateField = typeof(MegaCrit.Sts2.Core.Nodes.Combat.NPlayerHand).GetField("_combatState", BindingFlags.NonPublic | BindingFlags.Instance);
@@ -120,7 +117,6 @@ public static class GameHelper
                 }
             }
 
-            // 4. NRun UI node fallback
             if (NRun.Instance != null && RunStateField != null)
             {
                 if (RunStateField.GetValue(NRun.Instance) is RunState runState && runState.Players is { Count: > 0 } nrunPlayers)
@@ -323,7 +319,6 @@ public static class GameHelper
     {
         try
         {
-            // 1. Refresh cards held in combat hand
             if (MegaCrit.Sts2.Core.Nodes.Combat.NPlayerHand.Instance != null)
             {
                 var hand = MegaCrit.Sts2.Core.Nodes.Combat.NPlayerHand.Instance;
@@ -341,7 +336,6 @@ public static class GameHelper
                 }
             }
 
-            // 2. Scan entire active scene tree for any other active NCard nodes
             var root = ((SceneTree)Engine.GetMainLoop())?.Root;
             if (root != null)
             {
@@ -391,7 +385,6 @@ public static class GameHelper
             }
             else
             {
-                // Fallback: If in combat, target combat room's SceneContainer; if in event, event container
                 if (NCombatRoom.Instance != null && GodotObject.IsInstanceValid(NCombatRoom.Instance) && NCombatRoom.Instance.SceneContainer != null)
                 {
                     NGame.Instance?.SetScreenShakeTarget(NCombatRoom.Instance.SceneContainer);
@@ -445,7 +438,6 @@ public static class GameHelper
             // Restore screen shake target to prevent screen shake breaking after shop closes
             RestoreScreenShakeTarget();
 
-            // Release GUI focus from freed controls
             try
             {
                 var tree = Engine.GetMainLoop() as SceneTree;
@@ -593,14 +585,12 @@ public static class GameHelper
             var tree = (SceneTree)Engine.GetMainLoop();
             if (tree?.Root == null) return false;
 
-            // Check if shop overlay is already open
             var existingLayer = tree.Root.GetNodeOrNull<CanvasLayer>("AIOTweaks_ShopCanvasLayer");
             if (existingLayer != null && GodotObject.IsInstanceValid(existingLayer))
             {
                 CleanUpShopOverlay(existingLayer, null, null);
             }
 
-            // Load merchant room scene
             var packed = GD.Load<PackedScene>("res://scenes/rooms/merchant_room.tscn")
                 ?? PreloadManager.Cache?.GetScene("res://scenes/rooms/merchant_room.tscn");
             if (packed == null)
@@ -616,7 +606,6 @@ public static class GameHelper
                 return false;
             }
 
-            // Find NMerchantInventory child node
             NMerchantInventory? inventoryNode = null;
             foreach (var child in tempRoom.GetChildren())
             {
@@ -641,7 +630,6 @@ public static class GameHelper
                 return false;
             }
 
-            // Find NProceedButton child node from merchant_room scene
             NProceedButton? proceedButton = tempRoom.ProceedButton
                 ?? tempRoom.GetNodeOrNull<NProceedButton>("%ProceedButton")
                 ?? tempRoom.GetNodeOrNull<NProceedButton>("ProceedButton")
@@ -670,13 +658,11 @@ public static class GameHelper
             }
             tree.Root.AddChild(canvasLayer);
 
-            // Generate fresh randomized inventory and initialize inventoryNode now that internal nodes are resolved
             var freshInventory = MerchantInventory.CreateForNormalMerchant(player);
             var dialogue = new MerchantDialogueSet();
 
             inventoryNode.Initialize(freshInventory, dialogue);
 
-            // Configure proceed button just like the in-game shop event / merchant room
             if (proceedButton != null)
             {
                 proceedButton.UpdateText(NProceedButton.ProceedLoc);
@@ -689,7 +675,6 @@ public static class GameHelper
                 }));
             }
 
-            // Connect close event to clean up canvasLayer
             inventoryNode.InventoryClosed += () =>
             {
                 CleanUpShopOverlay(canvasLayer, proceedButton, inventoryNode);
@@ -784,7 +769,6 @@ public static class GameHelper
         ModLogger.Verbose("GameHelper", $"RefreshHealthUi invoked for creature: {creature?.GetType().Name ?? "all"}");
         try
         {
-            // 1. Update TopBar HP UI in real-time
             if (NRun.Instance?.GlobalUi?.TopBar?.Hp != null)
             {
                 try
@@ -798,7 +782,6 @@ public static class GameHelper
                 }
             }
 
-            // 2. Update combat room creature health bars in real-time
             if (NRun.Instance?.CombatRoom != null)
             {
                 var combatRoom = NRun.Instance.CombatRoom;
@@ -852,14 +835,12 @@ public static class GameHelper
                 {
                     if (node != null && GodotObject.IsInstanceValid(node))
                     {
-                        // 1. Refresh intents asynchronously
                         try
                         {
                             _ = node.RefreshIntents();
                         }
                         catch { }
 
-                        // 2. Refresh creature state display
                         try
                         {
                             var stateDisplayField = typeof(MegaCrit.Sts2.Core.Nodes.Combat.NCreature).GetField("_stateDisplay", BindingFlags.NonPublic | BindingFlags.Instance);
@@ -870,7 +851,6 @@ public static class GameHelper
                         }
                         catch { }
 
-                        // 3. Refresh NIntent visual nodes
                         try
                         {
                             var intentContainer = node.IntentContainer;
@@ -946,7 +926,6 @@ public static class GameHelper
         ModLogger.Verbose("GameHelper", "GetAllRelicIds: scanning ModelDb and assemblies for relics...");
         var results = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        // 1. Try ModelDb first (available if game runtime has initialized ModelDb)
         try
         {
             if (ModelDb.AllRelics != null)
@@ -966,7 +945,6 @@ public static class GameHelper
             ModLogger.Debug($"ModelDb relic scan notice: {ex.Message}");
         }
 
-        // 2. Scan assemblies for concrete RelicModel subtypes
         try
         {
             var assemblies = AppDomain.CurrentDomain.GetAssemblies();
@@ -1015,7 +993,6 @@ public static class GameHelper
         ModLogger.Verbose("GameHelper", "GetAllCardIds: scanning ModelDb and assemblies for cards...");
         var results = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        // 1. Try ModelDb first
         try
         {
             if (ModelDb.AllCards != null)
@@ -1035,7 +1012,6 @@ public static class GameHelper
             ModLogger.Debug($"ModelDb card scan notice: {ex.Message}");
         }
 
-        // 2. Scan assemblies for concrete CardModel subtypes
         try
         {
             var assemblies = AppDomain.CurrentDomain.GetAssemblies();
@@ -1109,7 +1085,6 @@ public static class GameHelper
         {
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            // 1. From Character models
             if (ModelDb.AllCharacters != null)
             {
                 foreach (var ch in ModelDb.AllCharacters)
@@ -1127,7 +1102,6 @@ public static class GameHelper
                 }
             }
 
-            // 2. From AllCardPools
             if (ModelDb.AllCardPools != null)
             {
                 foreach (var pool in ModelDb.AllCardPools)
@@ -1208,7 +1182,6 @@ public static class GameHelper
         ModLogger.Verbose("GameHelper", "GetAllPotionInfos: scanning ModelDb and assemblies for potions...");
         var dict = new Dictionary<string, PotionInfo>(StringComparer.OrdinalIgnoreCase);
 
-        // 1. From ModelDb
         try
         {
             if (ModelDb.AllPotions != null)
@@ -1232,7 +1205,6 @@ public static class GameHelper
             ModLogger.Debug($"ModelDb potion scan notice: {ex.Message}");
         }
 
-        // 2. From Assemblies
         try
         {
             var assemblies = AppDomain.CurrentDomain.GetAssemblies();
@@ -1473,7 +1445,6 @@ public static class GameHelper
                 ModLogger.Info($"GameHelper: Set player MaxPotionCount to {slots} (was {oldSlots}).");
             }
 
-            // Directly trigger TopBar & PotionContainer synchronization if active
             var topBar = MegaCrit.Sts2.Core.Nodes.NRun.Instance?.GlobalUi?.TopBar;
             if (topBar != null && GodotObject.IsInstanceValid(topBar))
             {
@@ -1537,7 +1508,6 @@ public static class GameHelper
         ModLogger.Verbose("GameHelper", "GetAllPowerInfos: scanning ModelDb and assemblies for powers/statuses...");
         var dict = new Dictionary<string, PowerInfo>(StringComparer.OrdinalIgnoreCase);
 
-        // 1. From ModelDb
         try
         {
             if (ModelDb.AllPowers != null)
@@ -1561,7 +1531,6 @@ public static class GameHelper
             ModLogger.Debug($"ModelDb power scan notice: {ex.Message}");
         }
 
-        // 2. From Assemblies
         try
         {
             var assemblies = AppDomain.CurrentDomain.GetAssemblies();
@@ -1798,7 +1767,6 @@ public static class GameHelper
         ModLogger.Verbose("GameHelper", "GetAllEventInfos: scanning ModelDb and assemblies for events & ancients...");
         var dict = new Dictionary<string, EventInfo>(StringComparer.OrdinalIgnoreCase);
 
-        // 1. From ModelDb (AllEvents and AllAncients)
         try
         {
             var allEvents = (ModelDb.AllEvents ?? Enumerable.Empty<EventModel>())
@@ -1822,7 +1790,6 @@ public static class GameHelper
             ModLogger.Debug($"ModelDb event discovery error: {ex.Message}");
         }
 
-        // 2. From Assemblies
         try
         {
             var assemblies = AppDomain.CurrentDomain.GetAssemblies();
@@ -1879,7 +1846,6 @@ public static class GameHelper
         string upper = clean.ToUpperInvariant();
         ModLogger.Verbose("GameHelper", $"GetEventModel: searching for event '{idOrName}' (clean: '{clean}', upper: '{upper}')");
 
-        // 1. Try Direct ModelDb.GetByIdOrNull
         try
         {
             var eventId = new ModelId("EVENT", upper);
@@ -1892,7 +1858,6 @@ public static class GameHelper
         }
         catch { }
 
-        // 2. Iterate ModelDb.AllEvents & AllAncients
         try
         {
             var allEvents = (ModelDb.AllEvents ?? Enumerable.Empty<EventModel>())
@@ -1912,7 +1877,6 @@ public static class GameHelper
         }
         catch { }
 
-        // 3. Fallback: Find type from assemblies
         try
         {
             var assemblies = AppDomain.CurrentDomain.GetAssemblies();
@@ -2010,7 +1974,6 @@ public static class GameHelper
         if (string.IsNullOrWhiteSpace(text)) return "";
         // Strip custom STS2 & Godot BBCode tags like [jitter], [sine], [b], [i], [orange], [gold], [aqua], [color=...], etc.
         string cleaned = System.Text.RegularExpressions.Regex.Replace(text, @"\[/?[a-zA-Z0-9_#=]+\]", "");
-        // Clean up excessive whitespace/blank lines while preserving readable paragraphs
         cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, @"\n{3,}", "\n\n");
         return cleaned.Trim();
     }
@@ -2020,7 +1983,6 @@ public static class GameHelper
         if (string.IsNullOrWhiteSpace(text) || ev == null) return text ?? "";
         try
         {
-            // 1. Resolve from DynamicVars dictionary
             var dynamicVarsProp = ev.GetType().GetProperty("DynamicVars", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
             if (dynamicVarsProp?.GetValue(ev) is System.Collections.IEnumerable dynamicVars)
             {
@@ -2045,7 +2007,6 @@ public static class GameHelper
                 }
             }
 
-            // 2. Resolve from CanonicalVars if any remain
             var canonicalVarsProp = ev.GetType().GetProperty("CanonicalVars", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
             if (canonicalVarsProp?.GetValue(ev) is System.Collections.IEnumerable canonicalVars)
             {
@@ -2075,7 +2036,6 @@ public static class GameHelper
         if (loc == null) return "";
         try
         {
-            // Bind dynamic variables if available
             if (ev?.DynamicVars != null)
             {
                 try
@@ -2159,10 +2119,8 @@ public static class GameHelper
                     sb.AppendLine(desc);
                 }
 
-                // Extract Choices / Options if available
                 var optionLines = new List<string>();
 
-                // 1. Try GameInfoOptions
                 var gameInfoProp = ev.GetType().GetProperty("GameInfoOptions", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
                 if (gameInfoProp != null)
                 {
@@ -2209,7 +2167,6 @@ public static class GameHelper
                     catch { }
                 }
 
-                // 2. Fallback to CurrentOptions / GenerateInitialOptions if GameInfoOptions had no items
                 if (optionLines.Count == 0)
                 {
                     try
@@ -2600,7 +2557,6 @@ public static class GameHelper
         if (relic == null) return "";
         try
         {
-            // 1. Try DynamicDescription first (the actual in-game functional text)
             try
             {
                 string dyn = relic.DynamicDescription.GetFormattedText();
@@ -2611,7 +2567,6 @@ public static class GameHelper
             }
             catch { }
 
-            // 2. Try HoverTip.Description
             try
             {
                 var ht = relic.HoverTip;
@@ -2622,7 +2577,6 @@ public static class GameHelper
             }
             catch { }
 
-            // 3. Try Description property
             try
             {
                 var descProp = relic.GetType().GetProperty("Description", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
@@ -2637,7 +2591,6 @@ public static class GameHelper
             }
             catch { }
 
-            // 4. Try EventDescription
             try
             {
                 var eventDescProp = relic.GetType().GetProperty("DynamicEventDescription", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance) ??
@@ -2672,7 +2625,6 @@ public static class GameHelper
             sb.AppendLine(title);
             sb.AppendLine($"Rarity: {relic.Rarity}");
 
-            // 1. Relic main gameplay description
             string desc = GetRelicDescription(relic);
             if (!string.IsNullOrWhiteSpace(desc))
             {
@@ -2680,7 +2632,6 @@ public static class GameHelper
                 sb.AppendLine(desc);
             }
 
-            // 2. Extra Keyword HoverTips (e.g. Doom, Strength, Block, etc.)
             try
             {
                 var hoverTips = relic.HoverTips;
@@ -2693,7 +2644,6 @@ public static class GameHelper
                             string tipTitle = CleanBbCode(ht.Title ?? "").Trim();
                             string tipDesc = CleanBbCode(ht.Description ?? "").Trim();
 
-                            // Skip if it's the main relic tooltip itself
                             if (tipTitle.Equals(title, StringComparison.OrdinalIgnoreCase) || 
                                 tipDesc.Equals(desc, StringComparison.OrdinalIgnoreCase))
                             {
@@ -2723,7 +2673,6 @@ public static class GameHelper
             }
             catch { }
 
-            // 3. Add Flavor lore if distinct and not a generic placeholder
             try
             {
                 string flavor = CleanBbCode(relic.Flavor.GetFormattedText() ?? "").Trim();
@@ -2929,7 +2878,6 @@ public static class GameHelper
             }
             catch { }
 
-            // Scale DynamicVars based on amount multiplier
             try
             {
                 if (result.DynamicVars != null)
@@ -3270,7 +3218,6 @@ public static class GameHelper
             catch { }
         }
 
-        // Fallback: regular player creation and explicit CombatState registration if active
         var fallback = CreateCardForPlayer(canonical, player);
         if (fallback != null && combatState != null && player != null && !combatState.ContainsCard(fallback))
         {

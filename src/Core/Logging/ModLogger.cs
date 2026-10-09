@@ -16,19 +16,22 @@ public enum LogLevel
     Error = 3
 }
 
-public sealed class LogHistoryEntry
+public enum ErrorType
 {
-    public DateTime Timestamp { get; set; }
-    public LogLevel Level { get; set; }
-    public string SourceTag { get; set; } = string.Empty;
-    public string Message { get; set; } = string.Empty;
+    General,
+    Syntax,
+    NotFound,
+    Validation,
+    Exception,
+    Critical
 }
 
 /// <summary>
 /// Centralized logging utility for AIOTweaks mod with tag formatting, timestamping, and log level filtering.
 /// Delivers real-time diagnostic information to the in-game debug console, Godot terminal, and file output.
-/// Features high-performance Lag-1 deduplication to suppress repeating log spam and provides SQL-style GROUP BY log analytics.
+/// Features high-performance Lag-1 deduplication to suppress repeating log spam.
 /// When compiled in DEBUG configuration, verbose logging and file logging to the mod's root folder are forcefully enabled by default.
+/// In RELEASE configuration, debug messages are fully disabled and stripped, keeping only necessary diagnostic logs.
 /// </summary>
 public static class ModLogger
 {
@@ -39,7 +42,6 @@ public static class ModLogger
     private static StreamWriter? _logWriter;
     private static bool _fileLoggingInitialized = false;
 
-    // Lag-1 deduplication engine
     private static readonly object _lagLock = new();
     private static string? _lastRawMessage;
     private static LogLevel _lastLogLevel = LogLevel.Debug;
@@ -47,11 +49,6 @@ public static class ModLogger
     private static DateTime _firstOccurrenceTime = DateTime.MinValue;
     private static DateTime _lastOccurrenceTime = DateTime.MinValue;
     private static readonly System.Threading.Timer _quietTimer = new(OnQuietTimerExpired, null, Timeout.Infinite, Timeout.Infinite);
-
-    // SQL Group By history state
-    private static readonly object _historyLock = new();
-    private static readonly List<LogHistoryEntry> _history = new(1024);
-    private const int MaxHistoryEntries = 1000;
 
 #if DEBUG
     public const bool IsDebugBuild = true;
@@ -97,13 +94,31 @@ public static class ModLogger
         }
     }
 
+    private static LogLevel _minimumLevel = IsDebugBuild ? LogLevel.Debug : LogLevel.Info;
+
     /// <summary>
     /// Minimum log level for filtering. In debug builds, defaults to Debug so all verbose diagnostics are captured.
+    /// In release builds, debug messages are disabled and cannot be set below Info.
     /// </summary>
-    public static LogLevel MinimumLevel { get; set; } = IsDebugBuild ? LogLevel.Debug : LogLevel.Info;
+    public static LogLevel MinimumLevel
+    {
+        get => _minimumLevel;
+        set
+        {
+#if !DEBUG
+            if (value < LogLevel.Info)
+            {
+                _minimumLevel = LogLevel.Info;
+                return;
+            }
+#endif
+            _minimumLevel = value;
+        }
+    }
 
     public static event Action<LogLevel, string>? OnLogged;
 
+    [System.Diagnostics.Conditional("DEBUG")]
     public static void Debug(string message)
     {
         if (MinimumLevel <= LogLevel.Debug)
@@ -112,6 +127,7 @@ public static class ModLogger
         }
     }
 
+    [System.Diagnostics.Conditional("DEBUG")]
     public static void Verbose(string caller, string message)
     {
         if (MinimumLevel <= LogLevel.Debug)
@@ -151,9 +167,62 @@ public static class ModLogger
         }
     }
 
+    /// <summary>
+    /// Resolves BBCode color text representing the category of the given error message.
+    /// </summary>
+    public static string GetErrorColor(string message, ErrorType type = ErrorType.General)
+    {
+        if (type == ErrorType.Critical ||
+            message.Contains("CRASH", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("INVARIANT", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("REGRESSION", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("FATAL", StringComparison.OrdinalIgnoreCase))
+        {
+            return "magenta";
+        }
+
+        if (type == ErrorType.Exception ||
+            message.Contains("Exception", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("NullReference", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("StackTrace", StringComparison.OrdinalIgnoreCase))
+        {
+            return "crimson";
+        }
+
+        if (type == ErrorType.Syntax ||
+            message.Contains("Usage:", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("Syntax", StringComparison.OrdinalIgnoreCase))
+        {
+            return "orange";
+        }
+
+        if (type == ErrorType.NotFound ||
+            message.Contains("not found", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("No active", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("does not exist", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("Ensure you are in an active run", StringComparison.OrdinalIgnoreCase))
+        {
+            return "tomato";
+        }
+
+        if (type == ErrorType.Validation ||
+            message.Contains("Unknown", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("Invalid", StringComparison.OrdinalIgnoreCase))
+        {
+            return "coral";
+        }
+
+        return "red"; // Standard operation failures
+    }
+
     private static void Log(LogLevel level, string message)
     {
         if (string.IsNullOrEmpty(message)) return;
+
+#if !DEBUG
+        // In release builds, disable all debug messages; only keep necessary (Info, Warn, Error)
+        if (level == LogLevel.Debug) return;
+#endif
 
         string? pendingRepeatMessage = null;
         LogLevel pendingRepeatLevel = LogLevel.Debug;
@@ -189,16 +258,13 @@ public static class ModLogger
                     }
                     catch { }
 
-                    // Duplicate suppressed unless threshold heartbeat triggered
                     if (pendingRepeatMessage == null)
                     {
-                        RecordHistoryInternal(level, message);
                         return;
                     }
                 }
                 else
                 {
-                    // Message changed from lag(1)! Flush previous repeat if it was repeated
                     if (_repeatCount > 1 && _lastRawMessage != null)
                     {
                         string ts = now.ToString("HH:mm:ss.fff");
@@ -232,8 +298,6 @@ public static class ModLogger
             emitLevel = level;
         }
 
-        RecordHistoryInternal(level, message);
-
         if (pendingRepeatMessage != null)
         {
             DispatchFormattedLog(pendingRepeatLevel, pendingRepeatMessage);
@@ -252,6 +316,10 @@ public static class ModLogger
             switch (level)
             {
                 case LogLevel.Debug:
+#if DEBUG
+                    GD.Print(formatted);
+#endif
+                    break;
                 case LogLevel.Info:
                     GD.Print(formatted);
                     break;
@@ -274,7 +342,6 @@ public static class ModLogger
         }
         catch
         {
-            // Safeguard against subscriber errors in logging pipeline
         }
 
         if (FileLoggingEnabled)
@@ -340,106 +407,11 @@ public static class ModLogger
         }
     }
 
-    private static void RecordHistoryInternal(LogLevel level, string message)
-    {
-        try
-        {
-            lock (_historyLock)
-            {
-                var (sourceTag, cleanMsg) = ExtractSourceAndMessage(message);
-                _history.Add(new LogHistoryEntry
-                {
-                    Timestamp = DateTime.Now,
-                    Level = level,
-                    SourceTag = sourceTag,
-                    Message = cleanMsg
-                });
-
-                if (_history.Count > MaxHistoryEntries)
-                {
-                    _history.RemoveRange(0, _history.Count - MaxHistoryEntries);
-                }
-            }
-        }
-        catch { }
-    }
-
-    private static (string Source, string Message) ExtractSourceAndMessage(string rawMessage)
-    {
-        if (string.IsNullOrWhiteSpace(rawMessage)) return ("General", string.Empty);
-
-        if (rawMessage.StartsWith("["))
-        {
-            int close = rawMessage.IndexOf(']');
-            if (close > 1 && close <= 32)
-            {
-                string src = rawMessage.Substring(1, close - 1);
-                string msg = rawMessage.Substring(close + 1).Trim();
-                return (src, msg);
-            }
-        }
-
-        return ("General", rawMessage);
-    }
-
     private static string TruncatePreview(string? text, int maxLength)
     {
         if (string.IsNullOrEmpty(text)) return string.Empty;
         if (text.Length <= maxLength) return text;
         return text.Substring(0, maxLength - 3) + "...";
-    }
-
-    /// <summary>
-    /// Generates a SQL-like GROUP BY summary of recent log records ordered by occurrence count descending.
-    /// Emulates: SELECT COUNT(*), LEVEL, SOURCE, MESSAGE ... GROUP BY LEVEL, SOURCE, MESSAGE ORDER BY COUNT(*) DESC.
-    /// </summary>
-    public static string GetSqlGroupBySummary(int limit = 25)
-    {
-        lock (_historyLock)
-        {
-            if (_history.Count == 0)
-            {
-                return "=== SQL GROUP BY RECENT LOGS ===\nNo logs recorded in history buffer.";
-            }
-
-            var groups = _history
-                .GroupBy(e => new { e.Level, e.SourceTag, e.Message })
-                .Select(g => new
-                {
-                    g.Key.Level,
-                    g.Key.SourceTag,
-                    g.Key.Message,
-                    Count = g.Count(),
-                    FirstSeen = g.Min(e => e.Timestamp),
-                    LastSeen = g.Max(e => e.Timestamp)
-                })
-                .OrderByDescending(g => g.Count)
-                .Take(limit)
-                .ToList();
-
-            var sb = new StringBuilder();
-            sb.AppendLine($"=== SQL GROUP BY RECENT LOGS (Top {groups.Count} Groups) ===");
-            sb.AppendLine(string.Format("{0,-7} | {1,-6} | {2,-18} | {3}", "COUNT", "LEVEL", "SOURCE", "MESSAGE"));
-            sb.AppendLine(new string('-', 78));
-
-            foreach (var row in groups)
-            {
-                string src = row.SourceTag;
-                if (src.Length > 18) src = src.Substring(0, 15) + "...";
-                string msg = row.Message;
-                if (msg.Length > 44) msg = msg.Substring(0, 41) + "...";
-
-                sb.AppendLine(string.Format("{0,-7} | {1,-6} | {2,-18} | {3}", 
-                    row.Count, 
-                    row.Level.ToString().ToUpperInvariant(), 
-                    src, 
-                    msg));
-            }
-
-            sb.AppendLine(new string('-', 78));
-            sb.AppendLine($"Total log events tracked: {_history.Count} | Distinct signatures: {groups.Count} | Deduplication (Lag): {(LagDeduplicationEnabled ? "ACTIVE" : "OFF")}");
-            return sb.ToString();
-        }
     }
 
     public static string GetModRootDirectory()
@@ -512,7 +484,9 @@ public static class ModLogger
                     "=================================================================";
 
                 _logWriter.WriteLine(banner);
+#if DEBUG
                 GD.Print($"{Tag} [INIT] File logging initialized at: {_logFilePath}");
+#endif
             }
             catch (Exception ex)
             {

@@ -30,7 +30,6 @@ public static class EventDirector
 
         ModLogger.Info($"Immediately forcing event: '{eventId}' (Normalized: '{normalizedId}')");
 
-        // Primary: Native direct room transition
         try
         {
             if (eventModel != null && RunManager.Instance != null && RunManager.Instance.IsInProgress)
@@ -54,7 +53,6 @@ public static class EventDirector
             ModLogger.Warn($"Direct event room transition notice: {ex.Message}. Falling back to console command.");
         }
 
-        // Secondary fallback: DevConsole command
         ModLogger.Verbose("EventDirector", $"Dispatching DevConsole command: 'event {normalizedId}'");
         GameHelper.ExecuteConsoleCommand($"event {normalizedId}");
     }

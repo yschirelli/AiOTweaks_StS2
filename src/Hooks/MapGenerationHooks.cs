@@ -402,7 +402,6 @@ public static class RunTweaksSaveManager
                 return false;
             }
 
-            // Check if CombatManager is actively running or starting a combat encounter
             if (CombatManager.Instance != null && (CombatManager.Instance.IsInProgress || CombatManager.Instance.IsStarting))
             {
                 return true;
@@ -498,7 +497,7 @@ public static class RunTweaksSaveManager
                 return;
             }
 
-            // 1. Ensure ActChangeSynchronizer's _lastTransitioningActIndex is reset if it blocks the current act
+            // Ensure ActChangeSynchronizer's _lastTransitioningActIndex is reset if it blocks the current act
             if (runManager.ActChangeSynchronizer != null)
             {
                 var lastActField = AccessTools.Field(typeof(ActChangeSynchronizer), "_lastTransitioningActIndex");
@@ -510,7 +509,6 @@ public static class RunTweaksSaveManager
                 }
             }
 
-            // 2. Check if NRewardsScreen is on overlay stack
             var rewardsScreen = NOverlayStack.Instance?.Peek() as NRewardsScreen;
             if (rewardsScreen != null && GodotObject.IsInstanceValid(rewardsScreen))
             {
@@ -533,7 +531,6 @@ public static class RunTweaksSaveManager
                 return;
             }
 
-            // 3. If NRewardsScreen is not present or closed, rescue via NCombatRoom.ProceedButton
             var combatRoom = NCombatRoom.Instance;
             if (combatRoom != null && GodotObject.IsInstanceValid(combatRoom))
             {
@@ -589,7 +586,6 @@ public static class RunTweaksSaveManager
         if (ActiveSnapshot != null)
         {
             bool snapshotChanged = false;
-            // Sync EndlessMode if user enabled it in current config
             if (ConfigManager.Current?.PreRunTweaks?.EndlessMode?.Enabled == true && !ActiveSnapshot.PreRunTweaks.EndlessMode.Enabled)
             {
                 ActiveSnapshot.PreRunTweaks.EndlessMode.Enabled = true;
@@ -794,7 +790,7 @@ public static class MapGenerationHooks
         [HarmonyPrefix]
         public static bool Prefix()
         {
-            return false; // Suppress exception
+            return false;
         }
     }
 
@@ -980,7 +976,6 @@ public static class MapGenerationHooks
                         var isFinishedField = typeof(EventModel).GetField("_isFinished", BindingFlags.Instance | BindingFlags.NonPublic);
                         isFinishedField?.SetValue(architect, false);
 
-                        // Inject choices into architect's private _currentOptions list
                         var currentOptionsField = typeof(EventModel).GetField("_currentOptions", BindingFlags.Instance | BindingFlags.NonPublic);
                         if (currentOptionsField?.GetValue(architect) is List<EventOption> optionsList)
                         {
@@ -1041,10 +1036,8 @@ public static class MapGenerationHooks
         {
             ModLogger.Info("Player chose [[Endless] Continue Run (Loop to Act 1)] at Architect cutscene.");
 
-            // 1. Play player attack animation on the Architect (dealing damage for the current loop, without dying)
             await PlayArchitectAttackAnimationsAsync(architect, includeArchitectAttack: false);
 
-            // 2. Accumulate current loop score into global Architect stats
             try
             {
                 if (architect.Owner?.RunState != null)
@@ -1059,7 +1052,6 @@ public static class MapGenerationHooks
                 ModLogger.Warn($"Failed to increment global Architect damage: {ex.Message}");
             }
 
-            // 3. Clear speech bubble if active
             try
             {
                 var speechBubbleProp = typeof(TheArchitect).GetProperty("SpeechBubble", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -1076,7 +1068,7 @@ public static class MapGenerationHooks
             }
             catch { }
 
-            // 4. Reset TheArchitect state cleanly for future loops
+            // Reset TheArchitect state cleanly for future loops
             try
             {
                 var currentLineIndexProp = typeof(TheArchitect).GetProperty("CurrentLineIndex", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -1094,17 +1086,16 @@ public static class MapGenerationHooks
             }
             catch { }
 
-            // 5. Ensure player health is alive and healthy
+            // Ensure player health is alive and healthy
             if (architect.Owner?.Creature != null)
             {
                 architect.Owner.Creature.SetCurrentHpInternal(Math.Max(1, architect.Owner.Creature.CurrentHp));
             }
 
-            // 6. Increment endless loop count and persist snapshot
             RunTweaksSaveManager.IncrementEndlessLoop();
             ModLogger.Info($"Endless Mode looping back to Act 1 (Loop #{RuntimeStateManager.CurrentEndlessLoopCount}) with preserved cards, relics, gold, and cumulative score.");
 
-            // 7. Execute EnterAct deferred so this option task completes immediately,
+            // Execute EnterAct deferred so this option task completes immediately,
             // avoiding the deadlock with EventSynchronizer.AwaitPendingOptionTasks()!
             Callable.From(() =>
             {
@@ -1127,7 +1118,6 @@ public static class MapGenerationHooks
             {
                 int loop = RuntimeStateManager.CurrentEndlessLoopCount;
 
-                // Re-seed and regenerate fresh rooms for all acts for the new endless loop
                 uint loopSeed = (uint)(state.Rng.Seed ^ ((uint)loop * 0x9E3779B9u));
                 var loopRng = new MegaCrit.Sts2.Core.Random.Rng(loopSeed, $"endless_loop_{loop}");
 
@@ -1186,7 +1176,7 @@ public static class MapGenerationHooks
 
             RunTweaksSaveManager.ClearActiveRun("EndlessModeVictory");
 
-            // Execute TheArchitect's vanilla WinRun method so the scene proceeds as normal:
+            // Execute TheArchitect's vanilla WinRun method so the scene proceeds as normal
             // player attacks -> architect attacks & kills player -> RunManager.WinRun() -> Victory screen
             if (vanillaProceed != null)
             {
@@ -1307,7 +1297,6 @@ public static class MapGenerationHooks
 
                     foreach (var file in relativeFiles)
                     {
-                        // 1. Through UserDataPathProvider paths
                         try
                         {
                             string pModded = MegaCrit.Sts2.Core.Saves.UserDataPathProvider.GetProfileScopedPath(p, $"saves/{file}", null, null);
@@ -1315,7 +1304,6 @@ public static class MapGenerationHooks
                         }
                         catch { }
 
-                        // 2. Direct OS filesystem paths under .local/share/SlayTheSpire2/steam
                         try
                         {
                             string localBasePath = Path.Combine(
@@ -1335,7 +1323,6 @@ public static class MapGenerationHooks
                         }
                         catch { }
 
-                        // 3. Direct Steam userdata remote storage on disk
                         try
                         {
                             string steamUserdataPath = Path.Combine(
@@ -1359,7 +1346,6 @@ public static class MapGenerationHooks
                         }
                         catch { }
 
-                        // 4. SaveManager Store / Steam Remote Storage deletion
                         try
                         {
                             if (MegaCrit.Sts2.Core.Saves.SaveManager.Instance != null)
@@ -1857,7 +1843,7 @@ public static class MapGenerationHooks
                     }
                 }
 
-                // 2. Safe Fallback for long maps: if boxed in by crossovers, choose straight or nearest valid column without crashing
+                // Safe Fallback for long maps: if boxed in by crossovers, choose straight or nearest valid column without crashing
                 int fallbackCol = col;
                 if (leftCol != col && rightCol != col)
                 {
@@ -2024,7 +2010,7 @@ public static class MapGenerationHooks
                     {
                         flag = false;
                         passes++;
-                        if (passes > 10) break; // Hard safety cap against infinite oscillation
+                        if (passes > 10) break;
 
                         foreach (MapPoint item in list)
                         {
@@ -2107,7 +2093,7 @@ public static class MapGenerationHooks
                         null,
                         false // Disable pruning on fallback to guarantee 100% reliability
                     );
-                    return null; // Suppress exception
+                    return null;
                 }
                 catch (Exception fallbackEx)
                 {
@@ -2343,21 +2329,16 @@ public static class MapGenerationHooks
             bossY -= 300f * num;
         }
 
-        // Camera top limit is reached when boss is clearly visible at top of viewport
         float maxScroll = -bossY - 180f;
         return Math.Max(-600f, maxScroll);
     }
 
-    /// <summary>
-    /// Adjusts the parchment background (NMapBg) height and Y position to fit the act seamlessly.
-    /// </summary>
     private static void AdjustMapBackground(NMapBg? mapBg, float totalHeight, float bossY)
     {
         try
         {
             if (mapBg == null) return;
 
-            // Clean up any previously added dynamic extra middle segments
             var existingExtras = mapBg.GetChildren().OfType<TextureRect>().Where(c => c.Name.ToString().StartsWith("MapMid_Extra_")).ToList();
             foreach (var extra in existingExtras)
             {
@@ -2493,7 +2474,7 @@ public static class MapGenerationHooks
 
                 var drawings = AccessTools.Field(typeof(NMapBg), "_drawings")?.GetValue(__instance) as NMapDrawings;
                 drawings?.RepositionBasedOnBackground(__instance);
-                return false; // Skip original method
+                return false;
             }
             catch (Exception ex)
             {
@@ -3015,7 +2996,7 @@ public static class MapGenerationHooks
             catch (Exception ex)
             {
                 ModLogger.Error("Error in RoomSetGetAncientPatch", ex);
-                return true; // Let original run if reflection fails
+                return true;
             }
         }
     }
@@ -3036,7 +3017,7 @@ public static class MapGenerationHooks
                 if (boss != null)
                 {
                     __result = boss;
-                    return false; // Skip original getter
+                    return false;
                 }
 
                 var fallbackBoss = ModelDb.Encounter<VantomBoss>();
@@ -3047,7 +3028,7 @@ public static class MapGenerationHooks
             catch (Exception ex)
             {
                 ModLogger.Error("Error in RoomSetGetBossPatch", ex);
-                return true; // Let original run if reflection fails
+                return true;
             }
         }
     }
@@ -3186,7 +3167,7 @@ public static class MapGenerationHooks
                     RunTweaksSaveManager.IsRunActiveAndCustom())
                 {
                     __result = false;
-                    return false; // Skip tutorial reward generation, forcing dynamic procedural reward generation
+                    return false;
                 }
             }
             catch (Exception ex)

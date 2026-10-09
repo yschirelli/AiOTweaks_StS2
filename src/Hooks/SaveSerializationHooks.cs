@@ -100,7 +100,6 @@ public static class SaveSerializationHooks
 
             try
             {
-                // 1. Check BaseLib's registered ExtendedSaveTypes dictionary
                 var extendedTypes = s_extendedTypes.Value;
                 if (extendedTypes != null && extendedTypes.TryGetValue(type, out var factory))
                 {
@@ -112,7 +111,6 @@ public static class SaveSerializationHooks
                     }
                 }
 
-                // 2. Direct fallback for BaseLib LinkedRewardSet custom save types if factory resolution didn't produce an info
                 if (type.FullName != null && type.FullName.Contains("SerializableCustomLinkedRewardSet"))
                 {
                     var fallbackInfo = JsonTypeInfo.CreateJsonTypeInfo(type, options);

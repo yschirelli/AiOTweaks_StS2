@@ -83,7 +83,8 @@ public static class ConfigManager
                     ModLogger.MinimumLevel = LogLevel.Debug;
                     ModLogger.FileLoggingEnabled = true;
 #else
-                    ModLogger.MinimumLevel = Current.General.DebugLogging ? LogLevel.Debug : LogLevel.Info;
+                    ModLogger.MinimumLevel = LogLevel.Info;
+                    ModLogger.FileLoggingEnabled = false;
 #endif
                     ModLogger.Info($"Loaded configuration successfully from root directory: {primaryPath} (DebugLogging={Current.General.DebugLogging}, MinimumLevel={ModLogger.MinimumLevel})");
                     OnConfigChanged?.Invoke(Current);
@@ -119,7 +120,8 @@ public static class ConfigManager
                             ModLogger.MinimumLevel = LogLevel.Debug;
                             ModLogger.FileLoggingEnabled = true;
 #else
-                            ModLogger.MinimumLevel = Current.General.DebugLogging ? LogLevel.Debug : LogLevel.Info;
+                            ModLogger.MinimumLevel = LogLevel.Info;
+                            ModLogger.FileLoggingEnabled = false;
 #endif
                             ModLogger.Info($"Loaded configuration from fallback source: {fallbackPath}. Migrating/saving to root directory: {primaryPath}");
                             SaveConfig();
@@ -141,7 +143,8 @@ public static class ConfigManager
             ModLogger.MinimumLevel = LogLevel.Debug;
             ModLogger.FileLoggingEnabled = true;
 #else
-            ModLogger.MinimumLevel = Current.General.DebugLogging ? LogLevel.Debug : LogLevel.Info;
+            ModLogger.MinimumLevel = LogLevel.Info;
+            ModLogger.FileLoggingEnabled = false;
 #endif
             SaveConfig();
         }
@@ -155,7 +158,8 @@ public static class ConfigManager
             ModLogger.MinimumLevel = LogLevel.Debug;
             ModLogger.FileLoggingEnabled = true;
 #else
-            ModLogger.MinimumLevel = Current.General.DebugLogging ? LogLevel.Debug : LogLevel.Info;
+            ModLogger.MinimumLevel = LogLevel.Info;
+            ModLogger.FileLoggingEnabled = false;
 #endif
             OnConfigChanged?.Invoke(Current);
         }

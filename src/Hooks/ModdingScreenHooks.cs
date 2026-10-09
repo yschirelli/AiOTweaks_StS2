@@ -227,7 +227,6 @@ public static class ModdingScreenHooks
             buttonContainer.AddChild(configBtn);
             charSelectNode.AddChild(buttonContainer);
 
-            // Anchor to top right
             buttonContainer.SetAnchorsPreset(Control.LayoutPreset.TopRight);
             buttonContainer.Position = new Vector2(-220, 24);
 

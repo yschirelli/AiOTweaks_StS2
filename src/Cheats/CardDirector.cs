@@ -119,7 +119,6 @@ public static class CardDirector
                 }
             }
 
-            // Fallback to DevConsole if direct runtime addition was not possible
             string cmd = upgraded ? $"card {cardId}+" : $"card {cardId}";
             ModLogger.Verbose("CardDirector", $"Direct addition unfulfilled; executing DevConsole fallback: '{cmd}'");
             GameHelper.ExecuteConsoleCommand(cmd);
@@ -200,7 +199,6 @@ public static class CardDirector
                 }
             }
 
-            // Fallback via DevConsole
             ModLogger.Verbose("CardDirector", $"Player combat hand not ready; dispatching DevConsole command 'card {cardId}'");
             GameHelper.ExecuteConsoleCommand($"card {cardId}");
             ModLogger.Info($"Spawn card requested for '{cardId}' via DevConsole fallback.");
@@ -458,11 +456,9 @@ public static class CardDirector
             }
             card.Pile?.InvokeContentsChanged();
 
-            // Synchronize upgrade state with matching master or combat instance
             var player = GameHelper.GetActivePlayer();
             if (player != null)
             {
-                // If this is a combat card with a linked master deck counterpart, sync master deck
                 if (card.DeckVersion != null && player.Deck?.Cards != null && player.Deck.Cards.Contains(card.DeckVersion))
                 {
                     var master = card.DeckVersion;
@@ -472,7 +468,6 @@ public static class CardDirector
                         player.Deck.InvokeContentsChanged();
                     }
                 }
-                // If this is a master deck card, sync any combat card spawned directly from it
                 else if (player.PlayerCombatState != null && player.Deck?.Cards != null && player.Deck.Cards.Contains(card))
                 {
                     var combatCards = player.PlayerCombatState.AllCards?.Where(c => c != null && (c.DeckVersion == card || c.CloneOf == card)).ToList();
@@ -665,7 +660,6 @@ public static class CardDirector
                 return true;
             }
 
-            // Execute engine CardPileCmd.Add to Exhaust pile safely
             try
             {
                 TaskHelper.RunSafely(CardPileCmd.Add(targetCombatCard, PileType.Exhaust, CardPilePosition.Bottom, null, false));
@@ -809,11 +803,9 @@ public static class CardDirector
 
             card.Pile?.InvokeContentsChanged();
 
-            // Sync with master deck or combat clone
             var player = GameHelper.GetActivePlayer();
             if (player != null)
             {
-                // If this is a combat card with a linked master deck counterpart, sync master deck
                 if (card.DeckVersion != null && player.Deck?.Cards != null && player.Deck.Cards.Contains(card.DeckVersion))
                 {
                     var master = card.DeckVersion;
@@ -841,7 +833,6 @@ public static class CardDirector
                     }
                     player.Deck.InvokeContentsChanged();
                 }
-                // If this is a master deck card, sync any combat card spawned directly from it
                 else if (player.PlayerCombatState != null && player.Deck?.Cards != null && player.Deck.Cards.Contains(card))
                 {
                     var combatCards = player.PlayerCombatState.AllCards?.Where(c => c != null && (c.DeckVersion == card || c.CloneOf == card)).ToList();
@@ -919,14 +910,12 @@ public static class CardDirector
             var player = GameHelper.GetActivePlayer();
             if (player != null)
             {
-                // If this is a combat card with a linked master deck counterpart, sync master deck
                 if (card.DeckVersion != null && player.Deck?.Cards != null && player.Deck.Cards.Contains(card.DeckVersion))
                 {
                     var master = card.DeckVersion;
                     try { CardCmd.ClearEnchantment(master); } catch { master.ClearEnchantmentInternal(); }
                     player.Deck.InvokeContentsChanged();
                 }
-                // If this is a master deck card, sync any combat card spawned directly from it
                 else if (player.PlayerCombatState != null && player.Deck?.Cards != null && player.Deck.Cards.Contains(card))
                 {
                     var combatCards = player.PlayerCombatState.AllCards?.Where(c => c != null && (c.DeckVersion == card || c.CloneOf == card)).ToList();
@@ -1062,7 +1051,6 @@ public static class CardDirector
 
             card.Pile?.InvokeContentsChanged();
 
-            // Sync with master deck or combat clone
             var player = GameHelper.GetActivePlayer();
             if (player != null)
             {

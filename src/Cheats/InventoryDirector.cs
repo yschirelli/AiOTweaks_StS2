@@ -34,7 +34,6 @@ public static class InventoryDirector
                 return;
             }
 
-            // Fallback via DevConsole
             ModLogger.Verbose("InventoryDirector", $"Active player not found; dispatching DevConsole command 'gold {amount}'");
             GameHelper.ExecuteConsoleCommand($"gold {amount}");
             ModLogger.Info($"AddGold executed via DevConsole ({amount}).");
@@ -200,5 +199,4 @@ public static class InventoryDirector
         return GameHelper.OpenShopMenu();
     }
 }
-
 

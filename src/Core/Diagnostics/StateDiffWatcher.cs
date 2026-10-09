@@ -124,28 +124,24 @@ public static class StateDiffWatcher
         expectedScope ??= new ActionScope();
         var violations = new List<string>();
 
-        // 1. Audit Energy
         int energyDelta = after.PlayerEnergy - before.PlayerEnergy;
         if (expectedScope.ExpectedEnergyDelta.HasValue && energyDelta != expectedScope.ExpectedEnergyDelta.Value)
         {
             violations.Add($"Energy changed by {energyDelta} (expected {expectedScope.ExpectedEnergyDelta.Value})");
         }
 
-        // 2. Audit Player HP
         int hpDelta = after.PlayerHp - before.PlayerHp;
         if (!expectedScope.AllowsPlayerHpChange && hpDelta != 0)
         {
             violations.Add($"Unintended Player HP change: {before.PlayerHp} -> {after.PlayerHp} ({hpDelta:+#;-#;0})");
         }
 
-        // 3. Audit Player Block
         int blockDelta = after.PlayerBlock - before.PlayerBlock;
         if (!expectedScope.AllowsPlayerBlockChange && blockDelta != 0)
         {
             violations.Add($"Unintended Player Block change: {before.PlayerBlock} -> {after.PlayerBlock} ({blockDelta:+#;-#;0})");
         }
 
-        // 4. Audit Untargeted Enemies
         foreach (var (idx, prevEnemy) in before.Enemies)
         {
             if (!after.Enemies.TryGetValue(idx, out var currentEnemy))

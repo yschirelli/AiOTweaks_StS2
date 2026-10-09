@@ -18,7 +18,6 @@ namespace AIOTweaks.Hooks;
 /// </summary>
 public static class CombatHooks
 {
-
     [HarmonyPatch(typeof(NCreatureStateDisplay), "SubscribeToCreatureEvents")]
     public static class CreatureStateDisplaySubscribeEventsPatch
     {
@@ -151,10 +150,9 @@ public static class CombatHooks
             {
                 if (__result <= 0) return;
 
-                // 1. Resolve effective dealer (target attack dealer or card owner creature)
                 Creature? effectiveDealer = dealer ?? cardSource?.Owner?.Creature;
 
-                // 2. Guard against self-damage (Breakthrough, Offering, Bloodletting, Hemokinesis, Pain curse, etc.)
+                // Guard against self-damage (Breakthrough, Offering, Bloodletting, Hemokinesis, Pain curse, etc.)
                 // Offensive damage multipliers only apply to attacks dealt to opposing combatants, never self-harm.
                 if (target != null && effectiveDealer != null)
                 {
@@ -164,13 +162,13 @@ public static class CombatHooks
                     }
                 }
 
-                // 3. Guard against pure unblockable HP loss (Poison, card self-harm costs, curses, event ticks)
+                // Guard against pure unblockable HP loss (Poison, card self-harm costs, curses, event ticks)
                 if (props.HasFlag(ValueProp.Unblockable))
                 {
                     return;
                 }
 
-                // 4. Multipliers apply strictly to powered attacks (attack cards and monster attack moves).
+                // Multipliers apply strictly to powered attacks (attack cards and monster attack moves).
                 // MegaCrit's IsPoweredAttack() checks: props.HasFlag(ValueProp.Move) && !props.HasFlag(ValueProp.Unpowered)
                 // If cardSource is present, it is an active card attack and allowed through unless flagged unpowered.
                 if (props.HasFlag(ValueProp.Unpowered))
@@ -183,7 +181,6 @@ public static class CombatHooks
                     return;
                 }
 
-                // 5. Player attacking enemy
                 if (effectiveDealer != null && effectiveDealer.IsPlayer)
                 {
 #if DEBUG
@@ -207,7 +204,6 @@ public static class CombatHooks
                         }
                     }
                 }
-                // 6. Enemy attacking player
                 else if (effectiveDealer != null && !effectiveDealer.IsPlayer)
                 {
                     if (target == null || target.IsPlayer)
@@ -242,14 +238,14 @@ public static class CombatHooks
             {
                 if (__result <= 0) return;
 
-                // 1. Guard against unpowered block (Status powers like Plating, Relics like Anchor / Orichalcum, Potions)
+                // Guard against unpowered block (Status powers like Plating, Relics like Anchor / Orichalcum, Potions)
                 // Defend multipliers are meant for active block actions (Cards and Monster moves), not fixed status/relic values.
                 if (props.HasFlag(ValueProp.Unpowered))
                 {
                     return;
                 }
 
-                // 2. Only scale powered block from cards or monster defend moves
+                // Only scale powered block from cards or monster defend moves
                 if (!props.IsPoweredCardOrMonsterMoveBlock() && cardSource == null)
                 {
                     return;

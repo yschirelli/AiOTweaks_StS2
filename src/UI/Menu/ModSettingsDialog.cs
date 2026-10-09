@@ -573,7 +573,6 @@ public partial class ModSettingsDialog : CanvasLayer
         float width = (uiCfg.MenuWidth.HasValue && uiCfg.MenuWidth.Value >= 200f) ? uiCfg.MenuWidth.Value : propWidth;
         float height = (uiCfg.MenuHeight.HasValue && uiCfg.MenuHeight.Value >= 200f) ? uiCfg.MenuHeight.Value : propHeight;
 
-        // Clamp to current viewport
         width = Mathf.Clamp(width, 650f, viewportSize.X);
         height = Mathf.Clamp(height, 450f, viewportSize.Y);
 
@@ -1504,7 +1503,6 @@ public partial class ModSettingsDialog : CanvasLayer
         vbox.AddThemeConstantOverride("separation", 14);
         scroll.AddChild(vbox);
 
-        // Section 1: Active Player Status Effects
         var activeBox = new VBoxContainer();
         activeBox.AddThemeConstantOverride("separation", 8);
 
@@ -1536,7 +1534,6 @@ public partial class ModSettingsDialog : CanvasLayer
 
         vbox.AddChild(CreateSectionCard("Active Player Powers", activeBox, new Color(0.4f, 0.85f, 1f)));
 
-        // Section 2: Apply Status Effects Compendium
         var applyBox = new VBoxContainer();
         applyBox.AddThemeConstantOverride("separation", 8);
 
@@ -1713,7 +1710,6 @@ public partial class ModSettingsDialog : CanvasLayer
         vbox.AddThemeConstantOverride("separation", 14);
         scroll.AddChild(vbox);
 
-        // Section 1: Active Enemy Selector and Status Effects
         var activeBox = new VBoxContainer();
         activeBox.AddThemeConstantOverride("separation", 8);
 
@@ -1813,7 +1809,6 @@ public partial class ModSettingsDialog : CanvasLayer
 
         vbox.AddChild(CreateSectionCard("Target Enemy Status Effects", activeBox, new Color(1f, 0.55f, 0.45f)));
 
-        // Section 2: Apply Status Effects to Enemy
         var applyBox = new VBoxContainer();
         applyBox.AddThemeConstantOverride("separation", 8);
 
@@ -2435,7 +2430,6 @@ public partial class ModSettingsDialog : CanvasLayer
     {
         if (_dialogPanel == null || !_dialogPanel.Visible) return;
 
-        // 1. Refresh Player active powers
         if (_playerActiveStatusesGrid != null && GodotObject.IsInstanceValid(_playerActiveStatusesGrid))
         {
             foreach (var child in _playerActiveStatusesGrid.GetChildren())
@@ -2554,7 +2548,6 @@ public partial class ModSettingsDialog : CanvasLayer
             }
         }
 
-        // 2. Refresh Enemy active powers
         var enemies = GameHelper.GetActiveCombatEnemies();
         bool inCombat = enemies != null && enemies.Count > 0;
 
@@ -3229,7 +3222,6 @@ public partial class ModSettingsDialog : CanvasLayer
             pIdx++;
         }
 
-        // Auto-select current character's pool if currently in a run
         string? activePoolId = GameHelper.GetCurrentPlayerCharacterPoolId();
         if (!string.IsNullOrEmpty(activePoolId))
         {
@@ -5024,10 +5016,13 @@ public partial class ModSettingsDialog : CanvasLayer
 
     private void OnLogReceived(LogLevel level, string msg)
     {
+#if !DEBUG
+        if (level == LogLevel.Debug) return;
+#endif
         string color = level switch
         {
             LogLevel.Warn => "yellow",
-            LogLevel.Error => "red",
+            LogLevel.Error => ModLogger.GetErrorColor(msg),
             LogLevel.Debug => "gray",
             _ => "white"
         };
