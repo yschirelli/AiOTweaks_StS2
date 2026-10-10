@@ -3384,5 +3384,146 @@ public static class MapGenerationHooks
     }
 
     #endregion
+
+    #region Save Continuity & Room Determinism Patches
+
+    /// <summary>
+    /// Prevents duplicate increments to act visit counters (eventsVisited, normalEncountersVisited)
+    /// when restoring an in-progress floor room from saved run history.
+    /// </summary>
+    [HarmonyPatch(typeof(ActModel), nameof(ActModel.MarkRoomVisited))]
+    public static class ActModelMarkRoomVisitedPatch
+    {
+        public static bool SuppressNextMarkRoomVisited { get; set; } = false;
+
+        [HarmonyPrefix]
+        public static bool Prefix(RoomType roomType)
+        {
+            if (SuppressNextMarkRoomVisited)
+            {
+                SuppressNextMarkRoomVisited = false;
+                ModLogger.Info($"[ActModelMarkRoomVisitedPatch] Suppressed duplicate MarkRoomVisited for {roomType} to preserve act counter integrity.");
+                return false;
+            }
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Harmony prefix on RunManager.EnterMapPointInternal.
+    /// When continuing a run (!saveGame && preFinishedRoom == null), if the current floor has already
+    /// been entered and recorded in MapPointHistory (e.g. from a previous mid-room quit or reload),
+    /// reconstructs the exact original room (encounter, event, etc.) instead of letting STS2 roll a new room
+    /// or advance to the next encounter/event.
+    /// </summary>
+    [HarmonyPatch(typeof(RunManager), "EnterMapPointInternal")]
+    public static class RunManagerEnterMapPointInternalPatch
+    {
+        [HarmonyPrefix]
+        public static void Prefix(RunManager __instance, int actFloor, ref MapPointType pointType, ref AbstractRoom? preFinishedRoom, bool saveGame)
+        {
+            try
+            {
+                // Only intervene when loading into a run (!saveGame) and no preFinishedRoom was provided by STS2 save data
+                if (saveGame || preFinishedRoom != null)
+                {
+                    return;
+                }
+
+                var state = GetRunState(__instance);
+                if (state == null)
+                {
+                    return;
+                }
+
+                int actIndex = state.CurrentActIndex;
+                if (state.MapPointHistory == null || actIndex < 0 || actIndex >= state.MapPointHistory.Count)
+                {
+                    return;
+                }
+
+                var actHistory = state.MapPointHistory[actIndex];
+                int floorIndex = actFloor - 1;
+                if (actHistory == null || floorIndex < 0 || floorIndex >= actHistory.Count)
+                {
+                    return;
+                }
+
+                var historyEntry = actHistory[floorIndex];
+                if (historyEntry == null || historyEntry.Rooms == null || historyEntry.Rooms.Count == 0)
+                {
+                    return;
+                }
+
+                var roomEntry = historyEntry.Rooms[0];
+                if (roomEntry == null)
+                {
+                    return;
+                }
+
+                ModLogger.Info($"[RunManagerEnterMapPointInternalPatch] Detected pre-existing history entry for act {actIndex}, floor {actFloor}: RoomType={roomEntry.RoomType}, ModelId={roomEntry.ModelId}, MapPointType={historyEntry.MapPointType}");
+
+                switch (roomEntry.RoomType)
+                {
+                    case RoomType.Monster:
+                    case RoomType.Elite:
+                    case RoomType.Boss:
+                        if (roomEntry.ModelId != null)
+                        {
+                            var encounterModel = SaveUtil.EncounterOrDeprecated(roomEntry.ModelId);
+                            if (encounterModel != null)
+                            {
+                                preFinishedRoom = new CombatRoom(encounterModel.ToMutable(), state);
+                                pointType = historyEntry.MapPointType;
+                                ActModelMarkRoomVisitedPatch.SuppressNextMarkRoomVisited = true;
+                                ModLogger.Info($"[RunManagerEnterMapPointInternalPatch] Restored preserved combat encounter '{encounterModel.Id.Entry}' for floor {actFloor} (pointType={pointType}).");
+                            }
+                        }
+                        break;
+
+                    case RoomType.Event:
+                        if (roomEntry.ModelId != null)
+                        {
+                            var eventModel = SaveUtil.EventOrDeprecated(roomEntry.ModelId);
+                            if (eventModel != null)
+                            {
+                                preFinishedRoom = new EventRoom(eventModel);
+                                pointType = historyEntry.MapPointType;
+                                ActModelMarkRoomVisitedPatch.SuppressNextMarkRoomVisited = true;
+                                ModLogger.Info($"[RunManagerEnterMapPointInternalPatch] Restored preserved event '{eventModel.Id.Entry}' for floor {actFloor} (pointType={pointType}).");
+                            }
+                        }
+                        break;
+
+                    case RoomType.Shop:
+                        preFinishedRoom = new MerchantRoom();
+                        pointType = historyEntry.MapPointType;
+                        ActModelMarkRoomVisitedPatch.SuppressNextMarkRoomVisited = true;
+                        ModLogger.Info($"[RunManagerEnterMapPointInternalPatch] Restored preserved merchant room for floor {actFloor}.");
+                        break;
+
+                    case RoomType.RestSite:
+                        preFinishedRoom = new RestSiteRoom();
+                        pointType = historyEntry.MapPointType;
+                        ActModelMarkRoomVisitedPatch.SuppressNextMarkRoomVisited = true;
+                        ModLogger.Info($"[RunManagerEnterMapPointInternalPatch] Restored preserved rest site room for floor {actFloor}.");
+                        break;
+
+                    case RoomType.Treasure:
+                        preFinishedRoom = new TreasureRoom(state.CurrentActIndex);
+                        pointType = historyEntry.MapPointType;
+                        ActModelMarkRoomVisitedPatch.SuppressNextMarkRoomVisited = true;
+                        ModLogger.Info($"[RunManagerEnterMapPointInternalPatch] Restored preserved treasure room for floor {actFloor}.");
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error("[RunManagerEnterMapPointInternalPatch] Error while checking/restoring room from history", ex);
+            }
+        }
+    }
+
+    #endregion
 }
 

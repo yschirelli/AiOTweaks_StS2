@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
 using Godot;
@@ -18,8 +19,8 @@ namespace AIOTweaks.Hooks;
 
 /// <summary>
 /// Hooks into the in-game Pause Menu (NPauseMenu) to ensure that clicking 'Save and Quit'
-/// explicitly triggers and awaits a full run save before transitioning back to the main menu.
-/// Also protects save files from premature deletion and validates Main Menu button states.
+/// cleanly handles active vs. finished room states, protects death screen runs from being saved into stuck states,
+/// prevents in-progress rooms from corrupting determinism, and validates Main Menu button states.
 /// </summary>
 public static class PauseMenuHooks
 {
@@ -29,16 +30,16 @@ public static class PauseMenuHooks
 
     /// <summary>
     /// Flag indicating that a Save & Quit transition is currently in progress.
-    /// Used to prevent clean-up or abandon hooks from inadvertently wiping save files.
+    /// Used to prevent clean-up or abandon hooks from inadvertently wiping save files during normal in-run quits.
     /// </summary>
     public static bool IsSavingAndQuitting { get; private set; }
 
+    private static bool _isCleaningDeadRun = false;
+
     /// <summary>
     /// Harmony prefix patch on NPauseMenu.CloseToMenu.
-    /// The vanilla CloseToMenu method only stops music and immediately calls ReturnToMainMenu(),
-    /// which runs RunManager.CleanUp() (ShouldSave = false) WITHOUT ever calling SaveManager.SaveRun().
-    /// We intercept CloseToMenu to explicitly flush and await SaveRun, save the active tweaks snapshot,
-    /// and then cleanly return to the main menu.
+    /// Intercepts CloseToMenu to handle pre-finished rooms, avoid saving dead/game-over runs,
+    /// preserve pristine start-of-floor saves for in-progress rooms, and cleanly return to the main menu.
     /// </summary>
     [HarmonyPatch(typeof(NPauseMenu), "CloseToMenu")]
     public static class NPauseMenu_CloseToMenu_Patch
@@ -53,14 +54,14 @@ public static class PauseMenuHooks
 
     private static async Task SafeCloseToMenuAsync(NPauseMenu menu)
     {
-        IsSavingAndQuitting = true;
         try
         {
             ModLogger.Info("[PauseMenuHooks] 'Save and Quit' triggered. Intercepting CloseToMenu...");
 
-            // Disable pause menu buttons to prevent double interactions
+            // 1. Disable pause menu buttons to prevent double interactions
             DisablePauseMenuButtons(menu);
 
+            // 2. Stop in-game music and debug audio
             try
             {
                 NRunMusicController.Instance?.StopMusic();
@@ -74,28 +75,64 @@ public static class PauseMenuHooks
             var runManager = RunManager.Instance;
             var runState = MapGenerationHooks.GetRunState(runManager);
 
-            if (runManager != null && runState != null)
+            // 3. Check if the run has ended, player is dead, or game is over
+            bool isGameOverOrDead = runManager == null ||
+                                    runState == null ||
+                                    !runManager.IsInProgress ||
+                                    runState.IsGameOver ||
+                                    (runState.Players != null && runState.Players.Count > 0 && runState.Players.All(p => p.Creature == null || p.Creature.IsDead)) ||
+                                    (runState.CurrentRoom != null && runState.CurrentRoom.IsVictoryRoom);
+
+            if (isGameOverOrDead)
             {
-                // Ensure ShouldSave is true before invoking SaveRun
-                if (!runManager.ShouldSave && ShouldSaveBackingField != null)
-                {
-                    ShouldSaveBackingField.SetValue(runManager, true);
-                }
-
-                AbstractRoom? currentRoom = runState.CurrentRoom;
-                // Only pass preFinishedRoom if the current room was already pre-finished (e.g. rewards screen or finished event).
-                // During combat, passing null resets the combat encounter on reload, matching base game behavior.
-                AbstractRoom? preFinishedRoom = (currentRoom != null && currentRoom.IsPreFinished) ? currentRoom : null;
-
-                ModLogger.Info($"[PauseMenuHooks] Saving active run... (CurrentRoom: {currentRoom?.GetType().Name ?? "null"}, PreFinished: {preFinishedRoom != null})");
+                ModLogger.Info("[PauseMenuHooks] Run is over or player is dead. Deleting save and active snapshot instead of saving to avoid stuck screen.");
+                IsSavingAndQuitting = false;
                 try
                 {
-                    await SaveManager.Instance.SaveRun(preFinishedRoom, saveProgress: true);
-                    ModLogger.Info("[PauseMenuHooks] SaveManager.Instance.SaveRun finished successfully.");
+                    MapGenerationHooks.ForceDeleteCurrentRunSaves();
+                    RunTweaksSaveManager.ClearActiveRun("GameOverOnSaveAndQuit");
                 }
                 catch (Exception ex)
                 {
-                    ModLogger.Error("[PauseMenuHooks] Exception occurred while awaiting SaveManager.Instance.SaveRun!", ex);
+                    ModLogger.Warn($"[PauseMenuHooks] Error clearing dead run save: {ex.Message}");
+                }
+
+                if (NGame.Instance != null)
+                {
+                    await NGame.Instance.ReturnToMainMenu();
+                    ModLogger.Info("[PauseMenuHooks] Successfully returned to main menu after dead run cleanup.");
+                }
+                return;
+            }
+
+            // 4. Run is alive and in progress
+            IsSavingAndQuitting = true;
+            try
+            {
+                AbstractRoom? currentRoom = runState?.CurrentRoom;
+
+                // In STS2, only legitimately pre-finished rooms (e.g. combat rewards screen or completed event)
+                // can and should be saved with preFinishedRoom.
+                // If a room is currently in progress (active combat, active event choice, unknown room, shop, rest site),
+                // the base game ALREADY committed a pristine start-of-floor save to disk upon entering the floor.
+                // Overwriting it with preFinishedRoom = null corrupts the save by writing post-enter counters and consumed RNG,
+                // causing unknown rooms, events, and monster encounters to change upon re-entering.
+                if (currentRoom != null && currentRoom.IsPreFinished && (currentRoom is CombatRoom || currentRoom is EventRoom))
+                {
+                    ModLogger.Info($"[PauseMenuHooks] Saving pre-finished room ({currentRoom.GetType().Name})...");
+                    try
+                    {
+                        await SaveManager.Instance.SaveRun(currentRoom, saveProgress: true);
+                        ModLogger.Info("[PauseMenuHooks] SaveManager.Instance.SaveRun finished successfully.");
+                    }
+                    catch (Exception ex)
+                    {
+                        ModLogger.Error("[PauseMenuHooks] Exception occurred while saving pre-finished room!", ex);
+                    }
+                }
+                else
+                {
+                    ModLogger.Info($"[PauseMenuHooks] Room is in-progress ({currentRoom?.GetType().Name ?? "null"}). Preserving pristine start-of-floor save without overwriting.");
                 }
 
                 try
@@ -107,26 +144,32 @@ public static class PauseMenuHooks
                 {
                     ModLogger.Error("[PauseMenuHooks] Exception occurred while saving active run tweaks snapshot!", ex);
                 }
-            }
-            else
-            {
-                ModLogger.Warn($"[PauseMenuHooks] Run cannot be saved: RunManager={runManager != null}, RunState={runState != null}");
-            }
 
-            ModLogger.Info("[PauseMenuHooks] Returning to main menu...");
+                // 5. Return to main menu
+                ModLogger.Info("[PauseMenuHooks] Returning to main menu...");
+                if (NGame.Instance != null)
+                {
+                    await NGame.Instance.ReturnToMainMenu();
+                    ModLogger.Info("[PauseMenuHooks] Successfully returned to main menu.");
+                }
+                else
+                {
+                    ModLogger.Error("[PauseMenuHooks] NGame.Instance is null when attempting to ReturnToMainMenu!");
+                }
+            }
+            finally
+            {
+                IsSavingAndQuitting = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Error("[PauseMenuHooks] Exception in SafeCloseToMenuAsync!", ex);
+            IsSavingAndQuitting = false;
             if (NGame.Instance != null)
             {
                 await NGame.Instance.ReturnToMainMenu();
-                ModLogger.Info("[PauseMenuHooks] Successfully returned to main menu.");
             }
-            else
-            {
-                ModLogger.Error("[PauseMenuHooks] NGame.Instance is null when attempting to ReturnToMainMenu!");
-            }
-        }
-        finally
-        {
-            IsSavingAndQuitting = false;
         }
     }
 
@@ -162,7 +205,8 @@ public static class PauseMenuHooks
     }
 
     /// <summary>
-    /// Harmony postfix on NMainMenu.RefreshButtons to log diagnostic state of the Continue button.
+    /// Harmony postfix on NMainMenu.RefreshButtons to log diagnostic state of the Continue button
+    /// and automatically heal corrupt dead runs (0 HP) saved by previous bugs so the player never gets stuck.
     /// </summary>
     [HarmonyPatch(typeof(NMainMenu), nameof(NMainMenu.RefreshButtons))]
     public static class NMainMenu_RefreshButtons_Patch
@@ -175,6 +219,29 @@ public static class PauseMenuHooks
                 bool hasRunSave = SaveManager.Instance.HasRunSave;
                 int profileId = SaveManager.Instance.IsProfileInitialized ? SaveManager.Instance.CurrentProfileId : -1;
                 ModLogger.Info($"[PauseMenuHooks] NMainMenu.RefreshButtons: Profile={profileId}, HasRunSave={hasRunSave}");
+
+                if (hasRunSave && !_isCleaningDeadRun)
+                {
+                    var readResult = SaveManager.Instance.LoadRunSave();
+                    if (readResult?.Success == true && readResult.SaveData?.Players != null && readResult.SaveData.Players.Count > 0)
+                    {
+                        if (readResult.SaveData.Players.All(p => p.CurrentHp <= 0))
+                        {
+                            ModLogger.Warn("[PauseMenuHooks] Detected saved dead run with 0 HP on main menu! Cleaning up corrupt save...");
+                            _isCleaningDeadRun = true;
+                            try
+                            {
+                                MapGenerationHooks.ForceDeleteCurrentRunSaves();
+                                RunTweaksSaveManager.ClearActiveRun("StaleDeadRunHealedOnMainMenu");
+                                __instance.RefreshButtons();
+                            }
+                            finally
+                            {
+                                _isCleaningDeadRun = false;
+                            }
+                        }
+                    }
+                }
             }
             catch (Exception ex)
             {

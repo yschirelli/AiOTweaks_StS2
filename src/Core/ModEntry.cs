@@ -22,7 +22,7 @@ public partial class ModEntry : Node
 {
     public const string ModId = "AIOTweaks";
     public const string ModName = "AIOTweaks";
-    public const string ModVersion = "1.1.3";
+    public const string ModVersion = "1.1.4";
 
 #if DEBUG
     public const string BuildConfiguration = "DEBUG";
