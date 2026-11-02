@@ -2323,7 +2323,8 @@ public static class MapGenerationHooks
         float num = (map.SecondBossMapPoint != null) ? 0.9f : 1f;
         float distY = (float)(AccessTools.Field(typeof(NMapScreen), "_distY")?.GetValue(screen) ?? (166.0714f * num));
         float totalHeight = (rowCount - 1) * distY;
-        float bossY = (740f - totalHeight - 395f) * num;
+        float bossSpacing = (map.SecondBossMapPoint != null) ? 430f : 395f;
+        float bossY = 740f - totalHeight - bossSpacing;
         if (map.SecondBossMapPoint != null)
         {
             bossY -= 300f * num;
@@ -2567,7 +2568,8 @@ public static class MapGenerationHooks
                     nNormalMapPoint.SetAngle(Rng.Chaotic.NextGaussianFloat(0f, 8f));
                 }
 
-                float bossY = (740f - totalHeight - 395f) * num;
+                float bossSpacing = (map.SecondBossMapPoint != null) ? 430f : 395f;
+                float bossY = 740f - totalHeight - bossSpacing;
                 var bossPointNode = NBossMapPoint.Create(map.BossMapPoint, __instance, runState);
                 bossPointNode.Position = new Vector2(-200f, bossY);
                 points.AddChildSafely(bossPointNode);
