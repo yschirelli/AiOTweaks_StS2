@@ -444,6 +444,35 @@ public static class CombatHooks
         }
     }
 
+    [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Models.PotionModel), "RemoveBeforeUse")]
+    public static class PotionModelRemoveBeforeUsePatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix(MegaCrit.Sts2.Core.Models.PotionModel __instance)
+        {
+            if (RuntimeStateManager.InfinitePotionsEnabled || ConfigManager.Current.CombatSandbox.InfinitePotions)
+            {
+                try
+                {
+                    __instance.AfterUsageCanceled();
+                    var owner = __instance.Owner;
+                    if (owner != null && MegaCrit.Sts2.Core.Context.LocalContext.IsMe(owner))
+                    {
+                        var container = MegaCrit.Sts2.Core.Nodes.NRun.Instance?.GlobalUi?.TopBar?.PotionContainer;
+                        container?.OnPotionUseOrDiscardCanceled(__instance);
+                    }
+                    ModLogger.Info($"InfinitePotions active: retained potion '{__instance.GetType().Name}' on use.");
+                    return false;
+                }
+                catch (Exception ex)
+                {
+                    ModLogger.Error("Error in PotionModelRemoveBeforeUsePatch Prefix", ex);
+                }
+            }
+            return true;
+        }
+    }
+
     /// <summary>
     /// Processes incoming damage to the player. If GodMode is active, prevents damage.
     /// </summary>

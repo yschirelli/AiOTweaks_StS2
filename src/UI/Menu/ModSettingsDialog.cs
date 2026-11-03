@@ -120,6 +120,7 @@ public partial class ModSettingsDialog : CanvasLayer
     private GridContainer? _activePotionsGrid;
     private System.Collections.Generic.List<ItemEntry> _availablePotionEntries = new();
     private SpinBox? _potionSlotsSpin;
+    private SpinBox? _playerPotionSlotSpin;
 
     private GridContainer? _playerActiveStatusesGrid;
     private System.Collections.Generic.List<ItemEntry> _availablePlayerStatusEntries = new();
@@ -202,6 +203,10 @@ public partial class ModSettingsDialog : CanvasLayer
         if (_potionSlotsSpin != null && (int)_potionSlotsSpin.Value != slots)
         {
             _potionSlotsSpin.SetValueNoSignal(slots);
+        }
+        if (_playerPotionSlotSpin != null && (int)_playerPotionSlotSpin.Value != slots)
+        {
+            _playerPotionSlotSpin.SetValueNoSignal(slots);
         }
         if (_potionSlotsPreRunSpin != null && (int)_potionSlotsPreRunSpin.Value != slots)
         {
@@ -751,6 +756,8 @@ public partial class ModSettingsDialog : CanvasLayer
                 snap.PreRunTweaks.EnemyDefendMultiplier = 1.0f;
                 snap.PreRunTweaks.PlayerDamageMultiplier = 1.0f;
                 snap.PreRunTweaks.PlayerDefendMultiplier = 1.0f;
+                snap.PreRunTweaks.MaxEnergy = 3;
+                snap.PreRunTweaks.PotionSlots = 3;
                 snap.PreRunTweaks.FreeMapNavigation = false;
                 if (snap.PreRunTweaks.EndlessMode != null)
                 {
@@ -770,6 +777,7 @@ public partial class ModSettingsDialog : CanvasLayer
 
             RuntimeStateManager.ResetSessionState();
             GameHelper.SetPlayerMaxEnergy(3);
+            GameHelper.SetPlayerMaxPotionSlots(3);
             GameHelper.RescaleActiveMonstersHp();
             GameHelper.RefreshCombatIntents();
             GameHelper.RefreshAllVisibleCards();
@@ -1174,6 +1182,7 @@ public partial class ModSettingsDialog : CanvasLayer
         _endlessModeCheck = new CheckBox { Text = " Enable Endless Mode (Scale enemies each loop)" };
         _endlessModeCheck.Toggled += val =>
         {
+            if (_isLoadingSettings) return;
             MarkTweaksModified();
             if (ConfigManager.Current.PreRunTweaks.EndlessMode != null)
                 ConfigManager.Current.PreRunTweaks.EndlessMode.Enabled = val;
@@ -1192,6 +1201,7 @@ public partial class ModSettingsDialog : CanvasLayer
         _endlessMultiplierSpin = new SpinBox { MinValue = 1.0, MaxValue = 10.0, Step = 0.1, Value = 2.0 }.MakeNumericOnly();
         _endlessMultiplierSpin.ValueChanged += val =>
         {
+            if (_isLoadingSettings) return;
             MarkTweaksModified();
             if (ConfigManager.Current.PreRunTweaks.EndlessMode != null)
                 ConfigManager.Current.PreRunTweaks.EndlessMode.EnemyScalingMultiplier = (float)val;
@@ -1209,6 +1219,7 @@ public partial class ModSettingsDialog : CanvasLayer
         _freeMapNavCheck = new CheckBox { Text = " Free Map Navigation (Click & travel to ANY room freely on map)" };
         _freeMapNavCheck.Toggled += val =>
         {
+            if (_isLoadingSettings) return;
             MarkTweaksModified();
             RunTweaksSaveManager.SetFreeMapNavigation(val);
             if (val)
@@ -1253,6 +1264,7 @@ public partial class ModSettingsDialog : CanvasLayer
         _enemyHpSlider = AddSliderControl(enemyBox, "Enemy Health Multiplier:", 0.1f, 10.0f, 0.1f, 1.0f);
         _enemyHpSlider.ValueChanged += val =>
         {
+            if (_isLoadingSettings) return;
             MarkTweaksModified();
             ConfigManager.Current.PreRunTweaks.EnemyHealthMultiplier = (float)val;
             var snap = RunTweaksSaveManager.ActiveSnapshot;
@@ -1267,6 +1279,7 @@ public partial class ModSettingsDialog : CanvasLayer
         _enemyDmgSlider = AddSliderControl(enemyBox, "Enemy Damage Multiplier:", 0.0f, 10.0f, 0.1f, 1.0f);
         _enemyDmgSlider.ValueChanged += val =>
         {
+            if (_isLoadingSettings) return;
             MarkTweaksModified();
             ConfigManager.Current.PreRunTweaks.EnemyDamageMultiplier = (float)val;
             var snap = RunTweaksSaveManager.ActiveSnapshot;
@@ -1281,6 +1294,7 @@ public partial class ModSettingsDialog : CanvasLayer
         _enemyDefSlider = AddSliderControl(enemyBox, "Enemy Defend/Block Multiplier:", 0.0f, 10.0f, 0.1f, 1.0f);
         _enemyDefSlider.ValueChanged += val =>
         {
+            if (_isLoadingSettings) return;
             MarkTweaksModified();
             ConfigManager.Current.PreRunTweaks.EnemyDefendMultiplier = (float)val;
             var snap = RunTweaksSaveManager.ActiveSnapshot;
@@ -1300,6 +1314,7 @@ public partial class ModSettingsDialog : CanvasLayer
         _playerDmgSlider = AddSliderControl(playerScalingBox, "Player Damage Multiplier:", 0.0f, 10.0f, 0.1f, 1.0f);
         _playerDmgSlider.ValueChanged += val =>
         {
+            if (_isLoadingSettings) return;
             MarkTweaksModified();
             ConfigManager.Current.PreRunTweaks.PlayerDamageMultiplier = (float)val;
             var snap = RunTweaksSaveManager.ActiveSnapshot;
@@ -1314,6 +1329,7 @@ public partial class ModSettingsDialog : CanvasLayer
         _playerDefSlider = AddSliderControl(playerScalingBox, "Player Defend/Block Multiplier:", 0.0f, 10.0f, 0.1f, 1.0f);
         _playerDefSlider.ValueChanged += val =>
         {
+            if (_isLoadingSettings) return;
             MarkTweaksModified();
             ConfigManager.Current.PreRunTweaks.PlayerDefendMultiplier = (float)val;
             var snap = RunTweaksSaveManager.ActiveSnapshot;
@@ -1330,6 +1346,7 @@ public partial class ModSettingsDialog : CanvasLayer
         _maxEnergySpin = new SpinBox { MinValue = 1, MaxValue = 20, Step = 1, Value = GameHelper.GetPlayerMaxEnergy(), TooltipText = "Sets the baseline Max Energy count. Dynamically reads and syncs with the active game state." }.MakeNumericOnly();
         _maxEnergySpin.ValueChanged += val =>
         {
+            if (_isLoadingSettings) return;
             MarkTweaksModified();
             ConfigManager.Current.PreRunTweaks.MaxEnergy = (int)val;
             GameHelper.SetPlayerMaxEnergy((int)val);
@@ -1417,29 +1434,29 @@ public partial class ModSettingsDialog : CanvasLayer
         cheatsBox.AddChild(cheatsGrid);
 
         _godModeCheck = new CheckBox { Text = " God Mode (Immune to all incoming damage)" };
-        _godModeCheck.Toggled += val => { RuntimeStateManager.GodModeEnabled = val; ConfigManager.Current.CombatSandbox.GodMode = val; ConfigManager.SaveConfig(); };
+        _godModeCheck.Toggled += val => { if (_isLoadingSettings) return; RuntimeStateManager.GodModeEnabled = val; ConfigManager.Current.CombatSandbox.GodMode = val; ConfigManager.SaveConfig(); };
         cheatsGrid.AddChild(_godModeCheck);
 
         _infEnergyCheck = new CheckBox { Text = " Infinite Energy (Playing cards does not drain energy)" };
-        _infEnergyCheck.Toggled += val => { RuntimeStateManager.InfiniteEnergyEnabled = val; ConfigManager.Current.CombatSandbox.InfiniteEnergy = val; ConfigManager.SaveConfig(); };
+        _infEnergyCheck.Toggled += val => { if (_isLoadingSettings) return; RuntimeStateManager.InfiniteEnergyEnabled = val; ConfigManager.Current.CombatSandbox.InfiniteEnergy = val; ConfigManager.SaveConfig(); };
         cheatsGrid.AddChild(_infEnergyCheck);
 
         _oneHitKillCheck = new CheckBox { Text = " 1-Hit Kill (Attacks deal lethal damage to enemies)" };
-        _oneHitKillCheck.Toggled += val => { RuntimeStateManager.OneHitKillEnabled = val; ConfigManager.Current.CombatSandbox.OneHitKill = val; ConfigManager.SaveConfig(); };
+        _oneHitKillCheck.Toggled += val => { if (_isLoadingSettings) return; RuntimeStateManager.OneHitKillEnabled = val; ConfigManager.Current.CombatSandbox.OneHitKill = val; ConfigManager.SaveConfig(); };
         cheatsGrid.AddChild(_oneHitKillCheck);
 
         _infPotionsCheck = new CheckBox { Text = " Infinite Potions (Using potions does not consume them)" };
-        _infPotionsCheck.Toggled += val => { ConfigManager.Current.CombatSandbox.InfinitePotions = val; ConfigManager.SaveConfig(); };
+        _infPotionsCheck.Toggled += val => { if (_isLoadingSettings) return; RuntimeStateManager.InfinitePotionsEnabled = val; ConfigManager.Current.CombatSandbox.InfinitePotions = val; ConfigManager.SaveConfig(); };
         cheatsGrid.AddChild(_infPotionsCheck);
 
         _noExhaustCheck = new CheckBox { Text = " No Card Exhaust (Exhausted cards are retained)" };
-        _noExhaustCheck.Toggled += val => { ConfigManager.Current.CombatSandbox.NoCardExhaust = val; ConfigManager.SaveConfig(); };
+        _noExhaustCheck.Toggled += val => { if (_isLoadingSettings) return; RuntimeStateManager.NoCardExhaustEnabled = val; ConfigManager.Current.CombatSandbox.NoCardExhaust = val; ConfigManager.SaveConfig(); };
         cheatsGrid.AddChild(_noExhaustCheck);
 
         var drawRow = new HBoxContainer();
         drawRow.AddChild(new Label { Text = "Bonus Card Draw per Turn: ", CustomMinimumSize = new Vector2(200, 0) });
         _bonusDrawSpin = new SpinBox { MinValue = 0, MaxValue = 10, Value = 0 }.MakeNumericOnly();
-        _bonusDrawSpin.ValueChanged += val => { ConfigManager.Current.CombatSandbox.BonusDrawPerTurn = (int)val; ConfigManager.SaveConfig(); };
+        _bonusDrawSpin.ValueChanged += val => { if (_isLoadingSettings) return; ConfigManager.Current.CombatSandbox.BonusDrawPerTurn = (int)val; ConfigManager.SaveConfig(); };
         drawRow.AddChild(_bonusDrawSpin);
         cheatsGrid.AddChild(drawRow);
 
@@ -2203,6 +2220,7 @@ public partial class ModSettingsDialog : CanvasLayer
         }.MakeNumericOnly();
         _potionSlotsSpin.ValueChanged += val =>
         {
+            if (_isLoadingSettings) return;
             PotionDirector.SetMaxPotionSlots((int)val);
             RefreshRealTimePotionTabs();
         };
@@ -4464,15 +4482,16 @@ public partial class ModSettingsDialog : CanvasLayer
         var potionSlotRow = new HBoxContainer();
         potionSlotRow.AddThemeConstantOverride("separation", 8);
         potionSlotRow.AddChild(new Label { Text = "Potion Slots: ", CustomMinimumSize = new Vector2(140, 0) });
-        var playerPotionSlotSpin = new SpinBox { MinValue = 1, MaxValue = 10, Step = 1, Value = PotionDirector.GetMaxPotionSlots(), CustomMinimumSize = new Vector2(120, 0), TooltipText = "Real-time maximum potion slots." }.MakeNumericOnly();
-        playerPotionSlotSpin.ValueChanged += val =>
+        _playerPotionSlotSpin = new SpinBox { MinValue = 1, MaxValue = 10, Step = 1, Value = PotionDirector.GetMaxPotionSlots(), CustomMinimumSize = new Vector2(120, 0), TooltipText = "Real-time maximum potion slots." }.MakeNumericOnly();
+        _playerPotionSlotSpin.ValueChanged += val =>
         {
+            if (_isLoadingSettings) return;
             PotionDirector.SetMaxPotionSlots((int)val);
             RefreshRealTimePotionTabs();
         };
         var clearPotionsBtn = new Button { Text = " Discard All Potions ", CustomMinimumSize = new Vector2(160, 32) };
         clearPotionsBtn.Pressed += () => { PotionDirector.ClearAllPotions(); RefreshRealTimePotionTabs(); };
-        potionSlotRow.AddChild(playerPotionSlotSpin);
+        potionSlotRow.AddChild(_playerPotionSlotSpin);
         potionSlotRow.AddChild(clearPotionsBtn);
         vitalsBox.AddChild(potionSlotRow);
 
@@ -4765,6 +4784,8 @@ public partial class ModSettingsDialog : CanvasLayer
         if (_bonusGoldSpin != null) _bonusGoldSpin.Value = tweaks.StartingGoldBonus;
         if (_bonusHpSpin != null) _bonusHpSpin.Value = tweaks.StartingMaxHpBonus;
         if (_potionSlotsPreRunSpin != null) _potionSlotsPreRunSpin.Value = tweaks.PotionSlots;
+        if (_potionSlotsSpin != null) _potionSlotsSpin.SetValueNoSignal(PotionDirector.GetMaxPotionSlots());
+        if (_playerPotionSlotSpin != null) _playerPotionSlotSpin.SetValueNoSignal(PotionDirector.GetMaxPotionSlots());
         if (_allowMultipleRelicsCheck != null) _allowMultipleRelicsCheck.ButtonPressed = tweaks.AllowMultipleRelics;
         if (_forceNeowCheck != null) _forceNeowCheck.ButtonPressed = tweaks.ForceNeowBonus;
         if (_customSeedInput != null) _customSeedInput.Text = tweaks.CustomSeed;
@@ -4796,8 +4817,8 @@ public partial class ModSettingsDialog : CanvasLayer
         if (_godModeCheck != null) _godModeCheck.ButtonPressed = RuntimeStateManager.GodModeEnabled || sandbox.GodMode;
         if (_infEnergyCheck != null) _infEnergyCheck.ButtonPressed = RuntimeStateManager.InfiniteEnergyEnabled || sandbox.InfiniteEnergy;
         if (_oneHitKillCheck != null) _oneHitKillCheck.ButtonPressed = RuntimeStateManager.OneHitKillEnabled || sandbox.OneHitKill;
-        if (_infPotionsCheck != null) _infPotionsCheck.ButtonPressed = sandbox.InfinitePotions;
-        if (_noExhaustCheck != null) _noExhaustCheck.ButtonPressed = sandbox.NoCardExhaust;
+        if (_infPotionsCheck != null) _infPotionsCheck.ButtonPressed = RuntimeStateManager.InfinitePotionsEnabled || sandbox.InfinitePotions;
+        if (_noExhaustCheck != null) _noExhaustCheck.ButtonPressed = RuntimeStateManager.NoCardExhaustEnabled || sandbox.NoCardExhaust;
         if (_bonusDrawSpin != null) _bonusDrawSpin.Value = sandbox.BonusDrawPerTurn;
 
         var player = InventoryDirector.GetActivePlayer();
@@ -4898,11 +4919,31 @@ public partial class ModSettingsDialog : CanvasLayer
                 RunTweaksSaveManager.SetFreeMapNavigation(_freeMapNavCheck.ButtonPressed);
             }
 
-            if (_godModeCheck != null && GodotObject.IsInstanceValid(_godModeCheck)) sandbox.GodMode = _godModeCheck.ButtonPressed;
-            if (_infEnergyCheck != null && GodotObject.IsInstanceValid(_infEnergyCheck)) sandbox.InfiniteEnergy = _infEnergyCheck.ButtonPressed;
-            if (_oneHitKillCheck != null && GodotObject.IsInstanceValid(_oneHitKillCheck)) sandbox.OneHitKill = _oneHitKillCheck.ButtonPressed;
-            if (_infPotionsCheck != null && GodotObject.IsInstanceValid(_infPotionsCheck)) sandbox.InfinitePotions = _infPotionsCheck.ButtonPressed;
-            if (_noExhaustCheck != null && GodotObject.IsInstanceValid(_noExhaustCheck)) sandbox.NoCardExhaust = _noExhaustCheck.ButtonPressed;
+            if (_godModeCheck != null && GodotObject.IsInstanceValid(_godModeCheck))
+            {
+                sandbox.GodMode = _godModeCheck.ButtonPressed;
+                RuntimeStateManager.GodModeEnabled = _godModeCheck.ButtonPressed;
+            }
+            if (_infEnergyCheck != null && GodotObject.IsInstanceValid(_infEnergyCheck))
+            {
+                sandbox.InfiniteEnergy = _infEnergyCheck.ButtonPressed;
+                RuntimeStateManager.InfiniteEnergyEnabled = _infEnergyCheck.ButtonPressed;
+            }
+            if (_oneHitKillCheck != null && GodotObject.IsInstanceValid(_oneHitKillCheck))
+            {
+                sandbox.OneHitKill = _oneHitKillCheck.ButtonPressed;
+                RuntimeStateManager.OneHitKillEnabled = _oneHitKillCheck.ButtonPressed;
+            }
+            if (_infPotionsCheck != null && GodotObject.IsInstanceValid(_infPotionsCheck))
+            {
+                sandbox.InfinitePotions = _infPotionsCheck.ButtonPressed;
+                RuntimeStateManager.InfinitePotionsEnabled = _infPotionsCheck.ButtonPressed;
+            }
+            if (_noExhaustCheck != null && GodotObject.IsInstanceValid(_noExhaustCheck))
+            {
+                sandbox.NoCardExhaust = _noExhaustCheck.ButtonPressed;
+                RuntimeStateManager.NoCardExhaustEnabled = _noExhaustCheck.ButtonPressed;
+            }
             if (_bonusDrawSpin != null && GodotObject.IsInstanceValid(_bonusDrawSpin)) sandbox.BonusDrawPerTurn = (int)_bonusDrawSpin.Value;
 
             var snap = RunTweaksSaveManager.ActiveSnapshot;
@@ -4914,6 +4955,7 @@ public partial class ModSettingsDialog : CanvasLayer
                 snap.PreRunTweaks.EnemyDefendMultiplier = tweaks.EnemyDefendMultiplier;
                 snap.PreRunTweaks.PlayerDamageMultiplier = tweaks.PlayerDamageMultiplier;
                 snap.PreRunTweaks.PlayerDefendMultiplier = tweaks.PlayerDefendMultiplier;
+                snap.PreRunTweaks.MaxEnergy = tweaks.MaxEnergy;
                 if (snap.PreRunTweaks.EndlessMode != null && tweaks.EndlessMode != null)
                 {
                     snap.PreRunTweaks.EndlessMode.Enabled = tweaks.EndlessMode.Enabled;

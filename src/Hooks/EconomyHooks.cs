@@ -74,6 +74,7 @@ public static class EconomyHooks
                 int customPotionSlots = RunTweaksSaveManager.GetEffectivePreRunTweaks().PotionSlots;
                 if (customPotionSlots > 0 && customPotionSlots != 3)
                 {
+                    int oldMaxPotionCount = __instance.MaxPotionCount;
                     var method = typeof(Player).GetMethod("SetMaxPotionCountInternal", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
                     if (method != null)
                     {
@@ -81,11 +82,11 @@ public static class EconomyHooks
                     }
                     else
                     {
-                        int diff = customPotionSlots - __instance.MaxPotionCount;
+                        int diff = customPotionSlots - oldMaxPotionCount;
                         if (diff > 0) __instance.AddToMaxPotionCount(diff);
                         else if (diff < 0) __instance.SubtractFromMaxPotionCount(-diff);
                     }
-                    ModLogger.Info($"Configured custom starting player PotionSlots: {customPotionSlots} (was {__instance.MaxPotionCount})");
+                    ModLogger.Info($"Configured custom starting player PotionSlots: {customPotionSlots} (was {oldMaxPotionCount})");
                 }
             }
             catch (Exception ex)

@@ -234,6 +234,11 @@ public static class GameHelper
     {
         maxEnergy = Math.Max(1, maxEnergy);
         ConfigManager.Current.PreRunTweaks.MaxEnergy = maxEnergy;
+        if (AIOTweaks.Hooks.RunTweaksSaveManager.ActiveSnapshot?.PreRunTweaks != null)
+        {
+            AIOTweaks.Hooks.RunTweaksSaveManager.ActiveSnapshot.PreRunTweaks.MaxEnergy = maxEnergy;
+            AIOTweaks.Hooks.RunTweaksSaveManager.SaveActiveSnapshot();
+        }
 
         try
         {
@@ -1424,6 +1429,11 @@ public static class GameHelper
     {
         slots = Math.Clamp(slots, 1, 10);
         ConfigManager.Current.PreRunTweaks.PotionSlots = slots;
+        if (AIOTweaks.Hooks.RunTweaksSaveManager.ActiveSnapshot?.PreRunTweaks != null)
+        {
+            AIOTweaks.Hooks.RunTweaksSaveManager.ActiveSnapshot.PreRunTweaks.PotionSlots = slots;
+            AIOTweaks.Hooks.RunTweaksSaveManager.SaveActiveSnapshot();
+        }
 
         try
         {

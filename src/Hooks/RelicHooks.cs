@@ -48,7 +48,7 @@ public static class RelicHooks
         [HarmonyPrefix]
         public static bool Prefix(RelicGrabBag __instance, RelicModel relic)
         {
-            if (ConfigManager.Current.PreRunTweaks.AllowMultipleRelics)
+            if (RunTweaksSaveManager.GetEffectivePreRunTweaks().AllowMultipleRelics)
             {
                 ModLogger.Verbose("RelicHooks", $"AllowMultipleRelics active: Retaining relic '{relic?.GetType().Name}' in grab bag.");
                 return false;
@@ -63,7 +63,7 @@ public static class RelicHooks
         [HarmonyPostfix]
         public static void Postfix(RelicGrabBag __instance, RelicRarity rarity, Func<RelicModel, bool> filter, IRunState runState, RelicModel? __result)
         {
-            if (ConfigManager.Current.PreRunTweaks.AllowMultipleRelics && __result != null && DequesField != null)
+            if (RunTweaksSaveManager.GetEffectivePreRunTweaks().AllowMultipleRelics && __result != null && DequesField != null)
             {
                 try
                 {
@@ -87,7 +87,7 @@ public static class RelicHooks
         [HarmonyPostfix]
         public static void Postfix(RelicGrabBag __instance, RelicRarity rarity, Func<RelicModel, bool> filter, IRunState runState, RelicModel? __result)
         {
-            if (ConfigManager.Current.PreRunTweaks.AllowMultipleRelics && __result != null && DequesField != null)
+            if (RunTweaksSaveManager.GetEffectivePreRunTweaks().AllowMultipleRelics && __result != null && DequesField != null)
             {
                 try
                 {
@@ -112,7 +112,7 @@ public static class RelicHooks
         [HarmonyPrefix]
         public static bool Prefix(MerchantInventory __instance)
         {
-            if (!ConfigManager.Current.PreRunTweaks.AllowMultipleRelics)
+            if (!RunTweaksSaveManager.GetEffectivePreRunTweaks().AllowMultipleRelics)
             {
                 return true;
             }
@@ -164,7 +164,7 @@ public static class RelicHooks
         [HarmonyPrefix]
         public static void Prefix(RelicGrabBag __instance)
         {
-            if (ConfigManager.Current.PreRunTweaks.AllowMultipleRelics && RefreshAllowedField != null)
+            if (RunTweaksSaveManager.GetEffectivePreRunTweaks().AllowMultipleRelics && RefreshAllowedField != null)
             {
                 try
                 {

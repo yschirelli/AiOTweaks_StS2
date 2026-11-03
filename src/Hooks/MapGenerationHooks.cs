@@ -283,6 +283,7 @@ public static class RunTweaksSaveManager
                 RunSettings = new RunSettings()
             };
             RuntimeStateManager.CurrentEndlessLoopCount = 0;
+            RuntimeStateManager.FreeMapNavigationEnabled = false;
         }
         else if (ActiveSnapshot != null)
         {
@@ -624,6 +625,11 @@ public static class RunTweaksSaveManager
                 if (Math.Abs(cur.EnemyDefendMultiplier - snap.EnemyDefendMultiplier) > 0.001f)
                 {
                     snap.EnemyDefendMultiplier = cur.EnemyDefendMultiplier;
+                    snapshotChanged = true;
+                }
+                if (cur.MaxEnergy > 0 && cur.MaxEnergy != snap.MaxEnergy)
+                {
+                    snap.MaxEnergy = cur.MaxEnergy;
                     snapshotChanged = true;
                 }
             }
@@ -3139,6 +3145,7 @@ public static class MapGenerationHooks
         public static void Postfix(RelicModel __instance, Player player, ref bool __result)
         {
             if (!__result) return;
+            if (RunTweaksSaveManager.GetEffectivePreRunTweaks().AllowMultipleRelics) return;
 
             // In Endless mode or repeated visits, Neow should always offer fresh relics not yet owned by the player
             if (player?.Relics != null && player.Relics.Any(r => r.Id == __instance.Id))

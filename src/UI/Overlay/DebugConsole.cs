@@ -806,13 +806,20 @@ public partial class DebugConsole : CanvasLayer
             case "dmgmult":
                 if (parts.Length > 1 && float.TryParse(parts[1], System.Globalization.CultureInfo.InvariantCulture, out float dmgMult))
                 {
-                    ConfigManager.Current.PreRunTweaks.PlayerDamageMultiplier = Math.Max(0f, dmgMult);
+                    float clampedDmg = Math.Max(0f, dmgMult);
+                    ConfigManager.Current.PreRunTweaks.PlayerDamageMultiplier = clampedDmg;
+                    if (RunTweaksSaveManager.ActiveSnapshot?.PreRunTweaks != null)
+                    {
+                        RunTweaksSaveManager.ActiveSnapshot.PreRunTweaks.PlayerDamageMultiplier = clampedDmg;
+                        RunTweaksSaveManager.SaveActiveSnapshot();
+                    }
+                    ConfigManager.SaveConfig();
                     GameHelper.RefreshAllVisibleCards();
-                    LogToConsole($"[color=green]Player damage multiplier set to {dmgMult:F2}x. Card damage updated.[/color]");
+                    LogToConsole($"[color=green]Player damage multiplier set to {clampedDmg:F2}x. Card damage updated.[/color]");
                 }
                 else
                 {
-                    LogToConsole($"[color=yellow]Current Player Damage Multiplier: {ConfigManager.Current.PreRunTweaks.PlayerDamageMultiplier:F2}x[/color]");
+                    LogToConsole($"[color=yellow]Current Player Damage Multiplier: {RuntimeStateManager.GetEffectivePlayerDamageMultiplier():F2}x[/color]");
                     LogError("Usage: playerdmg <multiplier>", ErrorType.Syntax);
                 }
                 break;
@@ -821,13 +828,20 @@ public partial class DebugConsole : CanvasLayer
             case "defmult":
                 if (parts.Length > 1 && float.TryParse(parts[1], System.Globalization.CultureInfo.InvariantCulture, out float defMult))
                 {
-                    ConfigManager.Current.PreRunTweaks.PlayerDefendMultiplier = Math.Max(0f, defMult);
+                    float clampedDef = Math.Max(0f, defMult);
+                    ConfigManager.Current.PreRunTweaks.PlayerDefendMultiplier = clampedDef;
+                    if (RunTweaksSaveManager.ActiveSnapshot?.PreRunTweaks != null)
+                    {
+                        RunTweaksSaveManager.ActiveSnapshot.PreRunTweaks.PlayerDefendMultiplier = clampedDef;
+                        RunTweaksSaveManager.SaveActiveSnapshot();
+                    }
+                    ConfigManager.SaveConfig();
                     GameHelper.RefreshAllVisibleCards();
-                    LogToConsole($"[color=green]Player defend multiplier set to {defMult:F2}x. Card block values updated.[/color]");
+                    LogToConsole($"[color=green]Player defend multiplier set to {clampedDef:F2}x. Card block values updated.[/color]");
                 }
                 else
                 {
-                    LogToConsole($"[color=yellow]Current Player Defend Multiplier: {ConfigManager.Current.PreRunTweaks.PlayerDefendMultiplier:F2}x[/color]");
+                    LogToConsole($"[color=yellow]Current Player Defend Multiplier: {RuntimeStateManager.GetEffectivePlayerDefendMultiplier():F2}x[/color]");
                     LogError("Usage: playerdef <multiplier>", ErrorType.Syntax);
                 }
                 break;
