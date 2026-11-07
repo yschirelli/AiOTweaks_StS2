@@ -31,6 +31,45 @@ public partial class ModSettingsDialog : CanvasLayer
         return _instance != null && _instance._activeAssignButton != null;
     }
 
+    public static Control? CreateFormattedTooltip(string forText)
+    {
+        if (string.IsNullOrWhiteSpace(forText))
+            return null;
+
+        var panel = new PanelContainer();
+        var style = new StyleBoxFlat
+        {
+            BgColor = new Color(0.08f, 0.10f, 0.14f, 0.98f),
+            BorderColor = new Color(0.35f, 0.42f, 0.55f, 0.9f),
+            BorderWidthLeft = 1,
+            BorderWidthRight = 1,
+            BorderWidthTop = 1,
+            BorderWidthBottom = 1,
+            CornerRadiusTopLeft = 5,
+            CornerRadiusTopRight = 5,
+            CornerRadiusBottomLeft = 5,
+            CornerRadiusBottomRight = 5,
+            ContentMarginLeft = 12,
+            ContentMarginRight = 12,
+            ContentMarginTop = 10,
+            ContentMarginBottom = 10
+        };
+        panel.AddThemeStyleboxOverride("panel", style);
+
+        var rtl = new RichTextLabel
+        {
+            BbcodeEnabled = true,
+            Text = GameHelper.FormatBbCodeForGodot(forText),
+            FitContent = true,
+            ScrollActive = false,
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+            CustomMinimumSize = new Vector2(340, 0),
+            MouseFilter = Control.MouseFilterEnum.Ignore
+        };
+        panel.AddChild(rtl);
+        return panel;
+    }
+
     private ColorRect? _backdrop;
     private PanelContainer? _dialogPanel;
     private TabContainer? _tabs;
@@ -1592,7 +1631,7 @@ public partial class ModSettingsDialog : CanvasLayer
 
         foreach (var power in allPowers)
         {
-            var card = new PanelContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+            var card = new FormattedTooltipPanel { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
             var cardStyle = new StyleBoxFlat
             {
                 BgColor = new Color(0.11f, 0.13f, 0.17f, 0.95f),
@@ -1623,30 +1662,32 @@ public partial class ModSettingsDialog : CanvasLayer
                     Texture = iconTex,
                     CustomMinimumSize = new Vector2(28, 28),
                     ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
-                    StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered
+                    StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+                    MouseFilter = Control.MouseFilterEnum.Pass
                 };
                 hCardBox.AddChild(iconRect);
             }
 
-            var textVBox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+            var textVBox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, MouseFilter = Control.MouseFilterEnum.Pass };
             string fullTooltip = GameHelper.GetPowerFullTooltip(power.CanonicalInstance);
             card.TooltipText = fullTooltip;
 
-            var titleLbl = new Label
+            var titleLbl = new FormattedTooltipLabel
             {
                 Text = power.DisplayName,
                 Modulate = GameHelper.GetPowerTypeColor(power.Type),
                 ClipText = true,
-                CustomMinimumSize = new Vector2(90, 0)
+                CustomMinimumSize = new Vector2(90, 0),
+                TooltipText = fullTooltip
             };
-            titleLbl.TooltipText = fullTooltip;
             textVBox.AddChild(titleLbl);
 
             var metaLbl = new Label
             {
                 Text = $"{power.Type} • {power.StackType}",
                 Modulate = new Color(0.6f, 0.65f, 0.72f, 0.8f),
-                ClipText = true
+                ClipText = true,
+                MouseFilter = Control.MouseFilterEnum.Pass
             };
             textVBox.AddChild(metaLbl);
 
@@ -1867,7 +1908,7 @@ public partial class ModSettingsDialog : CanvasLayer
 
         foreach (var power in allPowers)
         {
-            var card = new PanelContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+            var card = new FormattedTooltipPanel { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
             var cardStyle = new StyleBoxFlat
             {
                 BgColor = new Color(0.11f, 0.13f, 0.17f, 0.95f),
@@ -1898,30 +1939,32 @@ public partial class ModSettingsDialog : CanvasLayer
                     Texture = iconTex,
                     CustomMinimumSize = new Vector2(28, 28),
                     ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
-                    StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered
+                    StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+                    MouseFilter = Control.MouseFilterEnum.Pass
                 };
                 hCardBox.AddChild(iconRect);
             }
 
-            var textVBox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+            var textVBox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, MouseFilter = Control.MouseFilterEnum.Pass };
             string fullTooltip = GameHelper.GetPowerFullTooltip(power.CanonicalInstance);
             card.TooltipText = fullTooltip;
 
-            var titleLbl = new Label
+            var titleLbl = new FormattedTooltipLabel
             {
                 Text = power.DisplayName,
                 Modulate = GameHelper.GetPowerTypeColor(power.Type),
                 ClipText = true,
-                CustomMinimumSize = new Vector2(90, 0)
+                CustomMinimumSize = new Vector2(90, 0),
+                TooltipText = fullTooltip
             };
-            titleLbl.TooltipText = fullTooltip;
             textVBox.AddChild(titleLbl);
 
             var metaLbl = new Label
             {
                 Text = $"{power.Type} • {power.StackType}",
                 Modulate = new Color(0.6f, 0.65f, 0.72f, 0.8f),
-                ClipText = true
+                ClipText = true,
+                MouseFilter = Control.MouseFilterEnum.Pass
             };
             textVBox.AddChild(metaLbl);
 
@@ -2071,7 +2114,7 @@ public partial class ModSettingsDialog : CanvasLayer
 
         foreach (var potion in allPotions)
         {
-            var card = new PanelContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+            var card = new FormattedTooltipPanel { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
             var cardStyle = new StyleBoxFlat
             {
                 BgColor = new Color(0.12f, 0.14f, 0.18f, 0.95f),
@@ -2102,37 +2145,42 @@ public partial class ModSettingsDialog : CanvasLayer
                     Texture = iconTex,
                     CustomMinimumSize = new Vector2(32, 32),
                     ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
-                    StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered
+                    StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+                    MouseFilter = Control.MouseFilterEnum.Pass
                 };
                 hCardBox.AddChild(iconRect);
             }
 
-            var textVBox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+            var textVBox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, MouseFilter = Control.MouseFilterEnum.Pass };
             string fullTooltip = GameHelper.GetPotionFullTooltip(potion.CanonicalInstance);
             card.TooltipText = fullTooltip;
 
-            var titleLbl = new Label
+            var titleLbl = new FormattedTooltipLabel
             {
                 Text = potion.Title,
-                Modulate = GameHelper.GetPotionRarityColor(potion.Rarity)
+                Modulate = GameHelper.GetPotionRarityColor(potion.Rarity),
+                TooltipText = fullTooltip
             };
-            titleLbl.TooltipText = fullTooltip;
             textVBox.AddChild(titleLbl);
 
             var metaLbl = new Label
             {
                 Text = $"{potion.Rarity} • {potion.Usage}",
-                Modulate = new Color(0.6f, 0.65f, 0.75f, 0.8f)
+                Modulate = new Color(0.6f, 0.65f, 0.75f, 0.8f),
+                MouseFilter = Control.MouseFilterEnum.Pass
             };
             textVBox.AddChild(metaLbl);
 
             if (!string.IsNullOrWhiteSpace(potion.Description))
             {
-                var descLbl = new Label
+                var descLbl = new RichTextLabel
                 {
-                    Text = potion.Description,
+                    BbcodeEnabled = true,
+                    Text = GameHelper.FormatBbCodeForGodot(potion.Description),
+                    FitContent = true,
+                    ScrollActive = false,
                     AutowrapMode = TextServer.AutowrapMode.WordSmart,
-                    Modulate = new Color(0.85f, 0.85f, 0.85f, 0.9f)
+                    MouseFilter = Control.MouseFilterEnum.Pass
                 };
                 textVBox.AddChild(descLbl);
             }
@@ -2332,7 +2380,7 @@ public partial class ModSettingsDialog : CanvasLayer
             int slotIndex = i;
             var potion = (potionSlots != null && i < potionSlots.Count) ? potionSlots[i] : null;
 
-            var slotCard = new PanelContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+            var slotCard = new FormattedTooltipPanel { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
             var cardStyle = new StyleBoxFlat
             {
                 BgColor = potion != null ? new Color(0.12f, 0.15f, 0.20f, 0.95f) : new Color(0.08f, 0.09f, 0.12f, 0.85f),
@@ -2359,7 +2407,8 @@ public partial class ModSettingsDialog : CanvasLayer
             {
                 Text = $"Slot #{i + 1}:",
                 Modulate = new Color(0.6f, 0.85f, 1f),
-                CustomMinimumSize = new Vector2(65, 0)
+                CustomMinimumSize = new Vector2(65, 0),
+                MouseFilter = Control.MouseFilterEnum.Pass
             };
             slotHBox.AddChild(slotBadge);
 
@@ -2373,41 +2422,46 @@ public partial class ModSettingsDialog : CanvasLayer
                         Texture = iconTex,
                         CustomMinimumSize = new Vector2(36, 36),
                         ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
-                        StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered
+                        StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+                        MouseFilter = Control.MouseFilterEnum.Pass
                     };
                     slotHBox.AddChild(iconRect);
                 }
 
-                var textVBox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+                var textVBox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, MouseFilter = Control.MouseFilterEnum.Pass };
                 string fullTooltip = GameHelper.GetPotionFullTooltip(potion);
                 slotCard.TooltipText = fullTooltip;
 
                 string rawTitle = potion.Title?.GetFormattedText() ?? "";
                 string title = !string.IsNullOrWhiteSpace(rawTitle) ? GameHelper.CleanBbCode(rawTitle) : potion.GetType().Name;
 
-                var titleLbl = new Label
+                var titleLbl = new FormattedTooltipLabel
                 {
                     Text = title,
-                    Modulate = GameHelper.GetPotionRarityColor(potion.Rarity)
+                    Modulate = GameHelper.GetPotionRarityColor(potion.Rarity),
+                    TooltipText = fullTooltip
                 };
-                titleLbl.TooltipText = fullTooltip;
                 textVBox.AddChild(titleLbl);
 
                 var metaLbl = new Label
                 {
                     Text = $"{potion.Rarity} • {potion.Usage}",
-                    Modulate = new Color(0.65f, 0.7f, 0.8f, 0.85f)
+                    Modulate = new Color(0.65f, 0.7f, 0.8f, 0.85f),
+                    MouseFilter = Control.MouseFilterEnum.Pass
                 };
                 textVBox.AddChild(metaLbl);
 
                 string desc = GameHelper.GetPotionDescription(potion);
                 if (!string.IsNullOrWhiteSpace(desc))
                 {
-                    var descLbl = new Label
+                    var descLbl = new RichTextLabel
                     {
-                        Text = desc,
+                        BbcodeEnabled = true,
+                        Text = GameHelper.FormatBbCodeForGodot(desc),
+                        FitContent = true,
+                        ScrollActive = false,
                         AutowrapMode = TextServer.AutowrapMode.WordSmart,
-                        Modulate = new Color(0.9f, 0.9f, 0.9f, 0.95f)
+                        MouseFilter = Control.MouseFilterEnum.Pass
                     };
                     textVBox.AddChild(descLbl);
                 }
@@ -2464,7 +2518,7 @@ public partial class ModSettingsDialog : CanvasLayer
                 {
                     if (power == null) continue;
 
-                    var card = new PanelContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+                    var card = new FormattedTooltipPanel { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
                     var cardStyle = new StyleBoxFlat
                     {
                         BgColor = new Color(0.12f, 0.15f, 0.20f, 0.95f),
@@ -2495,26 +2549,27 @@ public partial class ModSettingsDialog : CanvasLayer
                             Texture = iconTex,
                             CustomMinimumSize = new Vector2(28, 28),
                             ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
-                            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered
+                            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+                            MouseFilter = Control.MouseFilterEnum.Pass
                         };
                         hBox.AddChild(iconRect);
                     }
 
-                    var textVBox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+                    var textVBox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, MouseFilter = Control.MouseFilterEnum.Pass };
                     string fullTooltip = GameHelper.GetPowerFullTooltip(power);
                     card.TooltipText = fullTooltip;
 
                     string rawTitle = power.Title?.GetFormattedText() ?? "";
                     string title = !string.IsNullOrWhiteSpace(rawTitle) ? GameHelper.CleanBbCode(rawTitle) : power.GetType().Name;
 
-                    var titleLbl = new Label
+                    var titleLbl = new FormattedTooltipLabel
                     {
                         Text = $"{title} (Amount: {power.Amount})",
                         Modulate = GameHelper.GetPowerTypeColor(power.Type),
                         ClipText = true,
-                        CustomMinimumSize = new Vector2(90, 0)
+                        CustomMinimumSize = new Vector2(90, 0),
+                        TooltipText = fullTooltip
                     };
-                    titleLbl.TooltipText = fullTooltip;
                     textVBox.AddChild(titleLbl);
 
                     hBox.AddChild(textVBox);
@@ -2694,7 +2749,7 @@ public partial class ModSettingsDialog : CanvasLayer
                     if (power == null) continue;
                     totalDisplayed++;
 
-                    var card = new PanelContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+                    var card = new FormattedTooltipPanel { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
                     var cardStyle = new StyleBoxFlat
                     {
                         BgColor = new Color(0.12f, 0.15f, 0.20f, 0.95f),
@@ -2725,12 +2780,13 @@ public partial class ModSettingsDialog : CanvasLayer
                             Texture = iconTex,
                             CustomMinimumSize = new Vector2(28, 28),
                             ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
-                            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered
+                            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+                            MouseFilter = Control.MouseFilterEnum.Pass
                         };
                         hBox.AddChild(iconRect);
                     }
 
-                    var textVBox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+                    var textVBox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, MouseFilter = Control.MouseFilterEnum.Pass };
                     string fullTooltip = "";
                     try { fullTooltip = GameHelper.GetPowerFullTooltip(power); } catch { }
                     card.TooltipText = fullTooltip;
@@ -2739,14 +2795,14 @@ public partial class ModSettingsDialog : CanvasLayer
                     try { rawTitle = power.Title?.GetFormattedText() ?? ""; } catch { }
                     string title = !string.IsNullOrWhiteSpace(rawTitle) ? GameHelper.CleanBbCode(rawTitle) : power.GetType().Name;
 
-                    var titleLbl = new Label
+                    var titleLbl = new FormattedTooltipLabel
                     {
                         Text = $"{cleanName} • {title} (Amount: {power.Amount})",
                         Modulate = GameHelper.GetPowerTypeColor(power.Type),
                         ClipText = true,
-                        CustomMinimumSize = new Vector2(90, 0)
+                        CustomMinimumSize = new Vector2(90, 0),
+                        TooltipText = fullTooltip
                     };
-                    titleLbl.TooltipText = fullTooltip;
                     textVBox.AddChild(titleLbl);
 
                     hBox.AddChild(textVBox);
@@ -2869,7 +2925,7 @@ public partial class ModSettingsDialog : CanvasLayer
             string relicTitle = !string.IsNullOrWhiteSpace(canonical?.Title.GetFormattedText()) ? canonical.Title.GetFormattedText() : r;
             Color rarityColor = GameHelper.GetRelicRarityColor(canonical);
 
-            var panel = new PanelContainer 
+            var panel = new FormattedTooltipPanel 
             { 
                 SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
                 TooltipText = fullTooltip
@@ -2889,14 +2945,14 @@ public partial class ModSettingsDialog : CanvasLayer
             };
             panel.AddThemeStyleboxOverride("panel", style);
 
-            var margin = new MarginContainer();
+            var margin = new MarginContainer { MouseFilter = Control.MouseFilterEnum.Pass };
             margin.AddThemeConstantOverride("margin_top", 6);
             margin.AddThemeConstantOverride("margin_bottom", 6);
             margin.AddThemeConstantOverride("margin_left", 8);
             margin.AddThemeConstantOverride("margin_right", 8);
             panel.AddChild(margin);
 
-            var row = new HBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, Alignment = BoxContainer.AlignmentMode.Center };
+            var row = new HBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, Alignment = BoxContainer.AlignmentMode.Center, MouseFilter = Control.MouseFilterEnum.Pass };
             margin.AddChild(row);
 
             var tex = GameHelper.GetRelicIcon(canonical);
@@ -2908,13 +2964,14 @@ public partial class ModSettingsDialog : CanvasLayer
                     CustomMinimumSize = new Vector2(44, 44),
                     ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
                     StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
-                    TextureFilter = CanvasItem.TextureFilterEnum.Linear
+                    TextureFilter = CanvasItem.TextureFilterEnum.Linear,
+                    MouseFilter = Control.MouseFilterEnum.Pass
                 };
                 row.AddChild(iconRect);
             }
 
-            var textVBox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, Alignment = BoxContainer.AlignmentMode.Center };
-            var lbl = new Label 
+            var textVBox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, Alignment = BoxContainer.AlignmentMode.Center, MouseFilter = Control.MouseFilterEnum.Pass };
+            var lbl = new FormattedTooltipLabel 
             { 
                 Text = relicTitle, 
                 CustomMinimumSize = new Vector2(110, 0), 
@@ -2927,7 +2984,8 @@ public partial class ModSettingsDialog : CanvasLayer
             var rarityLabel = new Label
             {
                 Text = canonical != null ? canonical.Rarity.ToString() : "",
-                Modulate = new Color(0.6f, 0.6f, 0.7f, 0.8f)
+                Modulate = new Color(0.6f, 0.6f, 0.7f, 0.8f),
+                MouseFilter = Control.MouseFilterEnum.Pass
             };
             textVBox.AddChild(rarityLabel);
             row.AddChild(textVBox);
@@ -3046,7 +3104,7 @@ public partial class ModSettingsDialog : CanvasLayer
                     string fullTooltip = GameHelper.GetRelicFullTooltip(relic);
                     Color rarityColor = GameHelper.GetRelicRarityColor(relic);
 
-                    var panel = new PanelContainer 
+                    var panel = new FormattedTooltipPanel 
                     { 
                         SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
                         TooltipText = fullTooltip
@@ -3066,14 +3124,14 @@ public partial class ModSettingsDialog : CanvasLayer
                     };
                     panel.AddThemeStyleboxOverride("panel", style);
 
-                    var margin = new MarginContainer();
+                    var margin = new MarginContainer { MouseFilter = Control.MouseFilterEnum.Pass };
                     margin.AddThemeConstantOverride("margin_top", 6);
                     margin.AddThemeConstantOverride("margin_bottom", 6);
                     margin.AddThemeConstantOverride("margin_left", 8);
                     margin.AddThemeConstantOverride("margin_right", 8);
                     panel.AddChild(margin);
 
-                    var row = new HBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, Alignment = BoxContainer.AlignmentMode.Center };
+                    var row = new HBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, Alignment = BoxContainer.AlignmentMode.Center, MouseFilter = Control.MouseFilterEnum.Pass };
                     margin.AddChild(row);
 
                     var tex = GameHelper.GetRelicIcon(relic);
@@ -3085,13 +3143,14 @@ public partial class ModSettingsDialog : CanvasLayer
                             CustomMinimumSize = new Vector2(46, 46),
                             ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
                             StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
-                            TextureFilter = CanvasItem.TextureFilterEnum.Linear
+                            TextureFilter = CanvasItem.TextureFilterEnum.Linear,
+                            MouseFilter = Control.MouseFilterEnum.Pass
                         };
                         row.AddChild(iconRect);
                     }
 
-                    var textVBox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, Alignment = BoxContainer.AlignmentMode.Center };
-                    var nameLabel = new Label
+                    var textVBox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, Alignment = BoxContainer.AlignmentMode.Center, MouseFilter = Control.MouseFilterEnum.Pass };
+                    var nameLabel = new FormattedTooltipLabel
                     {
                         Text = relicName,
                         CustomMinimumSize = new Vector2(110, 0),
@@ -3106,7 +3165,8 @@ public partial class ModSettingsDialog : CanvasLayer
                     var subLabel = new Label
                     {
                         Text = statusText,
-                        Modulate = new Color(0.7f, 0.75f, 0.85f, 0.85f)
+                        Modulate = new Color(0.7f, 0.75f, 0.85f, 0.85f),
+                        MouseFilter = Control.MouseFilterEnum.Pass
                     };
                     textVBox.AddChild(subLabel);
                     row.AddChild(textVBox);
@@ -3402,7 +3462,7 @@ public partial class ModSettingsDialog : CanvasLayer
             var canonical = GameHelper.FindCanonicalCardModel(c);
             string fullTooltip = canonical != null ? GameHelper.GetCardFullTooltip(canonical) : c;
 
-            var panel = new PanelContainer 
+            var panel = new FormattedTooltipPanel 
             { 
                 SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
                 TooltipText = fullTooltip
@@ -3422,14 +3482,14 @@ public partial class ModSettingsDialog : CanvasLayer
             };
             panel.AddThemeStyleboxOverride("panel", style);
 
-            var margin = new MarginContainer();
+            var margin = new MarginContainer { MouseFilter = Control.MouseFilterEnum.Pass };
             margin.AddThemeConstantOverride("margin_top", 8);
             margin.AddThemeConstantOverride("margin_bottom", 8);
             margin.AddThemeConstantOverride("margin_left", 8);
             margin.AddThemeConstantOverride("margin_right", 8);
             panel.AddChild(margin);
 
-            var cardVbox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, Alignment = BoxContainer.AlignmentMode.Center };
+            var cardVbox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, Alignment = BoxContainer.AlignmentMode.Center, MouseFilter = Control.MouseFilterEnum.Pass };
             margin.AddChild(cardVbox);
 
             Texture2D? tex = canonical?.Portrait;
@@ -3455,13 +3515,13 @@ public partial class ModSettingsDialog : CanvasLayer
                     StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
                     CustomMinimumSize = new Vector2(100, 110),
                     SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter,
-                    TooltipText = fullTooltip
+                    MouseFilter = Control.MouseFilterEnum.Pass
                 };
                 cardVbox.AddChild(texRect);
             }
 
             string cardTitle = !string.IsNullOrWhiteSpace(canonical?.Title) ? canonical.Title : c;
-            var lbl = new Label 
+            var lbl = new FormattedTooltipLabel 
             { 
                 Text = cardTitle, 
                 CustomMinimumSize = new Vector2(110, 24), 
@@ -3474,7 +3534,7 @@ public partial class ModSettingsDialog : CanvasLayer
             if (canonical != null)
             {
                 string costText = canonical.EnergyCost?.CostsX == true ? "X" : (canonical.EnergyCost?.Canonical >= 0 ? canonical.EnergyCost.Canonical.ToString() : "-");
-                var badgeLbl = new Label
+                var badgeLbl = new FormattedTooltipLabel
                 {
                     Text = $"[{costText}E | {canonical.Type}]",
                     CustomMinimumSize = new Vector2(110, 18),
@@ -3488,12 +3548,12 @@ public partial class ModSettingsDialog : CanvasLayer
                 var canonicalKws = GameHelper.GetCardKeywords(canonical);
                 if (canonicalKws != null && canonicalKws.Count > 0)
                 {
-                    var kwHBox = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+                    var kwHBox = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center, MouseFilter = Control.MouseFilterEnum.Pass };
                     kwHBox.AddThemeConstantOverride("separation", 2);
                     foreach (var kw in canonicalKws)
                     {
                         if (kw == MegaCrit.Sts2.Core.Entities.Cards.CardKeyword.None) continue;
-                        var kwLbl = new Label
+                        var kwLbl = new FormattedTooltipLabel
                         {
                             Text = $"[{kw}]",
                             Modulate = GameHelper.GetKeywordBadgeColor(kw),
@@ -3916,7 +3976,7 @@ public partial class ModSettingsDialog : CanvasLayer
 
             string fullTooltip = GameHelper.GetCardFullTooltip(c);
 
-            var panel = new PanelContainer 
+            var panel = new FormattedTooltipPanel 
             { 
                 SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
                 TooltipText = fullTooltip
@@ -3924,14 +3984,14 @@ public partial class ModSettingsDialog : CanvasLayer
             var style = new StyleBoxFlat { BgColor = new Color(0.15f, 0.15f, 0.2f, 0.9f), CornerRadiusTopLeft = 8, CornerRadiusTopRight = 8, CornerRadiusBottomLeft = 8, CornerRadiusBottomRight = 8 };
             panel.AddThemeStyleboxOverride("panel", style);
             
-            var margin = new MarginContainer();
+            var margin = new MarginContainer { MouseFilter = Control.MouseFilterEnum.Pass };
             margin.AddThemeConstantOverride("margin_top", 8);
             margin.AddThemeConstantOverride("margin_bottom", 8);
             margin.AddThemeConstantOverride("margin_left", 8);
             margin.AddThemeConstantOverride("margin_right", 8);
             panel.AddChild(margin);
 
-            var vbox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, Alignment = BoxContainer.AlignmentMode.Center };
+            var vbox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, Alignment = BoxContainer.AlignmentMode.Center, MouseFilter = Control.MouseFilterEnum.Pass };
             margin.AddChild(vbox);
             
             Texture2D? tex = c.Portrait;
@@ -3956,7 +4016,7 @@ public partial class ModSettingsDialog : CanvasLayer
                     StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
                     CustomMinimumSize = new Vector2(100, 110),
                     SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter,
-                    TooltipText = fullTooltip
+                    MouseFilter = Control.MouseFilterEnum.Pass
                 };
                 vbox.AddChild(texRect);
             }
@@ -4003,7 +4063,7 @@ public partial class ModSettingsDialog : CanvasLayer
                 titleColor = new Color(1f, 1f, 1f);
             }
 
-            var lbl = new Label { 
+            var lbl = new FormattedTooltipLabel { 
                 Text = cardTitle, 
                 CustomMinimumSize = new Vector2(110, 24), 
                 ClipText = true, 
@@ -4022,7 +4082,7 @@ public partial class ModSettingsDialog : CanvasLayer
                     ? $"{enchName} (x{c.Enchantment.Amount})" 
                     : $"{enchName}";
 
-                var enchBadge = new Label
+                var enchBadge = new FormattedTooltipLabel
                 {
                     Text = enchText,
                     CustomMinimumSize = new Vector2(110, 20),
@@ -4037,12 +4097,12 @@ public partial class ModSettingsDialog : CanvasLayer
             var cardKeywords = GameHelper.GetCardKeywords(c);
             if (cardKeywords != null && cardKeywords.Count > 0)
             {
-                var kwHBox = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+                var kwHBox = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center, MouseFilter = Control.MouseFilterEnum.Pass };
                 kwHBox.AddThemeConstantOverride("separation", 2);
                 foreach (var kw in cardKeywords)
                 {
                     if (kw == MegaCrit.Sts2.Core.Entities.Cards.CardKeyword.None) continue;
-                    var kwBadge = new Label
+                    var kwBadge = new FormattedTooltipLabel
                     {
                         Text = $"[{kw}]",
                         Modulate = GameHelper.GetKeywordBadgeColor(kw),
@@ -4570,7 +4630,7 @@ public partial class ModSettingsDialog : CanvasLayer
         {
             string fullTooltip = GameHelper.GetEventFullTooltip(info);
 
-            var panel = new PanelContainer 
+            var panel = new FormattedTooltipPanel 
             { 
                 SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
                 TooltipText = fullTooltip
@@ -4591,28 +4651,29 @@ public partial class ModSettingsDialog : CanvasLayer
             };
             panel.AddThemeStyleboxOverride("panel", style);
 
-            var margin = new MarginContainer();
+            var margin = new MarginContainer { MouseFilter = Control.MouseFilterEnum.Pass };
             margin.AddThemeConstantOverride("margin_top", 8);
             margin.AddThemeConstantOverride("margin_bottom", 8);
             margin.AddThemeConstantOverride("margin_left", 10);
             margin.AddThemeConstantOverride("margin_right", 10);
             panel.AddChild(margin);
 
-            var row = new HBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, Alignment = BoxContainer.AlignmentMode.Center };
+            var row = new HBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, Alignment = BoxContainer.AlignmentMode.Center, MouseFilter = Control.MouseFilterEnum.Pass };
             margin.AddChild(row);
 
-            var infoVBox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+            var infoVBox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, MouseFilter = Control.MouseFilterEnum.Pass };
             
-            var badgeRow = new HBoxContainer();
+            var badgeRow = new HBoxContainer { MouseFilter = Control.MouseFilterEnum.Pass };
             var badge = new Label
             {
                 Text = info.IsAncient ? "[Ancient Event]" : "[Standard Event]",
-                Modulate = info.IsAncient ? new Color(1f, 0.8f, 0.35f) : new Color(0.4f, 0.85f, 1f)
+                Modulate = info.IsAncient ? new Color(1f, 0.8f, 0.35f) : new Color(0.4f, 0.85f, 1f),
+                MouseFilter = Control.MouseFilterEnum.Pass
             };
             badgeRow.AddChild(badge);
             infoVBox.AddChild(badgeRow);
 
-            var titleLbl = new Label
+            var titleLbl = new FormattedTooltipLabel
             {
                 Text = info.DisplayName,
                 CustomMinimumSize = new Vector2(160, 0),
@@ -4625,7 +4686,8 @@ public partial class ModSettingsDialog : CanvasLayer
             var idLbl = new Label
             {
                 Text = $"Type: {info.TypeName}",
-                Modulate = new Color(0.6f, 0.65f, 0.75f, 0.7f)
+                Modulate = new Color(0.6f, 0.65f, 0.75f, 0.7f),
+                MouseFilter = Control.MouseFilterEnum.Pass
             };
             infoVBox.AddChild(idLbl);
             row.AddChild(infoVBox);
@@ -5192,5 +5254,21 @@ public partial class ModSettingsDialog : CanvasLayer
     private void DeferredLogAppend(string text)
     {
         _logLabel?.AppendText($"{text}\n");
+    }
+}
+
+public partial class FormattedTooltipPanel : PanelContainer
+{
+    public override Control? _MakeCustomTooltip(string forText)
+    {
+        return ModSettingsDialog.CreateFormattedTooltip(forText);
+    }
+}
+
+public partial class FormattedTooltipLabel : Label
+{
+    public override Control? _MakeCustomTooltip(string forText)
+    {
+        return ModSettingsDialog.CreateFormattedTooltip(forText);
     }
 }

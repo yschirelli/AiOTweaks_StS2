@@ -1232,7 +1232,11 @@ public static class GameHelper
                         if (!dict.ContainsKey(t.Name))
                         {
                             PotionModel? instance = null;
-                            try { instance = Activator.CreateInstance(t) as PotionModel; } catch { }
+                            try { instance = ModelDb.AllPotions?.FirstOrDefault(p => p != null && p.GetType() == t); } catch { }
+                            if (instance == null)
+                            {
+                                try { instance = Activator.CreateInstance(t) as PotionModel; } catch { }
+                            }
                             string entryId = instance?.Id.Entry ?? ConvertPascalToScreamingSnake(t.Name);
                             string rawTitle = instance?.Title?.GetFormattedText() ?? "";
                             string title = !string.IsNullOrWhiteSpace(rawTitle) ? CleanBbCode(rawTitle) : FormatPascalOrSnakeToWords(t.Name);
@@ -1318,11 +1322,31 @@ public static class GameHelper
         {
             string desc = "";
             try { desc = potion.DynamicDescription?.GetFormattedText() ?? ""; } catch { }
-            if (string.IsNullOrWhiteSpace(desc) && potion.CanonicalInstance != null)
+            if (string.IsNullOrWhiteSpace(desc) && potion.CanonicalInstance != null && potion.CanonicalInstance != potion)
             {
                 try { desc = potion.CanonicalInstance.DynamicDescription?.GetFormattedText() ?? ""; } catch { }
             }
-            return CleanBbCode(desc);
+
+            // Fallback: if DynamicDescription threw or left raw placeholders, construct from LocString
+            if (string.IsNullOrWhiteSpace(desc) || desc.Contains('{') || desc.Contains("starIcons"))
+            {
+                try
+                {
+                    string entryId = potion.Id.Entry ?? ConvertPascalToScreamingSnake(potion.GetType().Name);
+                    var loc = new MegaCrit.Sts2.Core.Localization.LocString("potions", entryId + ".description");
+                    try { potion.DynamicVars?.AddTo(loc); } catch { }
+                    try { loc.Add("energyPrefix", "colorless"); } catch { }
+                    try { loc.Add("singleStarIcon", "[img=18x18]res://images/packed/sprite_fonts/star_icon.png[/img]"); } catch { }
+                    string fmt = loc.GetFormattedText();
+                    if (!string.IsNullOrWhiteSpace(fmt)) desc = fmt;
+                }
+                catch { }
+            }
+
+            // Resolve any remaining dynamic variables from potion's DynamicVars/CanonicalVars
+            desc = ResolveDynamicVariables(desc, potion);
+
+            return desc.Trim();
         }
         catch
         {
@@ -1335,12 +1359,13 @@ public static class GameHelper
         if (potion == null) return "";
         try
         {
-            string title = !string.IsNullOrWhiteSpace(potion.Title?.GetFormattedText()) 
-                ? CleanBbCode(potion.Title.GetFormattedText()) 
+            string rawTitle = potion.Title?.GetFormattedText() ?? "";
+            string title = !string.IsNullOrWhiteSpace(rawTitle) 
+                ? rawTitle 
                 : FormatPascalOrSnakeToWords(potion.GetType().Name);
             var sb = new System.Text.StringBuilder();
-            sb.AppendLine(title);
-            sb.AppendLine($"Rarity: {potion.Rarity} | Usage: {potion.Usage}");
+            sb.AppendLine($"[b]{title}[/b]");
+            sb.AppendLine($"[color=#99AAB5]Rarity: {potion.Rarity} | Usage: {potion.Usage}[/color]");
 
             string desc = GetPotionDescription(potion);
             if (!string.IsNullOrWhiteSpace(desc))
@@ -1358,13 +1383,13 @@ public static class GameHelper
                     {
                         if (tip is HoverTip ht)
                         {
-                            string tipTitle = CleanBbCode(ht.Title ?? "").Trim();
-                            string tipDesc = CleanBbCode(ht.Description ?? "").Trim();
+                            string tipTitle = (ht.Title ?? "").Trim();
+                            string tipDesc = (ht.Description ?? "").Trim();
                             if (!string.IsNullOrWhiteSpace(tipTitle) && !string.IsNullOrWhiteSpace(tipDesc) &&
                                 !tipTitle.Equals(title, StringComparison.OrdinalIgnoreCase))
                             {
                                 sb.AppendLine();
-                                sb.AppendLine($"[{tipTitle}]");
+                                sb.AppendLine($"[color=#EFC851][b][{tipTitle}][/b][/color]");
                                 sb.AppendLine(tipDesc);
                             }
                         }
@@ -1641,7 +1666,8 @@ public static class GameHelper
             {
                 try { desc = power.Description?.GetFormattedText() ?? ""; } catch { }
             }
-            return CleanBbCode(desc);
+            desc = ResolveDynamicVariables(desc, power);
+            return desc.Trim();
         }
         catch
         {
@@ -1654,12 +1680,13 @@ public static class GameHelper
         if (power == null) return "";
         try
         {
-            string title = !string.IsNullOrWhiteSpace(power.Title?.GetFormattedText()) 
-                ? CleanBbCode(power.Title.GetFormattedText()) 
+            string rawTitle = power.Title?.GetFormattedText() ?? "";
+            string title = !string.IsNullOrWhiteSpace(rawTitle) 
+                ? rawTitle 
                 : FormatPascalOrSnakeToWords(power.GetType().Name);
             var sb = new System.Text.StringBuilder();
-            sb.AppendLine(title);
-            sb.AppendLine($"Type: {power.Type} | Stack: {power.StackType}");
+            sb.AppendLine($"[b]{title}[/b]");
+            sb.AppendLine($"[color=#99AAB5]Type: {power.Type} | Stack: {power.StackType}[/color]");
 
             string desc = GetPowerDescription(power);
             if (!string.IsNullOrWhiteSpace(desc))
@@ -1677,13 +1704,13 @@ public static class GameHelper
                     {
                         if (tip is HoverTip ht)
                         {
-                            string tipTitle = CleanBbCode(ht.Title ?? "").Trim();
-                            string tipDesc = CleanBbCode(ht.Description ?? "").Trim();
+                            string tipTitle = (ht.Title ?? "").Trim();
+                            string tipDesc = (ht.Description ?? "").Trim();
                             if (!string.IsNullOrWhiteSpace(tipTitle) && !string.IsNullOrWhiteSpace(tipDesc) &&
                                 !tipTitle.Equals(title, StringComparison.OrdinalIgnoreCase))
                             {
                                 sb.AppendLine();
-                                sb.AppendLine($"[{tipTitle}]");
+                                sb.AppendLine($"[color=#EFC851][b][{tipTitle}][/b][/color]");
                                 sb.AppendLine(tipDesc);
                             }
                         }
@@ -1979,66 +2006,215 @@ public static class GameHelper
         return null;
     }
 
+    public static string FormatBbCodeForGodot(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return "";
+
+        // Standard STS2 custom color tags mapped to Godot's [color=#hex]...[/color]
+        var colorMap = new (string Tag, string Hex)[]
+        {
+            ("red", "#FF5555"),
+            ("darkRed", "#C83232"),
+            ("gold", "#EFC851"),
+            ("yellow", "#FFFF55"),
+            ("blue", "#87CEEB"),
+            ("darkBlue", "#67AEEB"),
+            ("green", "#7FFF00"),
+            ("darkGreen", "#32CD32"),
+            ("aqua", "#2AEBBE"),
+            ("cyan", "#00FFFF"),
+            ("orange", "#FFA518"),
+            ("pink", "#FF78A0"),
+            ("purple", "#EE82EE"),
+            ("cream", "#FFF6E2"),
+            ("white", "#FFFFFF"),
+            ("gray", "#A0A0A0"),
+            ("grey", "#A0A0A0")
+        };
+
+        foreach (var (tag, hex) in colorMap)
+        {
+            text = System.Text.RegularExpressions.Regex.Replace(text, $@"\[{tag}\]", $"[color={hex}]", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            text = System.Text.RegularExpressions.Regex.Replace(text, $@"\[/{tag}\]", "[/color]", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        }
+
+        // Remove dynamic / animation effect tags that don't belong in UI
+        string[] animTags = { "jitter", "sine", "fadein", "flyin", "scramble", "thinkydots", "wave", "rainbow" };
+        foreach (var tag in animTags)
+        {
+            text = System.Text.RegularExpressions.Regex.Replace(text, $@"\[/?{tag}\]", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        }
+
+        // Ensure icon img tags specify dimensions so they render nicely inline with text fonts
+        text = System.Text.RegularExpressions.Regex.Replace(
+            text, 
+            @"\[img\](res://[^\s\]]+)\[/img\]", 
+            "[img=18x18]$1[/img]", 
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        return text.Trim();
+    }
+
     public static string CleanBbCode(string? text)
     {
         if (string.IsNullOrWhiteSpace(text)) return "";
+
+        // Replace icon images with readable text before stripping tags
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"\[img[^\]]*\]res://[^\s\]]*star_icon\.png\[/img\]", "Stars", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"\[img[^\]]*\]res://[^\s\]]*energy_icon\.png\[/img\]", "Energy", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"\[img[^\]]*\][^\[]*\[/img\]", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
         // Strip custom STS2 & Godot BBCode tags like [jitter], [sine], [b], [i], [orange], [gold], [aqua], [color=...], etc.
-        string cleaned = System.Text.RegularExpressions.Regex.Replace(text, @"\[/?[a-zA-Z0-9_#=]+\]", "");
+        string cleaned = System.Text.RegularExpressions.Regex.Replace(text, @"\[/?[a-zA-Z0-9_#=]+(?:\s+[^\]]*)?\]", "");
         cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, @"\n{3,}", "\n\n");
         return cleaned.Trim();
     }
 
-    public static string ResolveDynamicVariables(string text, EventModel? ev)
+    public static Dictionary<string, decimal> ExtractModelVariables(AbstractModel? model)
     {
-        if (string.IsNullOrWhiteSpace(text) || ev == null) return text ?? "";
+        var dict = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+        if (model == null) return dict;
+
         try
         {
-            var dynamicVarsProp = ev.GetType().GetProperty("DynamicVars", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-            if (dynamicVarsProp?.GetValue(ev) is System.Collections.IEnumerable dynamicVars)
+            var dvarsProp = model.GetType().GetProperty("DynamicVars", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            if (dvarsProp?.GetValue(model) is MegaCrit.Sts2.Core.Localization.DynamicVars.DynamicVarSet dvars)
             {
-                foreach (var item in dynamicVars)
+                foreach (var kvp in dvars)
                 {
-                    if (item == null) continue;
-                    var keyProp = item.GetType().GetProperty("Key");
-                    var valProp = item.GetType().GetProperty("Value");
-                    string? key = keyProp?.GetValue(item)?.ToString();
-                    object? valObj = valProp?.GetValue(item);
-                    if (!string.IsNullOrEmpty(key) && valObj != null)
+                    if (kvp.Value != null)
                     {
-                        string valStr = valObj.ToString() ?? "";
-                        var intValProp = valObj.GetType().GetProperty("IntValue") ?? valObj.GetType().GetProperty("BaseValue");
-                        if (intValProp != null)
-                        {
-                            var v = intValProp.GetValue(valObj);
-                            if (v != null) valStr = v.ToString() ?? valStr;
-                        }
-                        text = text.Replace($"{{{key}}}", valStr, StringComparison.OrdinalIgnoreCase);
+                        decimal val = kvp.Value.IntValue != 0 ? kvp.Value.IntValue : kvp.Value.BaseValue;
+                        dict[kvp.Key] = val;
                     }
                 }
             }
+        }
+        catch { }
 
-            var canonicalVarsProp = ev.GetType().GetProperty("CanonicalVars", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-            if (canonicalVarsProp?.GetValue(ev) is System.Collections.IEnumerable canonicalVars)
+        try
+        {
+            var canVarsProp = model.GetType().GetProperty("CanonicalVars", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            if (canVarsProp?.GetValue(model) is System.Collections.IEnumerable canVars)
             {
-                foreach (var item in canonicalVars)
+                foreach (var item in canVars)
                 {
-                    if (item == null) continue;
-                    var nameProp = item.GetType().GetProperty("Name");
-                    var baseValProp = item.GetType().GetProperty("BaseValue") ?? item.GetType().GetProperty("IntValue");
-                    string? name = nameProp?.GetValue(item)?.ToString();
-                    object? bVal = baseValProp?.GetValue(item);
-                    if (!string.IsNullOrEmpty(name) && bVal != null)
+                    if (item is MegaCrit.Sts2.Core.Localization.DynamicVars.DynamicVar dv)
                     {
-                        text = text.Replace($"{{{name}}}", bVal.ToString() ?? "", StringComparison.OrdinalIgnoreCase);
+                        decimal val = dv.IntValue != 0 ? dv.IntValue : dv.BaseValue;
+                        dict.TryAdd(dv.Name, val);
                     }
                 }
             }
         }
-        catch (Exception ex)
+        catch { }
+
+        try
         {
-            ModLogger.Debug($"ResolveDynamicVariables notice: {ex.Message}");
+            // Also check CanonicalInstance if different
+            var canInstProp = model.GetType().GetProperty("CanonicalInstance", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            if (canInstProp?.GetValue(model) is AbstractModel canInst && canInst != model)
+            {
+                var canDict = ExtractModelVariables(canInst);
+                foreach (var kvp in canDict)
+                {
+                    dict.TryAdd(kvp.Key, kvp.Value);
+                }
+            }
         }
+        catch { }
+
+        return dict;
+    }
+
+    public static string ResolveDynamicVariables(string text, AbstractModel? model)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return text ?? "";
+        var vars = ExtractModelVariables(model);
+        return ResolveDynamicVariables(text, vars);
+    }
+
+    public static string ResolveDynamicVariables(string text, Dictionary<string, decimal>? vars)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return text ?? "";
+
+        // 1. Star icons formatter: {Var:starIcons()} or {Var:starIcons}
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"\{(\w+):starIcons(?:\(\))?\}", m =>
+        {
+            string varName = m.Groups[1].Value;
+            if (vars != null && vars.TryGetValue(varName, out decimal v))
+            {
+                int count = (int)v;
+                return $"{count} [img=18x18]res://images/packed/sprite_fonts/star_icon.png[/img]";
+            }
+            return "[img=18x18]res://images/packed/sprite_fonts/star_icon.png[/img]";
+        }, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        // 2. Energy icons formatter: {Var:energyIcons()}
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"\{(\w+):energyIcons(?:\([^\)]*\))?\}", m =>
+        {
+            string varName = m.Groups[1].Value;
+            if (vars != null && vars.TryGetValue(varName, out decimal v))
+            {
+                int count = (int)v;
+                return $"{count} [img=18x18]res://images/packed/sprite_fonts/colorless_energy_icon.png[/img]";
+            }
+            return "[img=18x18]res://images/packed/sprite_fonts/colorless_energy_icon.png[/img]";
+        }, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        // 3. Plural formatter: {Var:plural:singular|plural}
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"\{(\w+):plural:([^\|\}]+)\|([^\|\}]+)\}", m =>
+        {
+            string varName = m.Groups[1].Value;
+            string one = m.Groups[2].Value;
+            string many = m.Groups[3].Value;
+            if (vars != null && vars.TryGetValue(varName, out decimal v))
+            {
+                return (v == 1) ? one : many;
+            }
+            return many;
+        }, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        // 4. Diff / inverseDiff: {Var:diff()} or {Var:inverseDiff()}
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"\{(\w+):(diff|inverseDiff)(?:\(\))?\}", m =>
+        {
+            string varName = m.Groups[1].Value;
+            if (vars != null && vars.TryGetValue(varName, out decimal v))
+            {
+                return v.ToString();
+            }
+            return m.Value;
+        }, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        // 5. Special STS2 standard icon tokens in brackets or braces
+        text = text.Replace("{singleStarIcon}", "[img=18x18]res://images/packed/sprite_fonts/star_icon.png[/img]", StringComparison.OrdinalIgnoreCase);
+        text = text.Replace("{energyPrefix}", "colorless", StringComparison.OrdinalIgnoreCase);
+
+        // 6. Standard {VarName} replacement
+        if (vars != null && vars.Count > 0)
+        {
+            foreach (var kvp in vars)
+            {
+                text = text.Replace($"{{{kvp.Key}}}", kvp.Value.ToString(), StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        // 7. Check for literal [stars] or [starts] or [star]
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"\[stars?\]|\[starts?\]", m =>
+        {
+            if (vars != null && (vars.TryGetValue("Stars", out decimal v) || vars.TryGetValue("Star", out v)))
+            {
+                return $"{((int)v)} [img=18x18]res://images/packed/sprite_fonts/star_icon.png[/img]";
+            }
+            return "[img=18x18]res://images/packed/sprite_fonts/star_icon.png[/img]";
+        }, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
         return text;
+    }
+
+    public static string ResolveDynamicVariables(string text, EventModel? ev)
+    {
+        return ResolveDynamicVariables(text, (AbstractModel?)ev);
     }
 
     public static string FormatEventLocString(MegaCrit.Sts2.Core.Localization.LocString? loc, EventModel? ev)
@@ -2062,12 +2238,12 @@ public static class GameHelper
             }
 
             formatted = ResolveDynamicVariables(formatted, ev);
-            return CleanBbCode(formatted);
+            return formatted.Trim();
         }
         catch
         {
             string raw = loc.ToString() ?? "";
-            return CleanBbCode(ResolveDynamicVariables(raw, ev));
+            return ResolveDynamicVariables(raw, ev).Trim();
         }
     }
 
@@ -2486,6 +2662,7 @@ public static class GameHelper
             {
                 desc = card.Description?.ToString() ?? "";
             }
+            desc = ResolveDynamicVariables(desc, card);
             return desc.Trim();
         }
         catch (Exception ex)
@@ -2507,8 +2684,8 @@ public static class GameHelper
             }
 
             var sb = new System.Text.StringBuilder();
-            sb.AppendLine(title);
-            sb.AppendLine($"Type: {card.Type} | Rarity: {card.Rarity}");
+            sb.AppendLine($"[b]{title}[/b]");
+            sb.AppendLine($"[color=#99AAB5]Type: {card.Type} | Rarity: {card.Rarity}[/color]");
 
             if (card.EnergyCost != null)
             {
@@ -2517,15 +2694,15 @@ public static class GameHelper
                     : (card.EnergyCost.HasLocalModifiers 
                         ? card.EnergyCost.GetResolved().ToString() 
                         : (card.EnergyCost.Canonical >= 0 ? card.EnergyCost.Canonical.ToString() : "Unplayable"));
-                sb.AppendLine($"Energy Cost: {energyCostText}");
+                sb.AppendLine($"[color=#87CEEB]Energy Cost: {energyCostText}[/color]");
             }
             if (card.HasStarCostX)
             {
-                sb.AppendLine("Star Cost: X");
+                sb.AppendLine("[color=#EFC851]Star Cost: X[/color]");
             }
             else if (card.CurrentStarCost > 0 || card.CanonicalStarCost > 0)
             {
-                sb.AppendLine($"Star Cost: {(card.CurrentStarCost > 0 ? card.CurrentStarCost : card.CanonicalStarCost)}");
+                sb.AppendLine($"[color=#EFC851]Star Cost: {(card.CurrentStarCost > 0 ? card.CurrentStarCost : card.CanonicalStarCost)}[/color]");
             }
 
             string desc = GetCardDescription(card);
@@ -2538,14 +2715,14 @@ public static class GameHelper
             if (card.Keywords != null && card.Keywords.Count > 0)
             {
                 sb.AppendLine();
-                sb.AppendLine("Keywords: " + string.Join(", ", card.Keywords.Select(k => k.ToString())));
+                sb.AppendLine($"[color=#A0AEC0]Keywords: {string.Join(", ", card.Keywords.Select(k => k.ToString()))}[/color]");
             }
 
             if (card.Enchantment != null)
             {
                 sb.AppendLine();
                 string enchTitle = card.Enchantment.Title?.GetFormattedText() ?? card.Enchantment.GetType().Name;
-                sb.AppendLine($"Enchantment: {enchTitle} (x{card.Enchantment.Amount})");
+                sb.AppendLine($"[color=#D6BCFA]Enchantment: {enchTitle} (x{card.Enchantment.Amount})[/color]");
                 string enchDesc = card.Enchantment.DynamicDescription?.GetFormattedText() ?? card.Enchantment.DynamicExtraCardText?.GetFormattedText() ?? "";
                 if (!string.IsNullOrWhiteSpace(enchDesc))
                 {
@@ -2567,56 +2744,85 @@ public static class GameHelper
         if (relic == null) return "";
         try
         {
+            string desc = "";
             try
             {
-                string dyn = relic.DynamicDescription.GetFormattedText();
+                string dyn = relic.DynamicDescription?.GetFormattedText() ?? "";
                 if (!string.IsNullOrWhiteSpace(dyn))
                 {
-                    return CleanBbCode(dyn).Trim();
+                    desc = dyn;
                 }
             }
             catch { }
 
-            try
+            if (string.IsNullOrWhiteSpace(desc) && relic.CanonicalInstance != null && relic.CanonicalInstance != relic)
             {
-                var ht = relic.HoverTip;
-                if (!string.IsNullOrWhiteSpace(ht.Description))
+                try
                 {
-                    return CleanBbCode(ht.Description).Trim();
-                }
-            }
-            catch { }
-
-            try
-            {
-                var descProp = relic.GetType().GetProperty("Description", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-                if (descProp?.GetValue(relic) is MegaCrit.Sts2.Core.Localization.LocString loc)
-                {
-                    string text = loc.GetFormattedText();
-                    if (!string.IsNullOrWhiteSpace(text))
+                    string dyn = relic.CanonicalInstance.DynamicDescription?.GetFormattedText() ?? "";
+                    if (!string.IsNullOrWhiteSpace(dyn))
                     {
-                        return CleanBbCode(text).Trim();
+                        desc = dyn;
                     }
                 }
+                catch { }
             }
-            catch { }
 
-            try
+            if (string.IsNullOrWhiteSpace(desc))
             {
-                var eventDescProp = relic.GetType().GetProperty("DynamicEventDescription", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance) ??
-                                    relic.GetType().GetProperty("EventDescription", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-                if (eventDescProp?.GetValue(relic) is MegaCrit.Sts2.Core.Localization.LocString loc)
+                try
                 {
-                    string text = loc.GetFormattedText();
-                    if (!string.IsNullOrWhiteSpace(text))
+                    var ht = relic.HoverTip;
+                    if (!string.IsNullOrWhiteSpace(ht.Description))
                     {
-                        return CleanBbCode(text).Trim();
+                        desc = ht.Description;
                     }
                 }
+                catch { }
             }
-            catch { }
 
-            return "";
+            if (string.IsNullOrWhiteSpace(desc) || desc.Contains('{'))
+            {
+                try
+                {
+                    var descProp = relic.GetType().GetProperty("Description", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                    if (descProp?.GetValue(relic) is MegaCrit.Sts2.Core.Localization.LocString loc)
+                    {
+                        try { relic.DynamicVars?.AddTo(loc); } catch { }
+                        try { loc.Add("energyPrefix", "colorless"); } catch { }
+                        try { loc.Add("singleStarIcon", "[img=18x18]res://images/packed/sprite_fonts/star_icon.png[/img]"); } catch { }
+                        string text = loc.GetFormattedText();
+                        if (!string.IsNullOrWhiteSpace(text))
+                        {
+                            desc = text;
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            if (string.IsNullOrWhiteSpace(desc))
+            {
+                try
+                {
+                    var eventDescProp = relic.GetType().GetProperty("DynamicEventDescription", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance) ??
+                                        relic.GetType().GetProperty("EventDescription", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                    if (eventDescProp?.GetValue(relic) is MegaCrit.Sts2.Core.Localization.LocString loc)
+                    {
+                        string text = loc.GetFormattedText();
+                        if (!string.IsNullOrWhiteSpace(text))
+                        {
+                            desc = text;
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            // Resolve any dynamic variables from relic's DynamicVars/CanonicalVars
+            desc = ResolveDynamicVariables(desc, relic);
+
+            return desc.Trim();
         }
         catch (Exception ex)
         {
@@ -2630,10 +2836,11 @@ public static class GameHelper
         if (relic == null) return "";
         try
         {
-            string title = !string.IsNullOrWhiteSpace(relic.Title.GetFormattedText()) ? CleanBbCode(relic.Title.GetFormattedText()) : relic.GetType().Name;
+            string rawTitle = relic.Title?.GetFormattedText() ?? "";
+            string title = !string.IsNullOrWhiteSpace(rawTitle) ? rawTitle : relic.GetType().Name;
             var sb = new System.Text.StringBuilder();
-            sb.AppendLine(title);
-            sb.AppendLine($"Rarity: {relic.Rarity}");
+            sb.AppendLine($"[b]{title}[/b]");
+            sb.AppendLine($"[color=#99AAB5]Rarity: {relic.Rarity}[/color]");
 
             string desc = GetRelicDescription(relic);
             if (!string.IsNullOrWhiteSpace(desc))
@@ -2651,8 +2858,8 @@ public static class GameHelper
                     {
                         if (tip is MegaCrit.Sts2.Core.HoverTips.HoverTip ht)
                         {
-                            string tipTitle = CleanBbCode(ht.Title ?? "").Trim();
-                            string tipDesc = CleanBbCode(ht.Description ?? "").Trim();
+                            string tipTitle = (ht.Title ?? "").Trim();
+                            string tipDesc = (ht.Description ?? "").Trim();
 
                             if (tipTitle.Equals(title, StringComparison.OrdinalIgnoreCase) || 
                                 tipDesc.Equals(desc, StringComparison.OrdinalIgnoreCase))
@@ -2663,18 +2870,18 @@ public static class GameHelper
                             if (!string.IsNullOrWhiteSpace(tipTitle) && !string.IsNullOrWhiteSpace(tipDesc))
                             {
                                 sb.AppendLine();
-                                sb.AppendLine($"[{tipTitle}]");
+                                sb.AppendLine($"[color=#EFC851][b][{tipTitle}][/b][/color]");
                                 sb.AppendLine(tipDesc);
                             }
                         }
                         else if (tip is MegaCrit.Sts2.Core.HoverTips.CardHoverTip cardTip && cardTip.Card != null)
                         {
-                            string cardTitle = CleanBbCode(cardTip.Card.Title ?? cardTip.Card.GetType().Name).Trim();
-                            string cardDesc = CleanBbCode(cardTip.Card.Description?.GetFormattedText() ?? "").Trim();
+                            string cardTitle = (cardTip.Card.Title ?? cardTip.Card.GetType().Name).Trim();
+                            string cardDesc = GetCardDescription(cardTip.Card);
                             if (!string.IsNullOrWhiteSpace(cardTitle) && !string.IsNullOrWhiteSpace(cardDesc))
                             {
                                 sb.AppendLine();
-                                sb.AppendLine($"[{cardTitle}]");
+                                sb.AppendLine($"[color=#EFC851][b][{cardTitle}][/b][/color]");
                                 sb.AppendLine(cardDesc);
                             }
                         }
@@ -2685,13 +2892,13 @@ public static class GameHelper
 
             try
             {
-                string flavor = CleanBbCode(relic.Flavor.GetFormattedText() ?? "").Trim();
+                string flavor = (relic.Flavor?.GetFormattedText() ?? "").Trim();
                 if (!string.IsNullOrWhiteSpace(flavor) && 
                     !flavor.Contains("revealed in the future", StringComparison.OrdinalIgnoreCase) &&
                     !flavor.Equals(desc, StringComparison.OrdinalIgnoreCase))
                 {
                     sb.AppendLine();
-                    sb.AppendLine($"\"{flavor}\"");
+                    sb.AppendLine($"[color=#8A94A8][i]\"{flavor}\"[/i][/color]");
                 }
             }
             catch { }
