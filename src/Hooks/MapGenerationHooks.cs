@@ -47,6 +47,12 @@ using MegaCrit.Sts2.Core.Nodes.Screens.ScreenContext;
 
 namespace AIOTweaks.Hooks;
 
+[JsonSerializable(typeof(ActiveRunTweaksSnapshot))]
+[JsonSourceGenerationOptions(WriteIndented = true, PropertyNameCaseInsensitive = true)]
+internal partial class ActiveRunTweaksJsonContext : JsonSerializerContext
+{
+}
+
 /// <summary>
 /// Serializable data container representing the immutable pre-run configuration snapshot bound to an active run.
 /// Persists across game restarts, quits, relogs, and endless loops.
@@ -143,7 +149,7 @@ public static class RunTweaksSaveManager
     private const string SnapshotFilePrefix = "active_run_tweaks_p";
     private static readonly object FileLock = new();
 
-    private static readonly JsonSerializerOptions JsonOpts = new()
+    private static readonly JsonSerializerOptions JsonOpts = new(ActiveRunTweaksJsonContext.Default.Options)
     {
         WriteIndented = true,
         PropertyNameCaseInsensitive = true

@@ -226,7 +226,8 @@ if [ -n "$OUTPUT_DIR" ] && [ -d "$OUTPUT_DIR" ]; then
     # Deploy to game mods directory if requested
     if [ "$DEPLOY" = true ]; then
         TARGET_MOD_DIR=""
-        if [ -n "$STS2_MOD_DIR" ] && [ -d "$STS2_MOD_DIR" ]; then
+        if [ -n "$STS2_MOD_DIR" ]; then
+            mkdir -p "$STS2_MOD_DIR"
             TARGET_MOD_DIR="$STS2_MOD_DIR"
         else
             for base in "${STEAM_CANDIDATE_PATHS[@]}"; do
@@ -246,11 +247,39 @@ if [ -n "$OUTPUT_DIR" ] && [ -d "$OUTPUT_DIR" ]; then
             DEPLOYED_COUNT=$((DEPLOYED_COUNT + 1))
         fi
 
+        # Also deploy to active Workshop item folder if present
+        for base in "${STEAM_CANDIDATE_PATHS[@]}"; do
+            workshop_dir="$base/steamapps/workshop/content/2868840/3795280483"
+            if [ -d "$workshop_dir" ]; then
+                echo " [Deploy] Active Steam Workshop mod folder verified: $workshop_dir"
+                echo " [Deploy] Deploying built DLLs to workshop folder..."
+                cp -vf "$OUTPUT_DIR"/AIOTweaks.* "$workshop_dir/"
+                DEPLOYED_COUNT=$((DEPLOYED_COUNT + 1))
+                break
+            fi
+        done
+
+        # If neither existing local mod folder nor workshop was found, auto-create local mod folder if game exists
+        if [ "$DEPLOYED_COUNT" -eq 0 ]; then
+            for base in "${STEAM_CANDIDATE_PATHS[@]}"; do
+                game_dir="$base/steamapps/common/Slay the Spire 2"
+                if [ -d "$game_dir" ]; then
+                    TARGET_MOD_DIR="$game_dir/mods/AIOTweaks"
+                    echo " [Deploy] Creating mod folder: $TARGET_MOD_DIR"
+                    mkdir -p "$TARGET_MOD_DIR"
+                    echo " [Deploy] Deploying built DLLs..."
+                    cp -vf "$OUTPUT_DIR"/AIOTweaks.* "$TARGET_MOD_DIR/"
+                    DEPLOYED_COUNT=$((DEPLOYED_COUNT + 1))
+                    break
+                fi
+            done
+        fi
+
         if [ "$DEPLOYED_COUNT" -gt 0 ]; then
-            echo " [Deploy] Deployment completed successfully to game mods folder!"
+            echo " [Deploy] Deployment completed successfully ($DEPLOYED_COUNT destination(s))!"
         else
             echo " [Deploy] Warning: Target game mod folder not found."
-            echo "          Expected: .../Slay the Spire 2/mods/AIOTweaks"
+            echo "          Expected: .../Slay the Spire 2/mods/AIOTweaks or .../workshop/content/2868840/3795280483"
             echo "          Please ensure the game and mods/AIOTweaks folder exist, or set STS2_MOD_DIR."
         fi
     fi

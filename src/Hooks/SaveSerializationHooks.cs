@@ -37,6 +37,7 @@ public static class SaveSerializationHooks
             }
             else
             {
+                // shortcut: mutates private _isReadOnly flag to register custom resolver, upgrade if .NET internals rename field
                 var isReadOnlyField = typeof(JsonSerializerOptions).GetField("_isReadOnly", BindingFlags.Instance | BindingFlags.NonPublic);
                 if (isReadOnlyField != null)
                 {
