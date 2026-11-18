@@ -3,8 +3,14 @@
   "name": "AIOTweaks",
   "author": "AIOTweaks Team",
   "description": "All-in-one customizable settings, tweak suite, and sandbox debug toolkit for Slay the Spire 2.",
-  "version": "1.1.6",
+  "version": "1.2.0",
   "min_game_version": "0.1.0",
+  "dependencies": [
+    {
+      "id": "BaseLib",
+      "min_version": "v3.4.8"
+    }
+  ],
   "has_pck": false,
   "has_dll": true,
   "affects_gameplay": false

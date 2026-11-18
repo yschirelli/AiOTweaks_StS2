@@ -461,25 +461,8 @@ public static class GameEventHooks
         }
     }
 
-    [HarmonyPatch(typeof(CardCmd), nameof(CardCmd.Enchant), new Type[] { typeof(CardModel), typeof(decimal) })]
-    public static class CardCmdEnchantSimplePatch
-    {
-        [HarmonyPostfix]
-        public static void Postfix(CardModel card, decimal amount)
-        {
-            try
-            {
-                string cardName = GetCardName(card);
-                string enchName = card?.Enchantment?.Title?.GetFormattedText() ?? card?.Enchantment?.Id.Entry ?? "Default";
-                LogEvent("CARD", $"Enchanted Card: '{cardName}' (ID: '{card?.Id.Entry}') with '{enchName}' (Amount: {amount})");
-            }
-            catch (Exception ex)
-            {
-                ModLogger.Debug($"[GameEventHooks] CardCmdEnchantSimplePatch error: {ex.Message}");
-            }
-        }
-    }
-
+    // Note: CardCmd.Enchant<T>(CardModel, decimal) delegates directly to CardCmd.Enchant(EnchantmentModel, CardModel, decimal)
+    // and cannot be patched directly because Harmony cannot patch open generic method definitions.
     [HarmonyPatch(typeof(CardCmd), nameof(CardCmd.Enchant), new Type[] { typeof(EnchantmentModel), typeof(CardModel), typeof(decimal) })]
     public static class CardCmdEnchantModelPatch
     {

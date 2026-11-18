@@ -1,4 +1,6 @@
 using System;
+using System.Linq;
+using System.Reflection;
 using AIOTweaks.Core;
 using AIOTweaks.Core.Config;
 using AIOTweaks.Core.Logging;
@@ -96,9 +98,23 @@ public static class EconomyHooks
         }
     }
 
-    [HarmonyPatch(typeof(CardReward), MethodType.Constructor, new Type[] { typeof(CardCreationOptions), typeof(int), typeof(Player), typeof(PlayerChoiceSynchronizer) })]
+    [HarmonyPatch]
     public static class CardRewardConstructorPatch
     {
+        [HarmonyTargetMethod]
+        public static MethodBase? TargetMethod()
+        {
+            return typeof(CardReward).GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+                .FirstOrDefault(c =>
+                {
+                    var p = c.GetParameters();
+                    return p.Length >= 3
+                        && p[0].ParameterType == typeof(CardCreationOptions)
+                        && p[1].ParameterType == typeof(int)
+                        && p[2].ParameterType == typeof(Player);
+                });
+        }
+
         [HarmonyPrefix]
         public static void Prefix(ref int cardCount)
         {

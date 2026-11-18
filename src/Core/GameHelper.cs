@@ -187,16 +187,47 @@ public static class GameHelper
     }
 
     private static readonly FieldInfo? RunStateGameModeField = typeof(RunState).GetField("<GameMode>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance);
+    private static readonly FieldInfo? RunStateIsCustomGameField = typeof(RunState).GetField("<IsCustomGame>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance);
+
+    public static void MarkRunStateCustom(RunState? runState)
+    {
+        if (runState == null) return;
+
+        try
+        {
+            // v0.113.0+ (beta): RunState tracks custom mode via IsCustomGame bool alongside GameMode (Standard/Blitz/Dread)
+            if (RunStateIsCustomGameField != null)
+            {
+                bool alreadyCustom = RunStateIsCustomGameField.GetValue(runState) is bool b && b;
+                if (!alreadyCustom)
+                {
+                    RunStateIsCustomGameField.SetValue(runState, true);
+                    ModLogger.Info("GameHelper: Switched active RunState to IsCustomGame = true.");
+                }
+                return;
+            }
+
+            // v0.111.x and earlier (main): GameMode.Custom enum value
+            if (runState.GameMode == GameMode.Standard && Enum.TryParse(typeof(GameMode), "Custom", out var customMode) && customMode != null)
+            {
+                RunStateGameModeField?.SetValue(runState, customMode);
+                ModLogger.Info("GameHelper: Switched active RunState to GameMode.Custom.");
+            }
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Debug($"MarkRunStateCustom error: {ex.Message}");
+        }
+    }
 
     public static void EnsureCustomRunMode()
     {
         try
         {
             var player = GetActivePlayer();
-            if (player?.RunState is RunState runState && runState.GameMode == GameMode.Standard)
+            if (player?.RunState is RunState runState)
             {
-                RunStateGameModeField?.SetValue(runState, GameMode.Custom);
-                ModLogger.Info("GameHelper: Switched active RunState to GameMode.Custom.");
+                MarkRunStateCustom(runState);
             }
         }
         catch (Exception ex)

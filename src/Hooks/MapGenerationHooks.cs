@@ -752,15 +752,15 @@ public static class MapGenerationHooks
 
     /// <summary>
     /// Enforces fair play on singleplayer/new run embarkation:
-    /// If tweaks are customized, switch GameMode to Custom (Seeded/Fair mode)
+    /// If tweaks are customized, marks the run as Custom (Seeded/Fair mode)
     /// to disable achievements and epoch unlocks.
-    /// If defaults are used, preserves GameMode.Standard.
+    /// If defaults are used, preserves standard progression.
     /// </summary>
     [HarmonyPatch(typeof(RunState), nameof(RunState.CreateForNewRun))]
     public static class RunStateCreateForNewRunPatch
     {
         [HarmonyPrefix]
-        public static void Prefix(ref GameMode gameMode, ref string seed)
+        public static void Prefix(ref string seed)
         {
             try
             {
@@ -769,25 +769,36 @@ public static class MapGenerationHooks
                 {
                     string canonical = MegaCrit.Sts2.Core.Helpers.SeedHelper.CanonicalizeSeed(customSeed);
                     seed = canonical;
-                    gameMode = GameMode.Custom;
-                    ModLogger.Info($"SeedingSystem: Custom seed '{canonical}' applied to new run (GameMode.Custom).");
-                }
-                else if (RunTweaksSaveManager.IsCustomRunPending())
-                {
-                    if (gameMode == GameMode.Standard)
-                    {
-                        gameMode = GameMode.Custom;
-                        ModLogger.Info($"Pre-run tweaks or map modifiers are active: Automatically set GameMode to Custom (Fair Mode). Procedural seed: {seed}");
-                    }
-                }
-                else
-                {
-                    ModLogger.Info($"SeedingSystem: Fresh procedural random seed '{seed}' used for standard run (GameMode.Standard).");
+                    ModLogger.Info($"SeedingSystem: Custom seed '{canonical}' applied to new run.");
                 }
             }
             catch (Exception ex)
             {
-                ModLogger.Error("Error evaluating fair play GameMode / seed in RunState.CreateForNewRun", ex);
+                ModLogger.Error("Error applying custom seed in RunState.CreateForNewRun", ex);
+            }
+        }
+
+        [HarmonyPostfix]
+        public static void Postfix(RunState __result)
+        {
+            try
+            {
+                if (__result == null) return;
+
+                var customSeed = ConfigManager.Current.PreRunTweaks.CustomSeed?.Trim();
+                if (!string.IsNullOrWhiteSpace(customSeed) || RunTweaksSaveManager.IsCustomRunPending())
+                {
+                    GameHelper.MarkRunStateCustom(__result);
+                    ModLogger.Info($"Pre-run tweaks or custom seed active: Marked new run as Custom (Fair Mode). GameMode={__result.GameMode}, Seed={__result.Rng?.Seed}");
+                }
+                else
+                {
+                    ModLogger.Info($"SeedingSystem: Fresh procedural random seed used for standard run (GameMode={__result.GameMode}).");
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error("Error evaluating fair play custom state in RunState.CreateForNewRun", ex);
             }
         }
     }
@@ -812,19 +823,18 @@ public static class MapGenerationHooks
     [HarmonyPatch(typeof(RunState), "CreateShared")]
     public static class RunStateCreateSharedPatch
     {
-        [HarmonyPrefix]
-        public static void Prefix(ref GameMode gameMode)
+        [HarmonyPostfix]
+        public static void Postfix(RunState __result)
         {
             try
             {
-                ModLogger.Verbose("MapGenerationHooks", $"RunState.CreateShared prefix evaluating GameMode: incoming={gameMode}");
+                if (__result == null) return;
+
+                ModLogger.Verbose("MapGenerationHooks", $"RunState.CreateShared postfix evaluating GameMode: {__result.GameMode}");
                 if (RunTweaksSaveManager.IsCustomRunPending())
                 {
-                    if (gameMode == GameMode.Standard)
-                    {
-                        gameMode = GameMode.Custom;
-                        ModLogger.Info("Pre-run tweaks are modified: Automatically set shared GameMode to Custom (Seeded/Fair Mode).");
-                    }
+                    GameHelper.MarkRunStateCustom(__result);
+                    ModLogger.Info($"Pre-run tweaks are modified: Marked shared run as Custom (Seeded/Fair Mode, GameMode={__result.GameMode}).");
                 }
                 else
                 {
@@ -833,7 +843,7 @@ public static class MapGenerationHooks
             }
             catch (Exception ex)
             {
-                ModLogger.Error("Error evaluating fair play GameMode in RunState.CreateShared", ex);
+                ModLogger.Error("Error evaluating fair play custom state in RunState.CreateShared", ex);
             }
         }
     }
@@ -1120,6 +1130,13 @@ public static class MapGenerationHooks
         }
     }
 
+    private static readonly MethodInfo? GenerateRooms4Arg = typeof(ActModel).GetMethod(
+        nameof(ActModel.GenerateRooms),
+        new[] { typeof(Rng), typeof(UnlockState), typeof(bool), typeof(bool) });
+    private static readonly MethodInfo? GenerateRooms3Arg = typeof(ActModel).GetMethod(
+        nameof(ActModel.GenerateRooms),
+        new[] { typeof(Rng), typeof(UnlockState), typeof(bool) });
+
     private static async Task ExecuteDeferredEnterAct()
     {
         try
@@ -1129,13 +1146,26 @@ public static class MapGenerationHooks
             if (RunManager.Instance != null && state != null)
             {
                 int loop = RuntimeStateManager.CurrentEndlessLoopCount;
+                bool isMultiplayer = state.Players.Count > 1;
+                bool isBlitz = string.Equals(state.GameMode.ToString(), "Blitz", StringComparison.OrdinalIgnoreCase);
 
                 uint loopSeed = (uint)(state.Rng.Seed ^ ((uint)loop * 0x9E3779B9u));
                 var loopRng = new MegaCrit.Sts2.Core.Random.Rng(loopSeed, $"endless_loop_{loop}");
 
                 foreach (var act in state.Acts)
                 {
-                    act.GenerateRooms(loopRng, state.UnlockState, state.Players.Count > 1);
+                    if (GenerateRooms4Arg != null)
+                    {
+                        GenerateRooms4Arg.Invoke(act, new object[] { loopRng, state.UnlockState, isMultiplayer, isBlitz });
+                    }
+                    else if (GenerateRooms3Arg != null)
+                    {
+                        GenerateRooms3Arg.Invoke(act, new object[] { loopRng, state.UnlockState, isMultiplayer });
+                    }
+                    else
+                    {
+                        act.GenerateRooms(loopRng, state.UnlockState, isMultiplayer);
+                    }
                 }
 
                 // Also re-seed all sub-RNGs in RunRngSet so combat rewards, monsters, drops, and treasures advance for the new loop!
@@ -1155,7 +1185,7 @@ public static class MapGenerationHooks
                     player.InitializeSeed(loopSeedStr);
                 }
 
-                ModLogger.Info($"Endless Mode: Regenerated fresh rooms, encounters, bosses, sub-RNGs, and player RNGs for loop #{loop}.");
+                ModLogger.Info($"Endless Mode: Regenerated fresh rooms, encounters, bosses, sub-RNGs, and player RNGs for loop #{loop} (Blitz={isBlitz}).");
 
                 // Ensure combat and action queues are cleanly reset before entering Act 0
                 CombatManager.Instance?.Reset(graceful: true);
@@ -2324,10 +2354,18 @@ public static class MapGenerationHooks
     public static float GetCurrentExtraOffsetY() => _currentExtraOffsetY;
 
     /// <summary>
-    /// Computes the dynamic maximum top scroll position based on the act's total height and boss position.
+    /// Computes the dynamic maximum top scroll position based on the act's boss node position.
     /// </summary>
     public static float GetMaxScrollTop(NMapScreen screen)
     {
+        var secondBoss = AccessTools.Field(typeof(NMapScreen), "_secondBossPointNode")?.GetValue(screen) as Control;
+        var boss = AccessTools.Field(typeof(NMapScreen), "_bossPointNode")?.GetValue(screen) as Control;
+        Control? topNode = secondBoss ?? boss;
+        if (topNode != null)
+        {
+            return Math.Max(1800f, -topNode.Position.Y - 180f);
+        }
+
         var map = AccessTools.Field(typeof(NMapScreen), "_map")?.GetValue(screen) as ActMap;
         if (map == null) return 1800f;
 
@@ -2343,7 +2381,46 @@ public static class MapGenerationHooks
         }
 
         float maxScroll = -bossY - 180f;
-        return Math.Max(-600f, maxScroll);
+        return Math.Max(1800f, maxScroll);
+    }
+
+    private static Vector2 GetMapBgViewportSize(NMapBg mapBg)
+    {
+        var windowField = AccessTools.Field(typeof(NMapBg), "_window");
+        if (windowField?.GetValue(mapBg) is Window window)
+        {
+            return new Vector2(window.Size.X, window.Size.Y);
+        }
+        return mapBg.IsInsideTree() ? mapBg.GetViewportRect().Size : Vector2.Zero;
+    }
+
+    private static void ApplyMapBgPosition(NMapBg mapBg, float extraOffsetY)
+    {
+        float bgTop = -1620f - extraOffsetY;
+        float adjustY = -1540f - extraOffsetY;
+        float offsetX = (float)(AccessTools.Field(typeof(NMapBg), "_offsetX")?.GetValue(mapBg) ?? mapBg.Position.X);
+        Vector2 viewportSize = GetMapBgViewportSize(mapBg);
+
+        if (viewportSize.Y > 0f)
+        {
+            float aspect = Math.Max(1.3333334f, viewportSize.X / viewportSize.Y);
+            if (aspect < 1.7777778f)
+            {
+                float p = (aspect - 1.3333334f) / 0.44444442f;
+                mapBg.Position = new Vector2(offsetX, Mathf.Remap(Ease.CubicOut(p), 0f, 1f, adjustY, bgTop));
+            }
+            else
+            {
+                mapBg.Position = new Vector2(offsetX, bgTop);
+            }
+        }
+        else
+        {
+            mapBg.Position = new Vector2(offsetX, bgTop);
+        }
+
+        var drawings = AccessTools.Field(typeof(NMapBg), "_drawings")?.GetValue(mapBg) as NMapDrawings;
+        drawings?.RepositionBasedOnBackground(mapBg);
     }
 
     private static void AdjustMapBackground(NMapBg? mapBg, float totalHeight, float bossY)
@@ -2417,32 +2494,7 @@ public static class MapGenerationHooks
                 }
             }
 
-            float bgTop = -1620f - _currentExtraOffsetY;
-            float adjustY = -1540f - _currentExtraOffsetY;
-
-            var window = AccessTools.Field(typeof(NMapBg), "_window")?.GetValue(mapBg) as Window;
-            float offsetX = (float)(AccessTools.Field(typeof(NMapBg), "_offsetX")?.GetValue(mapBg) ?? mapBg.Position.X);
-
-            if (window != null)
-            {
-                float num = Math.Max(1.3333334f, (float)window.Size.X / (float)window.Size.Y);
-                if (num < 1.7777778f)
-                {
-                    float p = (num - 1.3333334f) / 0.44444442f;
-                    mapBg.Position = new Vector2(offsetX, Mathf.Remap(Ease.CubicOut(p), 0f, 1f, adjustY, bgTop));
-                }
-                else
-                {
-                    mapBg.Position = new Vector2(offsetX, bgTop);
-                }
-            }
-            else
-            {
-                mapBg.Position = new Vector2(offsetX, bgTop);
-            }
-
-            var drawings = AccessTools.Field(typeof(NMapBg), "_drawings")?.GetValue(mapBg) as NMapDrawings;
-            drawings?.RepositionBasedOnBackground(mapBg);
+            ApplyMapBgPosition(mapBg, _currentExtraOffsetY);
         }
         catch (Exception ex)
         {
@@ -2451,47 +2503,29 @@ public static class MapGenerationHooks
     }
 
     /// <summary>
-    /// Ensures map parchment position remains accurate across window/resolution changes.
+    /// Ensures map parchment position remains accurate across window/viewport size changes.
     /// </summary>
-    [HarmonyPatch(typeof(NMapBg), "OnWindowChange")]
+    [HarmonyPatch]
     public static class NMapBgOnWindowChangePatch
     {
+        [HarmonyTargetMethod]
+        public static MethodBase? TargetMethod()
+        {
+            return AccessTools.Method(typeof(NMapBg), "OnViewportChange")
+                ?? AccessTools.Method(typeof(NMapBg), "OnWindowChange");
+        }
+
         [HarmonyPrefix]
         public static bool Prefix(NMapBg __instance)
         {
             try
             {
-                var window = AccessTools.Field(typeof(NMapBg), "_window")?.GetValue(__instance) as Window;
-                float offsetX = (float)(AccessTools.Field(typeof(NMapBg), "_offsetX")?.GetValue(__instance) ?? __instance.Position.X);
-                float extraOffsetY = GetCurrentExtraOffsetY();
-                float bgTop = -1620f - extraOffsetY;
-                float adjustY = -1540f - extraOffsetY;
-
-                if (window != null)
-                {
-                    float num = Math.Max(1.3333334f, (float)window.Size.X / (float)window.Size.Y);
-                    if (num < 1.7777778f)
-                    {
-                        float p = (num - 1.3333334f) / 0.44444442f;
-                        __instance.Position = new Vector2(offsetX, Mathf.Remap(Ease.CubicOut(p), 0f, 1f, adjustY, bgTop));
-                    }
-                    else
-                    {
-                        __instance.Position = new Vector2(offsetX, bgTop);
-                    }
-                }
-                else
-                {
-                    __instance.Position = new Vector2(offsetX, bgTop);
-                }
-
-                var drawings = AccessTools.Field(typeof(NMapBg), "_drawings")?.GetValue(__instance) as NMapDrawings;
-                drawings?.RepositionBasedOnBackground(__instance);
+                ApplyMapBgPosition(__instance, GetCurrentExtraOffsetY());
                 return false;
             }
             catch (Exception ex)
             {
-                ModLogger.Error("Error in NMapBg.OnWindowChange prefix", ex);
+                ModLogger.Error("Error in NMapBg viewport change prefix", ex);
                 return true;
             }
         }
@@ -2515,10 +2549,11 @@ public static class MapGenerationHooks
         private static readonly FieldInfo PathsField = AccessTools.Field(typeof(NMapScreen), "_paths");
         private static readonly FieldInfo RunStateField = AccessTools.Field(typeof(NMapScreen), "_runState");
         private static readonly FieldInfo HasPlayedAnimationField = AccessTools.Field(typeof(NMapScreen), "_hasPlayedAnimation");
-        private static readonly FieldInfo DistXField = AccessTools.Field(typeof(NMapScreen), "_distX");
-        private static readonly FieldInfo DistYField = AccessTools.Field(typeof(NMapScreen), "_distY");
+        private static readonly FieldInfo? DistXField = AccessTools.Field(typeof(NMapScreen), "_distX");
+        private static readonly FieldInfo? DistYField = AccessTools.Field(typeof(NMapScreen), "_distY");
         private static readonly FieldInfo TickTraveledScaleField = AccessTools.Field(typeof(NMapScreen), "_tickTraveledScale");
 
+        private static readonly MethodInfo? ToCenterAnchoredPositionMethod = AccessTools.Method(typeof(NMapScreen), "ToCenterAnchoredPosition");
         private static readonly MethodInfo RemoveAllMapPointsAndPathsMethod = AccessTools.Method(typeof(NMapScreen), "RemoveAllMapPointsAndPaths");
         private static readonly MethodInfo DrawPathsMethod = AccessTools.Method(typeof(NMapScreen), "DrawPaths");
         private static readonly MethodInfo InitMapVotesMethod = AccessTools.Method(typeof(NMapScreen), "InitMapVotes");
@@ -2526,11 +2561,73 @@ public static class MapGenerationHooks
         private static readonly MethodInfo RecalculateTravelabilityMethod = RunTweaksSaveManager.RecalculateTravelabilityMethod!;
         private static readonly MethodInfo RefreshAllPointVisualsMethod = AccessTools.Method(typeof(NMapScreen), "RefreshAllPointVisuals");
 
+        private static readonly MethodInfo? BossCreate4Arg = typeof(NBossMapPoint).GetMethod(
+            nameof(NBossMapPoint.Create),
+            new[] { typeof(MapPoint), typeof(NMapScreen), typeof(EncounterModel), typeof(IRunState) });
+        private static readonly MethodInfo? BossCreate3Arg = typeof(NBossMapPoint).GetMethod(
+            nameof(NBossMapPoint.Create),
+            new[] { typeof(MapPoint), typeof(NMapScreen), typeof(IRunState) });
+        private static readonly MethodInfo? AncientCreate4Arg = typeof(NAncientMapPoint).GetMethod(
+            nameof(NAncientMapPoint.Create),
+            new[] { typeof(MapPoint), typeof(NMapScreen), typeof(AncientEventModel), typeof(IRunState) });
+        private static readonly MethodInfo? AncientCreate3Arg = typeof(NAncientMapPoint).GetMethod(
+            nameof(NAncientMapPoint.Create),
+            new[] { typeof(MapPoint), typeof(NMapScreen), typeof(IRunState) });
+        private static readonly PropertyInfo? ActBossEncounterProp = typeof(ActModel).GetProperty("BossEncounter", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+        private static readonly PropertyInfo? ActSecondBossEncounterProp = typeof(ActModel).GetProperty("SecondBossEncounter", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+        private static readonly PropertyInfo? ActAncientProp = typeof(ActModel).GetProperty("Ancient", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+
+        private static NBossMapPoint CreateBossMapPoint(MapPoint point, NMapScreen screen, RunState runState, bool isSecondBoss)
+        {
+            if (BossCreate4Arg != null)
+            {
+                var encounter = isSecondBoss
+                    ? (ActSecondBossEncounterProp?.GetValue(runState.Act) as EncounterModel)
+                    : (ActBossEncounterProp?.GetValue(runState.Act) as EncounterModel);
+                return (NBossMapPoint)BossCreate4Arg.Invoke(null, new object?[] { point, screen, encounter, runState })!;
+            }
+            if (BossCreate3Arg != null)
+            {
+                return (NBossMapPoint)BossCreate3Arg.Invoke(null, new object?[] { point, screen, runState })!;
+            }
+            throw new MissingMethodException(nameof(NBossMapPoint), nameof(NBossMapPoint.Create));
+        }
+
+        private static NAncientMapPoint CreateAncientMapPoint(MapPoint point, NMapScreen screen, RunState runState)
+        {
+            if (AncientCreate4Arg != null)
+            {
+                var ancient = ActAncientProp?.GetValue(runState.Act) as AncientEventModel;
+                return (NAncientMapPoint)AncientCreate4Arg.Invoke(null, new object?[] { point, screen, ancient, runState })!;
+            }
+            if (AncientCreate3Arg != null)
+            {
+                return (NAncientMapPoint)AncientCreate3Arg.Invoke(null, new object?[] { point, screen, runState })!;
+            }
+            throw new MissingMethodException(nameof(NAncientMapPoint), nameof(NAncientMapPoint.Create));
+        }
+
         [HarmonyPrefix]
-        public static bool Prefix(NMapScreen __instance, ActMap map, uint seed, bool clearDrawings)
+        public static bool Prefix(NMapScreen __instance, ActMap map, bool clearDrawings)
         {
             try
             {
+                // For standard 15-room acts (16 rows) and Blitz maps, let vanilla NMapScreen.SetMap handle layout natively.
+                if (map.GetType().Name == "BlitzActMap" || map.GetRowCount() <= 16)
+                {
+                    _currentExtraOffsetY = 0f;
+                    if (MapBgContainerField.GetValue(__instance) is NMapBg stdBg)
+                    {
+                        var existingExtras = stdBg.GetChildren().OfType<TextureRect>().Where(c => c.Name.ToString().StartsWith("MapMid_Extra_")).ToList();
+                        foreach (var extra in existingExtras)
+                        {
+                            stdBg.RemoveChild(extra);
+                            extra.QueueFree();
+                        }
+                    }
+                    return true;
+                }
+
                 MapField.SetValue(__instance, map);
                 var mapPointDict = (Dictionary<MapCoord, NMapPoint>)MapPointDictField.GetValue(__instance)!;
                 var paths = (Dictionary<(MapCoord, MapCoord), IReadOnlyList<TextureRect>>)PathsField.GetValue(__instance)!;
@@ -2554,35 +2651,79 @@ public static class MapGenerationHooks
                 int columnCount = map.GetColumnCount();
                 float num = (map.SecondBossMapPoint != null) ? 0.9f : 1f;
 
-                // Standard vanilla spacing: 2325 / 14 = 166.0714f.
-                // Maintain standard natural floor distance for any row count!
-                const float StandardFloorSpacing = 166.0714f;
-                float distY = StandardFloorSpacing * num;
-                float distX = 1050f / (float)columnCount;
-                float totalHeight = (rowCount - 1) * distY;
-
-                DistXField.SetValue(__instance, distX);
-                DistYField.SetValue(__instance, distY);
-
+                ulong seed = runState.Rng.Seed;
                 Rng rng = new Rng(seed, $"map_jitter_{runState.CurrentActIndex}");
-                Vector2 vector = new Vector2(-500f, 740f);
-                Vector2 vector2 = new Vector2(distX, 0f - distY);
 
-                foreach (MapPoint allMapPoint in map.GetAllMapPoints())
+                float distX = 1050f / (float)columnCount;
+                float distY;
+                float totalHeight;
+                float bossY;
+
+                if (ToCenterAnchoredPositionMethod != null)
                 {
-                    NNormalMapPoint nNormalMapPoint = NNormalMapPoint.Create(allMapPoint, __instance, runState);
-                    nNormalMapPoint.Position = new Vector2(allMapPoint.coord.col, allMapPoint.coord.row) * vector2 + vector;
-                    float x = rng.NextFloat(-21f, 21f);
-                    float y = rng.NextFloat(-25f, 25f);
-                    nNormalMapPoint.Position += new Vector2(x, y);
-                    mapPointDict.Add(allMapPoint.coord, nNormalMapPoint);
-                    points.AddChildSafely(nNormalMapPoint);
-                    nNormalMapPoint.SetAngle(Rng.Chaotic.NextGaussianFloat(0f, 8f));
+                    // v0.113.0+ layout: account for row node heights and center-anchored container coordinates
+                    var createdNodes = new List<NMapPoint>();
+                    float[] rowHeights = new float[rowCount];
+                    foreach (MapPoint allMapPoint in map.GetAllMapPoints())
+                    {
+                        NMapPoint nMapPoint = NNormalMapPoint.Create(allMapPoint, __instance, runState);
+                        rowHeights[allMapPoint.coord.row] = Math.Max(rowHeights[allMapPoint.coord.row], nMapPoint.Size.Y * nMapPoint.Scale.Y);
+                        createdNodes.Add(nMapPoint);
+                    }
+
+                    float nonZeroAvgH = rowHeights.Where(h => h > 0f).DefaultIfEmpty(64f).Average();
+                    float stdSumH = 16f * nonZeroAvgH;
+                    float stdGapY = (2325f * num - stdSumH) / 15f;
+                    distY = stdGapY + nonZeroAvgH;
+                    totalHeight = (rowCount - 1) * stdGapY + rowHeights.Sum();
+                    float extraHeight = Math.Max(0f, totalHeight - 2325f * num);
+                    bossY = -1980f * num - extraHeight;
+
+                    Vector2 baseOffset = new Vector2(460f, 1280f);
+                    foreach (NMapPoint item in createdNodes)
+                    {
+                        mapPointDict.Add(item.Point.coord, item);
+                        points.AddChildSafely(item);
+                        float yPos = stdGapY * item.Point.coord.row + rowHeights.Take(item.Point.coord.row).Sum() + item.PivotOffset.Y;
+                        Vector2 layoutPos = baseOffset + item.Point.coord.col * distX * Vector2.Right + yPos * Vector2.Up - item.PivotOffset;
+                        item.Position = (Vector2)ToCenterAnchoredPositionMethod.Invoke(null, new object[] { layoutPos, points.Size })!;
+                        if (item is NNormalMapPoint nNormal)
+                        {
+                            item.Position += new Vector2(rng.NextFloat(-21f, 21f), rng.NextFloat(-25f, 25f));
+                            nNormal.SetAngle(Rng.Chaotic.NextGaussianFloat(0f, 8f));
+                        }
+                    }
+                }
+                else
+                {
+                    // v0.111.x and earlier layout
+                    const float StandardFloorSpacing = 166.0714f;
+                    distY = StandardFloorSpacing * num;
+                    totalHeight = (rowCount - 1) * distY;
+
+                    DistXField?.SetValue(__instance, distX);
+                    DistYField?.SetValue(__instance, distY);
+
+                    Vector2 vector = new Vector2(-500f, 740f);
+                    Vector2 vector2 = new Vector2(distX, 0f - distY);
+
+                    foreach (MapPoint allMapPoint in map.GetAllMapPoints())
+                    {
+                        NNormalMapPoint nNormalMapPoint = NNormalMapPoint.Create(allMapPoint, __instance, runState);
+                        nNormalMapPoint.Position = new Vector2(allMapPoint.coord.col, allMapPoint.coord.row) * vector2 + vector;
+                        float x = rng.NextFloat(-21f, 21f);
+                        float y = rng.NextFloat(-25f, 25f);
+                        nNormalMapPoint.Position += new Vector2(x, y);
+                        mapPointDict.Add(allMapPoint.coord, nNormalMapPoint);
+                        points.AddChildSafely(nNormalMapPoint);
+                        nNormalMapPoint.SetAngle(Rng.Chaotic.NextGaussianFloat(0f, 8f));
+                    }
+
+                    float bossSpacing = (map.SecondBossMapPoint != null) ? 430f : 395f;
+                    bossY = 740f - totalHeight - bossSpacing;
                 }
 
-                float bossSpacing = (map.SecondBossMapPoint != null) ? 430f : 395f;
-                float bossY = 740f - totalHeight - bossSpacing;
-                var bossPointNode = NBossMapPoint.Create(map.BossMapPoint, __instance, runState);
+                var bossPointNode = CreateBossMapPoint(map.BossMapPoint, __instance, runState, isSecondBoss: false);
                 bossPointNode.Position = new Vector2(-200f, bossY);
                 points.AddChildSafely(bossPointNode);
                 mapPointDict[map.BossMapPoint.coord] = bossPointNode;
@@ -2592,7 +2733,7 @@ public static class MapGenerationHooks
                 if (map.SecondBossMapPoint != null)
                 {
                     bossPointNode.Scale = new Vector2(0.75f, 0.75f);
-                    secondBossPointNode = NBossMapPoint.Create(map.SecondBossMapPoint, __instance, runState);
+                    secondBossPointNode = CreateBossMapPoint(map.SecondBossMapPoint, __instance, runState, isSecondBoss: true);
                     secondBossPointNode.Position = new Vector2(-200f, bossY - 300f * num);
                     secondBossPointNode.Scale = new Vector2(0.75f, 0.75f);
                     points.AddChildSafely(secondBossPointNode);
@@ -2607,7 +2748,7 @@ public static class MapGenerationHooks
                 NMapPoint startingPointNode;
                 if (map.StartingMapPoint.PointType == MapPointType.Ancient)
                 {
-                    startingPointNode = NAncientMapPoint.Create(map.StartingMapPoint, __instance, runState);
+                    startingPointNode = CreateAncientMapPoint(map.StartingMapPoint, __instance, runState);
                     startingPointNode.Position = new Vector2(-80f, (float)map.StartingMapPoint.coord.row * (0f - distY) + 720f);
                 }
                 else
@@ -2700,6 +2841,16 @@ public static class MapGenerationHooks
             {
                 ModLogger.Error("Error in proportional NMapScreen.SetMap patch, falling back to original", ex);
                 return true;
+            }
+        }
+
+        [HarmonyPostfix]
+        public static void Postfix(NMapScreen __instance)
+        {
+            if (RunTweaksSaveManager.IsFreeMapNavigationActive())
+            {
+                __instance.IsTraveling = false;
+                __instance.RefreshAllPointVisuals();
             }
         }
     }
@@ -2811,6 +2962,29 @@ public static class MapGenerationHooks
             }
         }
 
+        private static async Task<bool> AwaitTweenFinishedAsync(Tween tween, Node owner)
+        {
+            var method = typeof(TweenHelper).GetMethod(nameof(TweenHelper.AwaitFinished), BindingFlags.Public | BindingFlags.Static);
+            if (method == null) return true;
+
+            var parameters = method.GetParameters();
+            object?[] args = parameters.Length switch
+            {
+                2 => new object?[] { tween, owner },
+                3 => new object?[] { tween, owner, default(System.Threading.CancellationToken) },
+                _ => Array.Empty<object?>()
+            };
+
+            if (args.Length == 0 || method.Invoke(null, args) is not Task task)
+                return true;
+
+            await task;
+            var resultProp = task.GetType().GetProperty("Result", BindingFlags.Public | BindingFlags.Instance);
+            object? res = resultProp?.GetValue(task);
+            if (res is bool b) return b;
+            return res != null && string.Equals(res.ToString(), "Finished", StringComparison.Ordinal);
+        }
+
         private static async Task CustomStartOfActAnim(NMapScreen instance)
         {
             var mapContainer = (Control)MapContainerField.GetValue(instance)!;
@@ -2839,7 +3013,7 @@ public static class MapGenerationHooks
             tween.TweenCallback(Callable.From(() => SetInterruptableMethod.Invoke(instance, null))).SetDelay(duration * 0.25);
             TargetDragPosField.SetValue(instance, targetDragPos);
 
-            if (await tween.AwaitFinished(instance))
+            if (await AwaitTweenFinishedAsync(tween, instance))
             {
                 ActAnimTweenField.SetValue(instance, null);
                 InitMapPromptMethod.Invoke(instance, null);
@@ -2949,11 +3123,20 @@ public static class MapGenerationHooks
     /// Ensures that after ActModel.GenerateRooms finishes, the act's RoomSet has a valid Ancient assigned
     /// (especially for Act 1 / Overgrowth when NeowEpoch is unrevealed on fresh profiles).
     /// </summary>
-    [HarmonyPatch(typeof(ActModel), nameof(ActModel.GenerateRooms))]
+    [HarmonyPatch]
     public static class ActModelGenerateRoomsPatch
     {
+        [HarmonyTargetMethod]
+        public static MethodBase? TargetMethod()
+        {
+            return typeof(ActModel).GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+                .FirstOrDefault(m => m.Name == nameof(ActModel.GenerateRooms)
+                    && m.GetParameters().Length >= 3
+                    && m.GetParameters()[0].ParameterType == typeof(Rng));
+        }
+
         [HarmonyPostfix]
-        public static void Postfix(ActModel __instance, Rng rng, UnlockState unlockState, bool isMultiplayer)
+        public static void Postfix(ActModel __instance, Rng rng)
         {
             try
             {

@@ -8,11 +8,13 @@ using AIOTweaks.Core;
 using AIOTweaks.Core.Config;
 using AIOTweaks.Core.Logging;
 using MegaCrit.Sts2.Core.Entities.Merchant;
+using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Entities.Relics;
 using MegaCrit.Sts2.Core.Factories;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Nodes.CommonUi;
 using MegaCrit.Sts2.Core.Nodes.Potions;
+using MegaCrit.Sts2.Core.Random;
 using MegaCrit.Sts2.Core.Runs;
 
 namespace AIOTweaks.Hooks;
@@ -106,11 +108,66 @@ public static class RelicHooks
         }
     }
 
-    [HarmonyPatch(typeof(MerchantInventory), "PopulateRelicEntries")]
-    public static class MerchantInventory_PopulateRelicEntries_Patch
+    private static readonly MethodInfo? RollRarityRngMethod = typeof(RelicFactory).GetMethod(nameof(RelicFactory.RollRarity), new Type[] { typeof(Rng) });
+    private static readonly MethodInfo? RollRarityPlayerMethod = typeof(RelicFactory).GetMethod(nameof(RelicFactory.RollRarity), new Type[] { typeof(Player) });
+    private static readonly MethodInfo? AddRelicEntryMethod = typeof(MerchantInventory).GetMethod("AddRelicEntry", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+
+    private static RelicRarity RollShopRelicRarity(Player player)
     {
+        if (RollRarityRngMethod != null)
+        {
+            return (RelicRarity)RollRarityRngMethod.Invoke(null, new object[] { player.PlayerRng.Shops })!;
+        }
+        if (RollRarityPlayerMethod != null)
+        {
+            return (RelicRarity)RollRarityPlayerMethod.Invoke(null, new object[] { player })!;
+        }
+        return RelicRarity.Common;
+    }
+
+    private static List<MerchantRelicEntry> BuildShopRelicEntries(Player player)
+    {
+        var rarities = new RelicRarity[3]
+        {
+            RollShopRelicRarity(player),
+            RollShopRelicRarity(player),
+            RelicRarity.Shop
+        };
+
+        var rolledRelics = new List<RelicModel>();
+        var entries = new List<MerchantRelicEntry>(3);
+
+        foreach (var rarity in rarities)
+        {
+            var relic = RelicFactory.PullNextRelicFromBack(
+                player,
+                rarity,
+                r => !rolledRelics.Any(seen => seen.Id == r.Id) && r.IsAllowedInShops
+            )?.ToMutable();
+
+            if (relic != null)
+            {
+                rolledRelics.Add(relic);
+                entries.Add(new MerchantRelicEntry(relic, player));
+            }
+            else
+            {
+                entries.Add(new MerchantRelicEntry(rarity, player));
+            }
+        }
+
+        return entries;
+    }
+
+    // v0.113.0+ (beta): MerchantInventory uses static GetDefaultRelicEntries(Player)
+    [HarmonyPatch(typeof(MerchantInventory), "GetDefaultRelicEntries")]
+    public static class MerchantInventory_GetDefaultRelicEntries_Patch
+    {
+        [HarmonyPrepare]
+        public static bool Prepare() => AccessTools.Method(typeof(MerchantInventory), "GetDefaultRelicEntries") != null;
+
         [HarmonyPrefix]
-        public static bool Prefix(MerchantInventory __instance)
+        public static bool Prefix(Player player, ref List<MerchantRelicEntry> __result)
         {
             if (!RunTweaksSaveManager.GetEffectivePreRunTweaks().AllowMultipleRelics)
             {
@@ -119,35 +176,38 @@ public static class RelicHooks
 
             try
             {
-                var player = __instance.Player;
-                var rarities = new RelicRarity[3]
+                __result = BuildShopRelicEntries(player);
+                return false;
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Error("Error in MerchantInventory_GetDefaultRelicEntries_Patch", ex);
+                return true;
+            }
+        }
+    }
+
+    // v0.111.x and earlier (main): MerchantInventory uses instance PopulateRelicEntries()
+    [HarmonyPatch(typeof(MerchantInventory), "PopulateRelicEntries")]
+    public static class MerchantInventory_PopulateRelicEntries_Patch
+    {
+        [HarmonyPrepare]
+        public static bool Prepare() => AccessTools.Method(typeof(MerchantInventory), "PopulateRelicEntries") != null;
+
+        [HarmonyPrefix]
+        public static bool Prefix(MerchantInventory __instance)
+        {
+            if (!RunTweaksSaveManager.GetEffectivePreRunTweaks().AllowMultipleRelics || AddRelicEntryMethod == null)
+            {
+                return true;
+            }
+
+            try
+            {
+                foreach (var entry in BuildShopRelicEntries(__instance.Player))
                 {
-                    RelicFactory.RollRarity(player),
-                    RelicFactory.RollRarity(player),
-                    RelicRarity.Shop
-                };
-
-                var rolledRelics = new List<RelicModel>();
-
-                foreach (var rarity in rarities)
-                {
-                    var relic = RelicFactory.PullNextRelicFromBack(
-                        player,
-                        rarity,
-                        r => !rolledRelics.Any(seen => seen.Id == r.Id) && r.IsAllowedInShops
-                    )?.ToMutable();
-
-                    if (relic != null)
-                    {
-                        rolledRelics.Add(relic);
-                        __instance.AddRelicEntry(new MerchantRelicEntry(relic, player));
-                    }
-                    else
-                    {
-                        __instance.AddRelicEntry(new MerchantRelicEntry(rarity, player));
-                    }
+                    AddRelicEntryMethod.Invoke(__instance, new object[] { entry });
                 }
-
                 return false;
             }
             catch (Exception ex)
