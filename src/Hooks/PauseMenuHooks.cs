@@ -24,10 +24,6 @@ namespace AIOTweaks.Hooks;
 /// </summary>
 public static class PauseMenuHooks
 {
-    private static readonly FieldInfo? ShouldSaveBackingField = typeof(RunManager).GetField(
-        "<ShouldSave>k__BackingField",
-        BindingFlags.Instance | BindingFlags.NonPublic);
-
     /// <summary>
     /// Flag indicating that a Save & Quit transition is currently in progress.
     /// Used to prevent clean-up or abandon hooks from inadvertently wiping save files during normal in-run quits.
@@ -89,7 +85,8 @@ public static class PauseMenuHooks
                 IsSavingAndQuitting = false;
                 try
                 {
-                    MapGenerationHooks.ForceDeleteCurrentRunSaves();
+                    bool isMultiplayer = runState?.Players != null && runState.Players.Count > 1;
+                    MapGenerationHooks.ForceDeleteCurrentRunSaves(multiplayer: isMultiplayer);
                     RunTweaksSaveManager.ClearActiveRun("GameOverOnSaveAndQuit");
                 }
                 catch (Exception ex)

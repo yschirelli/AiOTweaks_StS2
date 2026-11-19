@@ -138,7 +138,7 @@ Open the console with your configured keybind (`F1`) and execute any of the foll
 | `freeroam` / `freemap` | `freeroam on` | Toggles Free Map Navigation (freely click any room or return to normal pathing). |
 | `playerdmg` / `dmgmult` | `playerdmg 2.5` | Sets or displays the player damage multiplier. |
 | `playerdef` / `defmult` | `playerdef 2.0` | Sets or displays the player defend/block multiplier. |
-| `verbose` / `debuglog` | `verbose` | Checks verbose diagnostic logging status (configured in `config.json`). |
+| `verbose` / `debuglog` | `verbose` | Checks whether verbose diagnostic logging is active (enabled in `Debug` builds, compiled out in `Release` builds). |
 | `lag` | `lag on`, `lag off`, `lag` | Toggles or checks the Lag-1 log deduplication engine. Collapses repeating spam into `↳ [Lag Group] (xN)`. |
 | `clear` | `clear` | Clears text from the console log window (flushing active lag buffer first). |
 | `reset` | `reset` | Clears all transient cheats and resets state to default. |
@@ -159,16 +159,20 @@ AiOTweaks_StS2/
 ├── assets/
 │   └── icons/                   # UI texture icons & assets
 │       └── README.md
+├── tests/
+│   └── AIOTweaks.Tests/         # Zero-dependency net9.0 unit tests (config, math, text formatting)
 └── src/
     ├── AIOTweaks.csproj         # C# project targeting net9.0 + Godot Mono
     ├── Core/
     │   ├── ModEntry.cs          # Mod lifecycle entry point & scene injector
     │   ├── GameHelper.cs        # Reflection, card/relic query & engine utilities
+    │   ├── ModMath.cs           # Pure C# map, economy & Endless scaling math
+    │   ├── TextFormatting.cs    # Compiled-regex BBCode & dynamic variable formatters
     │   ├── Logging/
     │   │   └── ModLogger.cs     # Centralized [AIOTweaks] logging & file diagnostics
-    │   ├── Config/              # Strongly typed JSON config & profile manager
+    │   ├── Diagnostics/         # Debug-only crash dumps, breadcrumbs, watchdog & run logs
+    │   ├── Config/              # Strongly typed JSON config & BaseLib provider
     │   │   ├── ModConfig.cs     # Configuration schema definitions
-    │   │   ├── RunSettings.cs   # Run profile settings schema
     │   │   ├── ConfigManager.cs # Config file persistence & fallback loader
     │   │   └── AIOTweaksBaseLibConfig.cs # BaseLib ModConfigRegistry provider
     │   └── State/
@@ -177,9 +181,13 @@ AiOTweaks_StS2/
     │   ├── CombatHooks.cs       # Invulnerability, energy, damage, def & draw hooks
     │   ├── EconomyHooks.cs      # Gold reward & shop price patches
     │   ├── EventHooks.cs        # Event manipulation & forcing
-    │   ├── MapGenerationHooks.cs# Map weights, room length, free navigation, Neow & Ancient fallbacks
+    │   ├── GameEventHooks.cs    # Debug-only event stream & breadcrumb hooks (#if DEBUG)
+    │   ├── MapGenerationHooks.cs# Map weights, room length, free navigation, Neow & Endless loops
     │   ├── ModdingScreenHooks.cs# Modding screen, Mod Info container & Character select button injections
-    │   └── RelicHooks.cs        # Allow Multiple Relics & TopBar anti-overlap layout patches
+    │   ├── PauseMenuHooks.cs    # Safe Save & Quit handling & stale dead-run healing
+    │   ├── RelicHooks.cs        # Allow Multiple Relics & TopBar anti-overlap layout patches
+    │   ├── RunTweaksSaveManager.cs # Per-run immutable tweak snapshot persistence
+    │   └── SaveSerializationHooks.cs # BaseLib custom save type JSON resolver
     ├── Cheats/                  # Domain-specific cheat managers
     │   ├── CardDirector.cs      # Deck, hand, pile, attribute & enchantment spawning
     │   ├── CombatDirector.cs    # Combat sandbox & turn management
@@ -189,15 +197,10 @@ AiOTweaks_StS2/
     │   ├── RelicDirector.cs     # Atomic relic injection/removal
     │   └── StatusDirector.cs    # Real-time player and enemy power/status effects
     └── UI/                      # Godot scene overlays and controls
-        ├── UIHelper.cs          # SpinBox numeric validation & UI helper extensions
         ├── Menu/
-        │   ├── ModSettingsDialog.cs   # Draggable/resizable Tabbed Mod Settings Dialog
-        │   ├── ModSettingsDialog.tscn
-        │   ├── PreRunSettingsMenu.cs  # Character select pre-run tweaks panel
-        │   └── PreRunSettingsMenu.tscn
+        │   └── ModSettingsDialog.cs   # Draggable/resizable Tabbed Mod Settings Dialog
         └── Overlay/
-            ├── DebugConsole.cs  # In-run CanvasLayer Debug Console
-            └── DebugConsole.tscn
+            └── DebugConsole.cs  # In-run CanvasLayer Debug Console
 ```
 
 ---
@@ -259,8 +262,13 @@ Run the root build script, which automatically detects your .NET SDK, locates St
    └── AIOTweaks.json
    ```
 
+4. Run the pure C# unit tests (no game assemblies or Godot runtime required):
+   ```bash
+   dotnet run --project tests/AIOTweaks.Tests/AIOTweaks.Tests.csproj
+   ```
+
 > [!NOTE]
-> **Logging Behavior**: When built in `Debug` configuration, verbose logging is forcefully enabled by default regardless of config file settings, and all real-time diagnostics are written to `aiotweaks_debug.log` directly in the mod's root folder. In `Release` builds, verbose logging is turned off by default and can only be turned on or off in `config.json` (`"debugLogging": true` / `false`).
+> **Logging Behavior**: When built in `Debug` configuration, verbose logging, `GameEventHooks`, and file logging to `aiotweaks_debug.log` in the mod's root folder are forcefully enabled. In `Release` builds, debug/verbose logging and `GameEventHooks` are compiled out (`#if DEBUG`) for zero runtime overhead.
 
 ---
 
@@ -318,7 +326,6 @@ Settings persist directly inside the mod root directory (`mods/AIOTweaks/config.
 {
   "general": {
     "enabled": true,
-    "debugLogging": false,
     "consoleHotkey": "F1",
     "guiOverlayHotkey": "F3",
     "quickGodModeKey": "",
@@ -360,15 +367,11 @@ Settings persist directly inside the mod root directory (`mods/AIOTweaks/config.
     "infiniteEnergy": false,
     "oneHitKill": false,
     "bonusDrawPerTurn": 0,
-    "maxHandSizeOverride": 10,
     "infinitePotions": false,
     "noCardExhaust": false
   },
   "ui": {
-    "overlayScale": 1.0,
-    "overlayOpacity": 0.95,
     "showDebugConsoleOnStart": false,
-    "enableAudioCues": true,
     "menuPosX": null,
     "menuPosY": null,
     "menuWidth": null,

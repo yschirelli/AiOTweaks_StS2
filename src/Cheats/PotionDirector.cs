@@ -1,11 +1,13 @@
 using System;
 using System.Linq;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using AIOTweaks.Core;
 using AIOTweaks.Core.Config;
 using AIOTweaks.Core.Logging;
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Entities.Players;
+using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Models;
 
 namespace AIOTweaks.Cheats;
@@ -66,20 +68,13 @@ public static class PotionDirector
                 var mutable = canonical.ToMutable();
                 if (mutable != null)
                 {
-                    ModLogger.Verbose("PotionDirector", $"Calling PotionCmd.TryToProcure for '{mutable.GetType().Name}'...");
-                    var procureTask = PotionCmd.TryToProcure(mutable, player, slotIndex);
-                    
-                    if (player.GetPotionSlotIndex(mutable) == -1 && player.HasOpenPotionSlots)
-                    {
-                        player.AddPotionInternal(mutable, slotIndex, false);
-                    }
+                    string typeName = canonical.GetType().Name;
+                    string pName = !string.IsNullOrWhiteSpace(canonical.Title?.GetFormattedText())
+                        ? canonical.Title.GetFormattedText()
+                        : typeName;
 
-                    string pName = !string.IsNullOrWhiteSpace(canonical.Title?.GetFormattedText()) 
-                        ? canonical.Title.GetFormattedText() 
-                        : canonical.GetType().Name;
-                    ModLogger.Info($"Potion '{pName}' successfully added to player inventory.");
-                    OnPotionAdded?.Invoke(canonical.GetType().Name);
-                    OnPotionsChanged?.Invoke();
+                    ModLogger.Verbose("PotionDirector", $"Calling PotionCmd.TryToProcure for '{mutable.GetType().Name}'...");
+                    TaskHelper.RunSafely(ProcurePotionAsync(mutable, player, slotIndex, typeName, pName));
                     return true;
                 }
             }
@@ -94,6 +89,34 @@ public static class PotionDirector
         {
             ModLogger.Error($"Failed to add potion '{potionId}'", ex);
             return false;
+        }
+    }
+
+    private static async Task ProcurePotionAsync(PotionModel mutable, Player player, int slotIndex, string typeName, string displayName)
+    {
+        try
+        {
+            await PotionCmd.TryToProcure(mutable, player, slotIndex);
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Warn($"PotionCmd.TryToProcure failed for '{typeName}': {ex.Message}; attempting direct fallback.");
+        }
+
+        if (player.GetPotionSlotIndex(mutable) == -1 && player.HasOpenPotionSlots)
+        {
+            player.AddPotionInternal(mutable, slotIndex, false);
+        }
+
+        if (player.GetPotionSlotIndex(mutable) != -1)
+        {
+            ModLogger.Info($"Potion '{displayName}' successfully added to player inventory.");
+            OnPotionAdded?.Invoke(typeName);
+            OnPotionsChanged?.Invoke();
+        }
+        else
+        {
+            ModLogger.Warn($"Potion '{displayName}' could not be added (no open slots or procurement rejected).");
         }
     }
 

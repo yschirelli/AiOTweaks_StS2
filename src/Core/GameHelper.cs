@@ -287,7 +287,7 @@ public static class GameHelper
                     {
                         player.PlayerCombatState.Energy = Math.Min(player.PlayerCombatState.Energy + delta, player.PlayerCombatState.MaxEnergy);
                     }
-                    else
+                    else if (delta < 0)
                     {
                         player.PlayerCombatState.Energy = Math.Min(player.PlayerCombatState.Energy, player.PlayerCombatState.MaxEnergy);
                     }
@@ -372,10 +372,10 @@ public static class GameHelper
                 }
             }
 
-            var root = ((SceneTree)Engine.GetMainLoop())?.Root;
-            if (root != null)
+            var runRoot = NRun.Instance as Node ?? ((SceneTree)Engine.GetMainLoop())?.Root;
+            if (runRoot != null && GodotObject.IsInstanceValid(runRoot))
             {
-                RefreshCardsInNode(root);
+                RefreshCardsInNode(runRoot);
             }
         }
         catch (Exception ex)
@@ -2037,69 +2037,9 @@ public static class GameHelper
         return null;
     }
 
-    public static string FormatBbCodeForGodot(string? text)
-    {
-        if (string.IsNullOrWhiteSpace(text)) return "";
+    public static string FormatBbCodeForGodot(string? text) => TextFormatting.FormatBbCodeForGodot(text);
 
-        // Standard STS2 custom color tags mapped to Godot's [color=#hex]...[/color]
-        var colorMap = new (string Tag, string Hex)[]
-        {
-            ("red", "#FF5555"),
-            ("darkRed", "#C83232"),
-            ("gold", "#EFC851"),
-            ("yellow", "#FFFF55"),
-            ("blue", "#87CEEB"),
-            ("darkBlue", "#67AEEB"),
-            ("green", "#7FFF00"),
-            ("darkGreen", "#32CD32"),
-            ("aqua", "#2AEBBE"),
-            ("cyan", "#00FFFF"),
-            ("orange", "#FFA518"),
-            ("pink", "#FF78A0"),
-            ("purple", "#EE82EE"),
-            ("cream", "#FFF6E2"),
-            ("white", "#FFFFFF"),
-            ("gray", "#A0A0A0"),
-            ("grey", "#A0A0A0")
-        };
-
-        foreach (var (tag, hex) in colorMap)
-        {
-            text = System.Text.RegularExpressions.Regex.Replace(text, $@"\[{tag}\]", $"[color={hex}]", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            text = System.Text.RegularExpressions.Regex.Replace(text, $@"\[/{tag}\]", "[/color]", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        }
-
-        // Remove dynamic / animation effect tags that don't belong in UI
-        string[] animTags = { "jitter", "sine", "fadein", "flyin", "scramble", "thinkydots", "wave", "rainbow" };
-        foreach (var tag in animTags)
-        {
-            text = System.Text.RegularExpressions.Regex.Replace(text, $@"\[/?{tag}\]", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        }
-
-        // Ensure icon img tags specify dimensions so they render nicely inline with text fonts
-        text = System.Text.RegularExpressions.Regex.Replace(
-            text, 
-            @"\[img\](res://[^\s\]]+)\[/img\]", 
-            "[img=18x18]$1[/img]", 
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-
-        return text.Trim();
-    }
-
-    public static string CleanBbCode(string? text)
-    {
-        if (string.IsNullOrWhiteSpace(text)) return "";
-
-        // Replace icon images with readable text before stripping tags
-        text = System.Text.RegularExpressions.Regex.Replace(text, @"\[img[^\]]*\]res://[^\s\]]*star_icon\.png\[/img\]", "Stars", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        text = System.Text.RegularExpressions.Regex.Replace(text, @"\[img[^\]]*\]res://[^\s\]]*energy_icon\.png\[/img\]", "Energy", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        text = System.Text.RegularExpressions.Regex.Replace(text, @"\[img[^\]]*\][^\[]*\[/img\]", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-
-        // Strip custom STS2 & Godot BBCode tags like [jitter], [sine], [b], [i], [orange], [gold], [aqua], [color=...], etc.
-        string cleaned = System.Text.RegularExpressions.Regex.Replace(text, @"\[/?[a-zA-Z0-9_#=]+(?:\s+[^\]]*)?\]", "");
-        cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, @"\n{3,}", "\n\n");
-        return cleaned.Trim();
-    }
+    public static string CleanBbCode(string? text) => TextFormatting.CleanBbCode(text);
 
     public static Dictionary<string, decimal> ExtractModelVariables(AbstractModel? model)
     {
@@ -2165,83 +2105,8 @@ public static class GameHelper
         return ResolveDynamicVariables(text, vars);
     }
 
-    public static string ResolveDynamicVariables(string text, Dictionary<string, decimal>? vars)
-    {
-        if (string.IsNullOrWhiteSpace(text)) return text ?? "";
-
-        // 1. Star icons formatter: {Var:starIcons()} or {Var:starIcons}
-        text = System.Text.RegularExpressions.Regex.Replace(text, @"\{(\w+):starIcons(?:\(\))?\}", m =>
-        {
-            string varName = m.Groups[1].Value;
-            if (vars != null && vars.TryGetValue(varName, out decimal v))
-            {
-                int count = (int)v;
-                return $"{count} [img=18x18]res://images/packed/sprite_fonts/star_icon.png[/img]";
-            }
-            return "[img=18x18]res://images/packed/sprite_fonts/star_icon.png[/img]";
-        }, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-
-        // 2. Energy icons formatter: {Var:energyIcons()}
-        text = System.Text.RegularExpressions.Regex.Replace(text, @"\{(\w+):energyIcons(?:\([^\)]*\))?\}", m =>
-        {
-            string varName = m.Groups[1].Value;
-            if (vars != null && vars.TryGetValue(varName, out decimal v))
-            {
-                int count = (int)v;
-                return $"{count} [img=18x18]res://images/packed/sprite_fonts/colorless_energy_icon.png[/img]";
-            }
-            return "[img=18x18]res://images/packed/sprite_fonts/colorless_energy_icon.png[/img]";
-        }, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-
-        // 3. Plural formatter: {Var:plural:singular|plural}
-        text = System.Text.RegularExpressions.Regex.Replace(text, @"\{(\w+):plural:([^\|\}]+)\|([^\|\}]+)\}", m =>
-        {
-            string varName = m.Groups[1].Value;
-            string one = m.Groups[2].Value;
-            string many = m.Groups[3].Value;
-            if (vars != null && vars.TryGetValue(varName, out decimal v))
-            {
-                return (v == 1) ? one : many;
-            }
-            return many;
-        }, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-
-        // 4. Diff / inverseDiff: {Var:diff()} or {Var:inverseDiff()}
-        text = System.Text.RegularExpressions.Regex.Replace(text, @"\{(\w+):(diff|inverseDiff)(?:\(\))?\}", m =>
-        {
-            string varName = m.Groups[1].Value;
-            if (vars != null && vars.TryGetValue(varName, out decimal v))
-            {
-                return v.ToString();
-            }
-            return m.Value;
-        }, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-
-        // 5. Special STS2 standard icon tokens in brackets or braces
-        text = text.Replace("{singleStarIcon}", "[img=18x18]res://images/packed/sprite_fonts/star_icon.png[/img]", StringComparison.OrdinalIgnoreCase);
-        text = text.Replace("{energyPrefix}", "colorless", StringComparison.OrdinalIgnoreCase);
-
-        // 6. Standard {VarName} replacement
-        if (vars != null && vars.Count > 0)
-        {
-            foreach (var kvp in vars)
-            {
-                text = text.Replace($"{{{kvp.Key}}}", kvp.Value.ToString(), StringComparison.OrdinalIgnoreCase);
-            }
-        }
-
-        // 7. Check for literal [stars] or [starts] or [star]
-        text = System.Text.RegularExpressions.Regex.Replace(text, @"\[stars?\]|\[starts?\]", m =>
-        {
-            if (vars != null && (vars.TryGetValue("Stars", out decimal v) || vars.TryGetValue("Star", out v)))
-            {
-                return $"{((int)v)} [img=18x18]res://images/packed/sprite_fonts/star_icon.png[/img]";
-            }
-            return "[img=18x18]res://images/packed/sprite_fonts/star_icon.png[/img]";
-        }, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-
-        return text;
-    }
+    public static string ResolveDynamicVariables(string text, Dictionary<string, decimal>? vars) =>
+        TextFormatting.ResolveDynamicVariables(text, vars);
 
     public static string ResolveDynamicVariables(string text, EventModel? ev)
     {

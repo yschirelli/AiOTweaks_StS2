@@ -84,37 +84,19 @@ public static class RuntimeStateManager
     public static float GetEffectiveEnemyHealthMultiplier()
     {
         var tweaks = AIOTweaks.Hooks.RunTweaksSaveManager.GetEffectivePreRunTweaks();
-        float baseHp = tweaks.EnemyHealthMultiplier;
-        var endless = tweaks.EndlessMode;
-        if (endless.Enabled && CurrentEndlessLoopCount > 0)
-        {
-            baseHp *= (float)Math.Pow(endless.EnemyScalingMultiplier, CurrentEndlessLoopCount);
-        }
-        return Math.Max(0.01f, baseHp);
+        return ModMath.ComputeEndlessMultiplier(tweaks.EnemyHealthMultiplier, tweaks.EndlessMode.Enabled, tweaks.EndlessMode.EnemyScalingMultiplier, CurrentEndlessLoopCount, 0.01f);
     }
 
     public static float GetEffectiveEnemyDamageMultiplier()
     {
         var tweaks = AIOTweaks.Hooks.RunTweaksSaveManager.GetEffectivePreRunTweaks();
-        float baseDmg = tweaks.EnemyDamageMultiplier;
-        var endless = tweaks.EndlessMode;
-        if (endless.Enabled && CurrentEndlessLoopCount > 0)
-        {
-            baseDmg *= (float)Math.Pow(endless.EnemyScalingMultiplier, CurrentEndlessLoopCount);
-        }
-        return Math.Max(0.0f, baseDmg);
+        return ModMath.ComputeEndlessMultiplier(tweaks.EnemyDamageMultiplier, tweaks.EndlessMode.Enabled, tweaks.EndlessMode.EnemyScalingMultiplier, CurrentEndlessLoopCount, 0.0f);
     }
 
     public static float GetEffectiveEnemyDefendMultiplier()
     {
         var tweaks = AIOTweaks.Hooks.RunTweaksSaveManager.GetEffectivePreRunTweaks();
-        float baseDef = tweaks.EnemyDefendMultiplier;
-        var endless = tweaks.EndlessMode;
-        if (endless.Enabled && CurrentEndlessLoopCount > 0)
-        {
-            baseDef *= (float)Math.Pow(endless.EnemyScalingMultiplier, CurrentEndlessLoopCount);
-        }
-        return Math.Max(0.0f, baseDef);
+        return ModMath.ComputeEndlessMultiplier(tweaks.EnemyDefendMultiplier, tweaks.EndlessMode.Enabled, tweaks.EndlessMode.EnemyScalingMultiplier, CurrentEndlessLoopCount, 0.0f);
     }
 
     /// <summary>
@@ -139,6 +121,21 @@ public static class RuntimeStateManager
             OverrideCardDrawCount = null;
 
             ActiveCheatFlags.Clear();
+        }
+
+        var sandbox = ConfigManager.Current?.CombatSandbox;
+        if (sandbox != null)
+        {
+            bool changed = sandbox.GodMode || sandbox.InfiniteEnergy || sandbox.OneHitKill || sandbox.InfinitePotions || sandbox.NoCardExhaust;
+            sandbox.GodMode = false;
+            sandbox.InfiniteEnergy = false;
+            sandbox.OneHitKill = false;
+            sandbox.InfinitePotions = false;
+            sandbox.NoCardExhaust = false;
+            if (changed)
+            {
+                ConfigManager.SaveConfig();
+            }
         }
 
         ModLogger.Info("RuntimeStateManager: Clean session reset executed. All cheats and overrides cleared.");

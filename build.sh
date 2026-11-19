@@ -163,7 +163,7 @@ fi
 
 echo "Using .NET CLI: $($DOTNET_BIN --version 2>/dev/null || echo "$DOTNET_BIN")"
 
-MSBUILD_PROPS=""
+MSBUILD_PROPS=()
 
 # Detect sts2.dll if not explicitly provided
 if [ -z "$STS2_PATH" ]; then
@@ -178,7 +178,7 @@ fi
 
 if [ -n "$STS2_PATH" ] && [ -f "$STS2_PATH" ]; then
     echo "Found sts2.dll: $STS2_PATH"
-    MSBUILD_PROPS="$MSBUILD_PROPS -p:Sts2Path=\"$STS2_PATH\""
+    MSBUILD_PROPS+=("-p:Sts2Path=$STS2_PATH")
 fi
 
 # Detect BaseLib.dll if not explicitly provided
@@ -194,7 +194,7 @@ fi
 
 if [ -n "$BASELIB_PATH" ] && [ -f "$BASELIB_PATH" ]; then
     echo "Found BaseLib.dll: $BASELIB_PATH"
-    MSBUILD_PROPS="$MSBUILD_PROPS -p:BaseLibPath=\"$BASELIB_PATH\""
+    MSBUILD_PROPS+=("-p:BaseLibPath=$BASELIB_PATH")
 fi
 
 # Restore if needed and compile solution
@@ -204,7 +204,7 @@ if [ ! -f "$SCRIPT_DIR/obj/project.assets.json" ] && [ ! -f "$SCRIPT_DIR/src/.go
 fi
 
 echo "Compiling project..."
-eval "\"$DOTNET_BIN\" build \"$SCRIPT_DIR/aiotweaks.sln\" -c \"$CONFIG\" $MSBUILD_PROPS --no-restore"
+"$DOTNET_BIN" build "$SCRIPT_DIR/aiotweaks.sln" -c "$CONFIG" "${MSBUILD_PROPS[@]}" --no-restore
 
 # Locate build output directory
 OUTPUT_DIR=""

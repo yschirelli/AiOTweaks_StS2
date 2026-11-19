@@ -134,33 +134,32 @@ public static class EconomyHooks
         }
     }
 
-    [HarmonyPatch(typeof(MerchantCardEntry), nameof(MerchantCardEntry.CalcCost))]
-    public static class MerchantCardEntryCalcCostPatch
+    [HarmonyPatch]
+    public static class MerchantEntryCalcCostPatch
     {
-        [HarmonyPostfix]
-        public static void Postfix(MerchantCardEntry __instance)
+        [HarmonyTargetMethods]
+        public static System.Collections.Generic.IEnumerable<MethodBase> TargetMethods()
         {
-            try
+            Type[] entryTypes =
+            [
+                typeof(MerchantCardEntry),
+                typeof(MerchantRelicEntry),
+                typeof(MerchantPotionEntry),
+                typeof(MerchantCardRemovalEntry)
+            ];
+
+            foreach (var type in entryTypes)
             {
-                int baseCost = __instance.Cost;
-                int modified = ProcessShopPrice(baseCost);
-                if (modified != baseCost)
+                var method = type.GetMethod("CalcCost", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                if (method != null)
                 {
-                    Traverse.Create(__instance).Field("_cost").SetValue(modified);
+                    yield return method;
                 }
-            }
-            catch (Exception ex)
-            {
-                ModLogger.Error("Error adjusting MerchantCardEntry cost", ex);
             }
         }
-    }
 
-    [HarmonyPatch(typeof(MerchantRelicEntry), nameof(MerchantRelicEntry.CalcCost))]
-    public static class MerchantRelicEntryCalcCostPatch
-    {
         [HarmonyPostfix]
-        public static void Postfix(MerchantRelicEntry __instance)
+        public static void Postfix(MerchantEntry __instance)
         {
             try
             {
@@ -173,51 +172,7 @@ public static class EconomyHooks
             }
             catch (Exception ex)
             {
-                ModLogger.Error("Error adjusting MerchantRelicEntry cost", ex);
-            }
-        }
-    }
-
-    [HarmonyPatch(typeof(MerchantPotionEntry), nameof(MerchantPotionEntry.CalcCost))]
-    public static class MerchantPotionEntryCalcCostPatch
-    {
-        [HarmonyPostfix]
-        public static void Postfix(MerchantPotionEntry __instance)
-        {
-            try
-            {
-                int baseCost = __instance.Cost;
-                int modified = ProcessShopPrice(baseCost);
-                if (modified != baseCost)
-                {
-                    Traverse.Create(__instance).Field("_cost").SetValue(modified);
-                }
-            }
-            catch (Exception ex)
-            {
-                ModLogger.Error("Error adjusting MerchantPotionEntry cost", ex);
-            }
-        }
-    }
-
-    [HarmonyPatch(typeof(MerchantCardRemovalEntry), nameof(MerchantCardRemovalEntry.CalcCost))]
-    public static class MerchantCardRemovalEntryCalcCostPatch
-    {
-        [HarmonyPostfix]
-        public static void Postfix(MerchantCardRemovalEntry __instance)
-        {
-            try
-            {
-                int baseCost = __instance.Cost;
-                int modified = ProcessShopPrice(baseCost);
-                if (modified != baseCost)
-                {
-                    Traverse.Create(__instance).Field("_cost").SetValue(modified);
-                }
-            }
-            catch (Exception ex)
-            {
-                ModLogger.Error("Error adjusting MerchantCardRemovalEntry cost", ex);
+                ModLogger.Error($"Error adjusting {__instance?.GetType().Name ?? "MerchantEntry"} cost", ex);
             }
         }
     }
@@ -227,27 +182,13 @@ public static class EconomyHooks
     /// </summary>
     public static int ProcessGoldDrop(int baseGold)
     {
-        if (RuntimeStateManager.ForcedGoldDropAmount.HasValue)
-        {
-            int forced = RuntimeStateManager.ForcedGoldDropAmount.Value;
-            ModLogger.Verbose("EconomyHooks", $"ProcessGoldDrop: ForcedGoldDropAmount active: {baseGold} -> {forced}");
-            return forced;
-        }
-
         float multiplier = RunTweaksSaveManager.GetEffectivePreRunTweaks().GoldRewardMultiplier;
-        if (RunTweaksSaveManager.GetEffectiveRunSettings().GoldMultiplier > 0f)
+        int modified = ModMath.ComputeGoldDrop(baseGold, multiplier, RuntimeStateManager.ForcedGoldDropAmount);
+        if (modified != baseGold)
         {
-            multiplier *= RunTweaksSaveManager.GetEffectiveRunSettings().GoldMultiplier;
-        }
-
-        if (Math.Abs(multiplier - 1.0f) > 0.001f)
-        {
-            int modified = (int)Math.Round(baseGold * multiplier);
             ModLogger.Info($"EconomyHook: Base Gold {baseGold} -> Modified {modified} (x{multiplier:F2})");
-            return modified;
         }
-
-        return baseGold;
+        return modified;
     }
 
     /// <summary>
@@ -256,14 +197,12 @@ public static class EconomyHooks
     public static int ProcessShopPrice(int basePrice)
     {
         float discountMult = RunTweaksSaveManager.GetEffectivePreRunTweaks().ShopDiscountMultiplier;
-        if (Math.Abs(discountMult - 1.0f) > 0.001f)
+        int modified = ModMath.ComputeShopPrice(basePrice, discountMult);
+        if (modified != basePrice)
         {
-            int modified = Math.Max(1, (int)Math.Round(basePrice * discountMult));
             ModLogger.Info($"EconomyHook: Shop Price {basePrice} -> Discounted {modified} (x{discountMult:F2})");
-            return modified;
         }
-
-        return basePrice;
+        return modified;
     }
 }
 

@@ -22,7 +22,7 @@ public partial class ModEntry : Node
 {
     public const string ModId = "AIOTweaks";
     public const string ModName = "AIOTweaks";
-    public const string ModVersion = "1.2.0";
+    public const string ModVersion = "1.3.0";
 
 #if DEBUG
     public const string BuildConfiguration = "DEBUG";
@@ -280,7 +280,7 @@ public partial class ModEntry : Node
 
         try
         {
-            ModLogger.Verbose("ModEntry", "Unpatching Harmony ID '{ModId}'...");
+            ModLogger.Verbose("ModEntry", $"Unpatching Harmony ID '{ModId}'...");
             _harmony?.UnpatchAll(ModId);
 
             try

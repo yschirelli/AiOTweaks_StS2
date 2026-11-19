@@ -167,7 +167,7 @@ public static class RunDiagnosticLogger
 
         int profileId = snapshot?.ProfileId ?? RunTweaksSaveManager.GetCurrentProfileId();
         int roomCount = snapshot?.PreRunTweaks?.MapRoomCount ?? config.PreRunTweaks.MapRoomCount;
-        bool isCustom = snapshot?.IsCustom ?? RunTweaksSaveManager.IsCustomRun(config.PreRunTweaks, ConfigManager.ActiveRunSettings);
+        bool isCustom = snapshot?.IsCustom ?? RunTweaksSaveManager.IsCustomRun(config.PreRunTweaks);
         bool endless = snapshot?.PreRunTweaks?.EndlessMode?.Enabled ?? config.PreRunTweaks.EndlessMode.Enabled;
         float endlessMult = snapshot?.PreRunTweaks?.EndlessMode?.EnemyScalingMultiplier ?? config.PreRunTweaks.EndlessMode.EnemyScalingMultiplier;
         bool freeMapNav = snapshot?.PreRunTweaks?.FreeMapNavigation ?? config.PreRunTweaks.FreeMapNavigation;

@@ -179,9 +179,6 @@ public partial class ModSettingsDialog : CanvasLayer
     private SpinBox? _maxHpAmountSpin;
     private Label? _eventOverrideLabel;
 
-    private RichTextLabel? _logLabel;
-    private LineEdit? _commandInput;
-
     public override void _Ready()
     {
         _instance = this;
@@ -189,7 +186,6 @@ public partial class ModSettingsDialog : CanvasLayer
         Layer = 130;
         SetupDialogUI();
 
-        ModLogger.OnLogged += OnLogReceived;
         CardDirector.OnDeckChanged += OnDeckModified;
         RelicDirector.OnRelicsChanged += OnRelicsModified;
         PotionDirector.OnPotionsChanged += OnPotionsModified;
@@ -268,7 +264,6 @@ public partial class ModSettingsDialog : CanvasLayer
     public override void _ExitTree()
     {
         UpdateBlockingState(false);
-        ModLogger.OnLogged -= OnLogReceived;
         CardDirector.OnDeckChanged -= OnDeckModified;
         RelicDirector.OnRelicsChanged -= OnRelicsModified;
         PotionDirector.OnPotionsChanged -= OnPotionsModified;
@@ -812,7 +807,6 @@ public partial class ModSettingsDialog : CanvasLayer
             ConfigManager.Current.CombatSandbox.InfinitePotions = false;
             ConfigManager.Current.CombatSandbox.NoCardExhaust = false;
             ConfigManager.Current.CombatSandbox.BonusDrawPerTurn = 0;
-            ConfigManager.Current.CombatSandbox.MaxHandSizeOverride = 10;
 
             RuntimeStateManager.ResetSessionState();
             GameHelper.SetPlayerMaxEnergy(3);
@@ -821,8 +815,6 @@ public partial class ModSettingsDialog : CanvasLayer
             GameHelper.RefreshCombatIntents();
             GameHelper.RefreshAllVisibleCards();
             RunTweaksSaveManager.RefreshMapNavigationState(false);
-
-            ConfigManager.ResetRunSettingsToDefault();
 
             LoadSettingsValues();
             ConfigManager.SaveConfig();
@@ -1310,10 +1302,10 @@ public partial class ModSettingsDialog : CanvasLayer
             if (snap?.PreRunTweaks != null)
             {
                 snap.PreRunTweaks.EnemyHealthMultiplier = (float)val;
-                RunTweaksSaveManager.SaveActiveSnapshot();
             }
             GameHelper.RescaleActiveMonstersHp();
         };
+        _enemyHpSlider.DragEnded += changed => { if (changed) RunTweaksSaveManager.SaveActiveSnapshot(); };
 
         _enemyDmgSlider = AddSliderControl(enemyBox, "Enemy Damage Multiplier:", 0.0f, 10.0f, 0.1f, 1.0f);
         _enemyDmgSlider.ValueChanged += val =>
@@ -1325,10 +1317,10 @@ public partial class ModSettingsDialog : CanvasLayer
             if (snap?.PreRunTweaks != null)
             {
                 snap.PreRunTweaks.EnemyDamageMultiplier = (float)val;
-                RunTweaksSaveManager.SaveActiveSnapshot();
             }
             GameHelper.RefreshCombatIntents();
         };
+        _enemyDmgSlider.DragEnded += changed => { if (changed) RunTweaksSaveManager.SaveActiveSnapshot(); };
 
         _enemyDefSlider = AddSliderControl(enemyBox, "Enemy Defend/Block Multiplier:", 0.0f, 10.0f, 0.1f, 1.0f);
         _enemyDefSlider.ValueChanged += val =>
@@ -1340,10 +1332,10 @@ public partial class ModSettingsDialog : CanvasLayer
             if (snap?.PreRunTweaks != null)
             {
                 snap.PreRunTweaks.EnemyDefendMultiplier = (float)val;
-                RunTweaksSaveManager.SaveActiveSnapshot();
             }
             GameHelper.RefreshCombatIntents();
         };
+        _enemyDefSlider.DragEnded += changed => { if (changed) RunTweaksSaveManager.SaveActiveSnapshot(); };
 
         rightCol.AddChild(CreateSectionCard("Enemy Multipliers & Scaling", enemyBox, new Color(1f, 0.45f, 0.45f)));
 
@@ -1360,10 +1352,10 @@ public partial class ModSettingsDialog : CanvasLayer
             if (snap?.PreRunTweaks != null)
             {
                 snap.PreRunTweaks.PlayerDamageMultiplier = (float)val;
-                RunTweaksSaveManager.SaveActiveSnapshot();
             }
             GameHelper.RefreshAllVisibleCards();
         };
+        _playerDmgSlider.DragEnded += changed => { if (changed) RunTweaksSaveManager.SaveActiveSnapshot(); };
 
         _playerDefSlider = AddSliderControl(playerScalingBox, "Player Defend/Block Multiplier:", 0.0f, 10.0f, 0.1f, 1.0f);
         _playerDefSlider.ValueChanged += val =>
@@ -1375,10 +1367,10 @@ public partial class ModSettingsDialog : CanvasLayer
             if (snap?.PreRunTweaks != null)
             {
                 snap.PreRunTweaks.PlayerDefendMultiplier = (float)val;
-                RunTweaksSaveManager.SaveActiveSnapshot();
             }
             GameHelper.RefreshAllVisibleCards();
         };
+        _playerDefSlider.DragEnded += changed => { if (changed) RunTweaksSaveManager.SaveActiveSnapshot(); };
 
         var maxEnergyRow = new HBoxContainer();
         maxEnergyRow.AddChild(new Label { Text = "Max Energy Count: ", CustomMinimumSize = new Vector2(230, 0) });
@@ -4871,7 +4863,7 @@ public partial class ModSettingsDialog : CanvasLayer
         if (_maxEnergySpin != null) _maxEnergySpin.Value = tweaks.MaxEnergy;
 
         var endlessSnap = RunTweaksSaveManager.ActiveSnapshot;
-        bool endlessActive = (endlessSnap?.PreRunTweaks?.EndlessMode?.Enabled ?? false) || (tweaks.EndlessMode?.Enabled ?? false);
+        bool endlessActive = RunTweaksSaveManager.IsEndlessModeActive();
         if (_endlessModeCheck != null) _endlessModeCheck.ButtonPressed = endlessActive;
         if (_endlessMultiplierSpin != null) _endlessMultiplierSpin.Value = endlessSnap?.PreRunTweaks?.EndlessMode?.EnemyScalingMultiplier ?? (tweaks.EndlessMode?.EnemyScalingMultiplier ?? 2.0f);
         if (_freeMapNavCheck != null) _freeMapNavCheck.ButtonPressed = RunTweaksSaveManager.IsFreeMapNavigationActive();
@@ -4967,8 +4959,11 @@ public partial class ModSettingsDialog : CanvasLayer
             if (_maxEnergySpin != null && GodotObject.IsInstanceValid(_maxEnergySpin))
             {
                 int energyVal = (int)_maxEnergySpin.Value;
-                tweaks.MaxEnergy = energyVal;
-                try { GameHelper.SetPlayerMaxEnergy(energyVal); } catch { }
+                if (energyVal != tweaks.MaxEnergy)
+                {
+                    tweaks.MaxEnergy = energyVal;
+                    try { GameHelper.SetPlayerMaxEnergy(energyVal); } catch { }
+                }
             }
 
             if (tweaks.EndlessMode != null)
@@ -5044,93 +5039,6 @@ public partial class ModSettingsDialog : CanvasLayer
         {
             ModLogger.Error("ModSettingsDialog.SaveSettingsValues: Failed to save settings values.", ex);
         }
-    }
-
-    private void ExecuteDirectCommand(string input)
-    {
-        if (string.IsNullOrWhiteSpace(input)) return;
-        if (_commandInput != null) _commandInput.Text = "";
-
-        string trimmed = input.Trim();
-        ModLogger.Info($"Exec: {trimmed}");
-        string[] parts = trimmed.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        string cmd = parts[0].ToLowerInvariant();
-
-        switch (cmd)
-        {
-            case "shop":
-            case "openshop":
-            case "merchant":
-                if (GameHelper.OpenShopMenu())
-                {
-                    CloseDialog();
-                }
-                break;
-            case "god":
-                CombatDirector.ToggleGodMode();
-                LoadSettingsValues();
-                break;
-            case "infenergy":
-                CombatDirector.ToggleInfiniteEnergy();
-                LoadSettingsValues();
-                break;
-            case "onehitkill":
-            case "ohk":
-                CombatDirector.ToggleOneHitKill();
-                LoadSettingsValues();
-                break;
-            case "killall":
-                CombatDirector.KillAllEnemies();
-                break;
-            case "gold":
-                if (parts.Length > 1 && int.TryParse(parts[1], out int g)) InventoryDirector.AddGold(g);
-                break;
-            case "setgold":
-                if (parts.Length > 1 && int.TryParse(parts[1], out int sg)) InventoryDirector.SetGold(sg);
-                break;
-            case "heal":
-                if (parts.Length > 1 && int.TryParse(parts[1], out int h)) InventoryDirector.Heal(h);
-                break;
-            case "damage":
-            case "dmg":
-                if (parts.Length > 1 && int.TryParse(parts[1], out int d)) InventoryDirector.DamagePlayer(d);
-                break;
-            case "setmaxhp":
-            case "maxhp":
-                if (parts.Length > 1 && int.TryParse(parts[1], out int m)) InventoryDirector.SetMaxHp(m);
-                break;
-            case "relic":
-                if (parts.Length > 1) RelicDirector.AddRelic(parts[1]);
-                break;
-            case "rmrelic":
-            case "removerelic":
-                if (parts.Length > 1) RelicDirector.RemoveRelic(parts[1]);
-                break;
-            case "card":
-                if (parts.Length > 1) CardDirector.AddCardToDeck(parts[1]);
-                break;
-            case "event":
-                if (parts.Length > 1) EventDirector.ForceNextEvent(parts[1]);
-                break;
-            default:
-                ModLogger.Warn($"Unknown command: {cmd}");
-                break;
-        }
-    }
-
-    private void OnLogReceived(LogLevel level, string msg)
-    {
-#if !DEBUG
-        if (level == LogLevel.Debug) return;
-#endif
-        string color = level switch
-        {
-            LogLevel.Warn => "yellow",
-            LogLevel.Error => ModLogger.GetErrorColor(msg),
-            LogLevel.Debug => "gray",
-            _ => "white"
-        };
-        CallDeferred(nameof(DeferredLogAppend), $"[color={color}]{msg}[/color]");
     }
 
     private void StartHotkeyAssignment(Button button, string currentVal, string fallbackDefault, Action<string> onAssigned)
@@ -5249,11 +5157,6 @@ public partial class ModSettingsDialog : CanvasLayer
 
         outButton = assignBtn;
         return row;
-    }
-
-    private void DeferredLogAppend(string text)
-    {
-        _logLabel?.AppendText($"{text}\n");
     }
 }
 

@@ -1,7 +1,6 @@
 {
   "general": {
     "enabled": true,
-    "debugLogging": false,
     "consoleHotkey": "F1",
     "guiOverlayHotkey": "F3",
     "quickGodModeKey": "",
@@ -43,15 +42,11 @@
     "infiniteEnergy": false,
     "oneHitKill": false,
     "bonusDrawPerTurn": 0,
-    "maxHandSizeOverride": 10,
     "infinitePotions": false,
     "noCardExhaust": false
   },
   "ui": {
-    "overlayScale": 1.0,
-    "overlayOpacity": 0.95,
     "showDebugConsoleOnStart": false,
-    "enableAudioCues": true,
     "menuPosX": null,
     "menuPosY": null,
     "menuWidth": null,

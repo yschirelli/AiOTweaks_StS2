@@ -898,9 +898,15 @@ public partial class DebugConsole : CanvasLayer
         }
     }
 
+    private const int MaxConsoleLogLines = 500;
+
     private void LogToConsole(string text)
     {
         if (_logLabel == null) return;
+        while (_logLabel.GetParagraphCount() >= MaxConsoleLogLines)
+        {
+            _logLabel.RemoveParagraph(0);
+        }
         _logLabel.AppendText($"{text}\n");
     }
 

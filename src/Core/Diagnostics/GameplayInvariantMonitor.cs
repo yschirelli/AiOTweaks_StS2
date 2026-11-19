@@ -13,17 +13,8 @@ namespace AIOTweaks.Core.Diagnostics;
 public static class GameplayInvariantMonitor
 {
 #if DEBUG
-    private static int _combatStartDeckTotal = -1;
-
-    public static void RecordCombatStartDeckSize(int count)
-    {
-        _combatStartDeckTotal = count;
-        BreadcrumbTracker.Record("Invariant", $"Initial combat deck size registered: {count}");
-    }
-
     public static void ResetCombatTracking()
     {
-        _combatStartDeckTotal = -1;
     }
 
     public static void CheckInvariants(string eventContext)
@@ -92,7 +83,6 @@ public static class GameplayInvariantMonitor
         BreadcrumbTracker.Record("InvariantViolation", $"[{context}] {details}");
     }
 #else
-    public static void RecordCombatStartDeckSize(int count) { }
     public static void ResetCombatTracking() { }
     public static void CheckInvariants(string eventContext) { }
 #endif

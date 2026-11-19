@@ -33,12 +33,15 @@ The goal is to maintain and extend a sandbox, cheat director, and quality-of-lif
 - **Clean Workspace & Scratch Scripts:** Keep temporary exploration scripts and scratch files (e.g. `.csx` scripts, temporary logs, test dumps) out of Git tracking. Ensure `.gitignore` captures all scratch patterns and clean up temporary files once development tasks conclude.
 
 ### 3. File & Component Responsibilities
-- `src/Core/Config/`: Strongly typed JSON config (`ModConfig.cs`, `RunSettings.cs`), profile management (`ConfigManager.cs`), and BaseLib config provider (`AIOTweaksBaseLibConfig.cs`).
+- `src/Core/Config/`: Strongly typed JSON config (`ModConfig.cs`), persistence (`ConfigManager.cs`), and BaseLib config provider (`AIOTweaksBaseLibConfig.cs`).
 - `src/Core/Logging/`: Centralized logging wrapper (`ModLogger.cs`) with `[AIOTweaks]` tagging and debug verbosity filtering (supports forced file output in Debug builds).
+- `src/Core/Diagnostics/`: Debug-only diagnostics (`BreadcrumbTracker`, `CombatWatchdog`, `CrashDumpHandler`, `FormulaAuditor`, `GameplayInvariantMonitor`, `HarmonyPatchAuditor`, `RunDiagnosticLogger`, `TurnMetricsTracker`).
 - `src/Core/State/`: Transient runtime state tracker (`RuntimeStateManager.cs`).
-- `src/Hooks/`: Interception points for game systems (Combat, Economy, Events, Map Generation & Neow, Modding & Character Select Screens).
-- `src/Cheats/`: Atomic command directors for runtime manipulation (`CardDirector.cs`, `CombatDirector.cs`, `EventDirector.cs`, `InventoryDirector.cs`, `RelicDirector.cs`).
-- `src/UI/`: Godot UI components for the draggable/resizable tabbed Mod Settings Dialog (`ModSettingsDialog.cs`), pre-run panel (`PreRunSettingsMenu.cs`), numeric validation (`UIHelper.cs`), and In-Run Debug Console (`DebugConsole.cs`).
+- `src/Core/`: Entry point (`ModEntry.cs`), reflection/engine helpers (`GameHelper.cs`), pure C# math (`ModMath.cs`), and compiled-regex BBCode/variable formatters (`TextFormatting.cs`).
+- `src/Hooks/`: Interception points for game systems (`CombatHooks.cs`, `EconomyHooks.cs`, `EventHooks.cs`, `GameEventHooks.cs` (`#if DEBUG`), `MapGenerationHooks.cs`, `ModdingScreenHooks.cs`, `PauseMenuHooks.cs`, `RelicHooks.cs`, `RunTweaksSaveManager.cs`, `SaveSerializationHooks.cs`).
+- `src/Cheats/`: Atomic command directors for runtime manipulation (`CardDirector.cs`, `CombatDirector.cs`, `EventDirector.cs`, `InventoryDirector.cs`, `PotionDirector.cs`, `RelicDirector.cs`, `StatusDirector.cs`).
+- `src/UI/`: Godot UI components for the draggable/resizable tabbed Mod Settings Dialog (`ModSettingsDialog.cs`) and In-Run Debug Console (`DebugConsole.cs`).
+- `tests/AIOTweaks.Tests/`: Zero-dependency `net9.0` unit tests for `ModConfig`, `ModMath`, and `TextFormatting`.
 
 ---
 
@@ -80,12 +83,13 @@ When diagnosing runtime issues, combat softlocks, or mod errors reported during 
   Deletes accumulated logs/dumps without rebuilding.
 
 ### 4. Quick Bug Fixing Checklist for Agents
-1. Run `./build.sh debug --deploy --nuke-logs` to ensure a clean slate and active debug diagnostics.
-2. Reproduce the bug or error scenario in-game.
-3. Check `aiotweaks_debug.log` for recent `[ERROR]` or `[WARN]` logs, hook traces, and exception stack traces.
-4. Check for any `aiotweaks_crash_*.txt` crash dumps in the mod folder.
-5. Review the breadcrumb sequence preceding the failure to isolate whether the fault originated from a hook prefix/postfix, director call, or UI event.
-6. Verify whether the bug reproduces in both `Debug` and `Release` configurations (diagnostics are `#if DEBUG` only).
+1. Run `dotnet run --project tests/AIOTweaks.Tests/AIOTweaks.Tests.csproj` to verify pure C# config, math, and text-formatting logic.
+2. Run `./build.sh debug --deploy --nuke-logs` to ensure a clean slate and active debug diagnostics.
+3. Reproduce the bug or error scenario in-game.
+4. Check `aiotweaks_debug.log` for recent `[ERROR]` or `[WARN]` logs, hook traces, and exception stack traces.
+5. Check for any `aiotweaks_crash_*.txt` crash dumps in the mod folder.
+6. Review the breadcrumb sequence preceding the failure to isolate whether the fault originated from a hook prefix/postfix, director call, or UI event.
+7. Verify whether the bug reproduces in both `Debug` and `Release` configurations (diagnostics are `#if DEBUG` only).
 
 ---
 
@@ -110,16 +114,20 @@ AiOTweaks_StS2/
 │   └── default_config.json      # Reference default configuration
 ├── assets/
 │   └── icons/                   # UI texture icons & assets
+├── tests/
+│   └── AIOTweaks.Tests/         # Zero-dependency net9.0 unit tests
 └── src/
     ├── AIOTweaks.csproj         # Godot .NET SDK project targeting net9.0
     ├── Core/
     │   ├── ModEntry.cs          # Mod lifecycle entry point & scene injector
     │   ├── GameHelper.cs        # Reflection, card query & engine utilities
+    │   ├── ModMath.cs           # Pure C# map, economy & Endless scaling math
+    │   ├── TextFormatting.cs    # Compiled-regex BBCode & variable formatters
     │   ├── Logging/
     │   │   └── ModLogger.cs     # Centralized [AIOTweaks] logging
+    │   ├── Diagnostics/         # Debug-only crash dumps, breadcrumbs, watchdog & run logs
     │   ├── Config/
     │   │   ├── ModConfig.cs
-    │   │   ├── RunSettings.cs
     │   │   ├── ConfigManager.cs
     │   │   └── AIOTweaksBaseLibConfig.cs
     │   └── State/
@@ -128,22 +136,24 @@ AiOTweaks_StS2/
     │   ├── CombatHooks.cs
     │   ├── EconomyHooks.cs
     │   ├── EventHooks.cs
+    │   ├── GameEventHooks.cs
     │   ├── MapGenerationHooks.cs
-    │   └── ModdingScreenHooks.cs
+    │   ├── ModdingScreenHooks.cs
+    │   ├── PauseMenuHooks.cs
+    │   ├── RelicHooks.cs
+    │   ├── RunTweaksSaveManager.cs
+    │   └── SaveSerializationHooks.cs
     ├── Cheats/
     │   ├── CardDirector.cs
     │   ├── CombatDirector.cs
     │   ├── EventDirector.cs
     │   ├── InventoryDirector.cs
-    │   └── RelicDirector.cs
+    │   ├── PotionDirector.cs
+    │   ├── RelicDirector.cs
+    │   └── StatusDirector.cs
     └── UI/
-        ├── UIHelper.cs          # UI extension methods & SpinBox numeric validation
         ├── Menu/
-        │   ├── ModSettingsDialog.cs
-        │   ├── ModSettingsDialog.tscn
-        │   ├── PreRunSettingsMenu.cs
-        │   └── PreRunSettingsMenu.tscn
+        │   └── ModSettingsDialog.cs
         └── Overlay/
-            ├── DebugConsole.cs
-            └── DebugConsole.tscn
+            └── DebugConsole.cs
 ```

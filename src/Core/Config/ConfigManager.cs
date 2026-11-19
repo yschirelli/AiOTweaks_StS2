@@ -24,12 +24,10 @@ public static class ConfigManager
     };
 
     public static ModConfig Current { get; private set; } = new();
-    public static RunSettings ActiveRunSettings { get; private set; } = new();
 
     public static event Action<ModConfig>? OnConfigChanged;
 
     public static PreRunTweaksConfig GetEffectivePreRunTweaks() => RunTweaksSaveManager.GetEffectivePreRunTweaks();
-    public static RunSettings GetEffectiveRunSettings() => RunTweaksSaveManager.GetEffectiveRunSettings();
 
     public static string GetConfigFilePath()
     {
@@ -79,14 +77,13 @@ public static class ConfigManager
                     Current = loaded;
                     EnsureHotkeyFailsafes();
 #if DEBUG
-                    Current.General.DebugLogging = true;
                     ModLogger.MinimumLevel = LogLevel.Debug;
                     ModLogger.FileLoggingEnabled = true;
 #else
                     ModLogger.MinimumLevel = LogLevel.Info;
                     ModLogger.FileLoggingEnabled = false;
 #endif
-                    ModLogger.Info($"Loaded configuration successfully from root directory: {primaryPath} (DebugLogging={Current.General.DebugLogging}, MinimumLevel={ModLogger.MinimumLevel})");
+                    ModLogger.Info($"Loaded configuration successfully from root directory: {primaryPath} (MinimumLevel={ModLogger.MinimumLevel})");
                     OnConfigChanged?.Invoke(Current);
                     return;
                 }
@@ -116,7 +113,6 @@ public static class ConfigManager
                             Current = loaded;
                             EnsureHotkeyFailsafes();
 #if DEBUG
-                            Current.General.DebugLogging = true;
                             ModLogger.MinimumLevel = LogLevel.Debug;
                             ModLogger.FileLoggingEnabled = true;
 #else
@@ -139,7 +135,6 @@ public static class ConfigManager
             Current = new ModConfig();
             EnsureHotkeyFailsafes();
 #if DEBUG
-            Current.General.DebugLogging = true;
             ModLogger.MinimumLevel = LogLevel.Debug;
             ModLogger.FileLoggingEnabled = true;
 #else
@@ -154,7 +149,6 @@ public static class ConfigManager
             Current = new ModConfig();
             EnsureHotkeyFailsafes();
 #if DEBUG
-            Current.General.DebugLogging = true;
             ModLogger.MinimumLevel = LogLevel.Debug;
             ModLogger.FileLoggingEnabled = true;
 #else
@@ -187,19 +181,5 @@ public static class ConfigManager
         {
             ModLogger.Error($"Failed to save configuration to root directory: {path}", ex);
         }
-    }
-
-    public static void UpdateActiveRunSettings(RunSettings settings)
-    {
-        ModLogger.Verbose("ConfigManager", $"Updating ActiveRunSettings with profile '{settings?.ProfileName}' (GoldMult={settings?.GoldMultiplier}, EliteMult={settings?.EliteSpawnMultiplier})...");
-        ActiveRunSettings = settings?.Clone() ?? new RunSettings();
-        ModLogger.Info($"Active Run Settings updated for profile: {ActiveRunSettings.ProfileName}");
-    }
-
-    public static void ResetRunSettingsToDefault()
-    {
-        ModLogger.Verbose("ConfigManager", "Resetting ActiveRunSettings to default profile...");
-        ActiveRunSettings = new RunSettings();
-        ModLogger.Info("Active Run Settings reset to defaults.");
     }
 }

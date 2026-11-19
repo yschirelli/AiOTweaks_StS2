@@ -1,9 +1,12 @@
 using System;
 using System.Linq;
+using System.Threading.Tasks;
 using AIOTweaks.Core;
 using AIOTweaks.Core.Logging;
 using AIOTweaks.Core.State;
 using MegaCrit.Sts2.Core.Commands;
+using MegaCrit.Sts2.Core.Entities.Players;
+using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Models;
 
 namespace AIOTweaks.Cheats;
@@ -70,19 +73,8 @@ public static class RelicDirector
 
                     // RelicCmd.Obtain correctly attaches to player, sets up hooks, and fires RelicObtained for NRelicInventory
                     ModLogger.Verbose("RelicDirector", $"Calling RelicCmd.Obtain for '{relicInstance.GetType().Name}'...");
-                    var obtained = RelicCmd.Obtain(relicInstance, player, -1);
-                    if (obtained != null)
-                    {
-                        string resName = canonical.GetType().Name;
-                        ModLogger.Info($"Relic '{resName}' successfully obtained via RelicCmd.Obtain. (Player relics count: {player.Relics.Count})");
-                        OnRelicAdded?.Invoke(resName);
-                        OnRelicsChanged?.Invoke();
-                        return true;
-                    }
-                    else
-                    {
-                        ModLogger.Verbose("RelicDirector", "RelicCmd.Obtain returned null.");
-                    }
+                    TaskHelper.RunSafely(ObtainRelicAsync(relicInstance, player, canonical.GetType().Name));
+                    return true;
                 }
             }
 
@@ -118,20 +110,7 @@ public static class RelicDirector
             if (player?.Relics != null)
             {
                 var allPlayerRelics = player.Relics.ToList();
-                foreach (var r in allPlayerRelics)
-                {
-                    try
-                    {
-                        RelicCmd.Remove(r);
-                    }
-                    catch (Exception ex)
-                    {
-                        ModLogger.Warn($"Error removing relic '{r?.GetType().Name}': {ex.Message}");
-                    }
-                }
-                ModLogger.Info("All player relics removed via RelicCmd.Remove.");
-                OnRelicRemoved?.Invoke("all");
-                OnRelicsChanged?.Invoke();
+                TaskHelper.RunSafely(RemoveAllRelicsAsync(allPlayerRelics));
                 return true;
             }
             return false;
@@ -151,11 +130,7 @@ public static class RelicDirector
                 if (matchingRelic != null)
                 {
                     ModLogger.Verbose("RelicDirector", $"Found matching relic in inventory: {matchingRelic.GetType().Name}. Calling RelicCmd.Remove...");
-                    RelicCmd.Remove(matchingRelic);
-                    string rName = matchingRelic.GetType().Name;
-                    ModLogger.Info($"Relic '{rName}' successfully removed via RelicCmd.Remove. (Remaining: {player.Relics.Count})");
-                    OnRelicRemoved?.Invoke(rName);
-                    OnRelicsChanged?.Invoke();
+                    TaskHelper.RunSafely(RemoveRelicAsync(matchingRelic, player));
                     return true;
                 }
                 else
@@ -173,6 +148,55 @@ public static class RelicDirector
             ModLogger.Error($"Failed to remove relic '{relicId}'", ex);
             return false;
         }
+    }
+
+    private static async Task ObtainRelicAsync(RelicModel relicInstance, Player player, string resName)
+    {
+        try
+        {
+            await RelicCmd.Obtain(relicInstance, player, -1);
+            ModLogger.Info($"Relic '{resName}' successfully obtained via RelicCmd.Obtain. (Player relics count: {player.Relics.Count})");
+            OnRelicAdded?.Invoke(resName);
+            OnRelicsChanged?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Error($"Async RelicCmd.Obtain failed for '{resName}'", ex);
+        }
+    }
+
+    private static async Task RemoveRelicAsync(RelicModel relic, Player player)
+    {
+        string rName = relic.GetType().Name;
+        try
+        {
+            await RelicCmd.Remove(relic);
+            ModLogger.Info($"Relic '{rName}' successfully removed via RelicCmd.Remove. (Remaining: {player.Relics.Count})");
+            OnRelicRemoved?.Invoke(rName);
+            OnRelicsChanged?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Error($"Async RelicCmd.Remove failed for '{rName}'", ex);
+        }
+    }
+
+    private static async Task RemoveAllRelicsAsync(System.Collections.Generic.List<RelicModel> relics)
+    {
+        foreach (var r in relics)
+        {
+            try
+            {
+                await RelicCmd.Remove(r);
+            }
+            catch (Exception ex)
+            {
+                ModLogger.Warn($"Error removing relic '{r?.GetType().Name}': {ex.Message}");
+            }
+        }
+        ModLogger.Info("All player relics removed via RelicCmd.Remove.");
+        OnRelicRemoved?.Invoke("all");
+        OnRelicsChanged?.Invoke();
     }
 }
 

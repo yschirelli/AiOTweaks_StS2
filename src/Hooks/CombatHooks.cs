@@ -23,16 +23,23 @@ public static class CombatHooks
     {
         private static readonly FieldInfo? CreatureField = typeof(NCreatureStateDisplay).GetField("_creature", BindingFlags.NonPublic | BindingFlags.Instance);
         private static readonly MethodInfo? RefreshValuesMethod = typeof(NCreatureStateDisplay).GetMethod("RefreshValues", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<NCreatureStateDisplay, Action> UnsubscribeTable = new();
 
         [HarmonyPostfix]
         public static void Postfix(NCreatureStateDisplay __instance)
         {
             try
             {
+                if (UnsubscribeTable.TryGetValue(__instance, out var existingUnsubscribe))
+                {
+                    existingUnsubscribe();
+                    UnsubscribeTable.Remove(__instance);
+                }
+
                 if (CreatureField?.GetValue(__instance) is Creature creature)
                 {
                     ModLogger.Verbose("CombatHooks", $"Subscribing state display update handlers for creature '{creature.GetType().Name}'.");
-                    creature.CurrentHpChanged += (oldHp, newHp) => 
+                    Action<int, int> onHpChanged = (oldHp, newHp) =>
                     {
                         try
                         {
@@ -49,23 +56,24 @@ public static class CombatHooks
                         }
                         catch { }
                     };
-                    creature.MaxHpChanged += (oldMax, newMax) => 
+
+                    creature.CurrentHpChanged += onHpChanged;
+                    creature.MaxHpChanged += onHpChanged;
+
+                    Action? cleanup = null;
+                    cleanup = () =>
                     {
-                        try
+                        creature.CurrentHpChanged -= onHpChanged;
+                        creature.MaxHpChanged -= onHpChanged;
+                        if (GodotObject.IsInstanceValid(__instance))
                         {
-                            if (GodotObject.IsInstanceValid(__instance) && __instance.IsInsideTree())
-                            {
-                                Callable.From(() =>
-                                {
-                                    if (GodotObject.IsInstanceValid(__instance) && __instance.IsInsideTree())
-                                    {
-                                        RefreshValuesMethod?.Invoke(__instance, null);
-                                    }
-                                }).CallDeferred();
-                            }
+                            __instance.TreeExiting -= cleanup;
                         }
-                        catch { }
+                        UnsubscribeTable.Remove(__instance);
                     };
+
+                    UnsubscribeTable.Add(__instance, cleanup);
+                    __instance.TreeExiting += cleanup;
                 }
             }
             catch (Exception ex)
@@ -123,7 +131,10 @@ public static class CombatHooks
 #if DEBUG
                 AIOTweaks.Core.Diagnostics.TurnMetricsTracker.RecordDirectDamage(amount);
 #endif
-                amount = ProcessPlayerIncomingDamage((int)amount);
+                if (RuntimeStateManager.GodModeEnabled || ConfigManager.Current.CombatSandbox.GodMode)
+                {
+                    amount = ProcessPlayerIncomingDamage((int)amount);
+                }
                 if (amount != originalAmount)
                 {
                     ModLogger.Verbose("CombatHooks", $"Player LoseHpInternal intercept: {originalAmount} -> {amount}");
@@ -131,7 +142,10 @@ public static class CombatHooks
             }
             else
             {
-                amount = ProcessMonsterIncomingDamage((int)amount);
+                if (RuntimeStateManager.OneHitKillEnabled || ConfigManager.Current.CombatSandbox.OneHitKill)
+                {
+                    amount = ProcessMonsterIncomingDamage((int)amount, __instance.CurrentHp);
+                }
                 if (amount != originalAmount)
                 {
                     ModLogger.Verbose("CombatHooks", $"Monster LoseHpInternal intercept ({__instance.GetType().Name}): {originalAmount} -> {amount}");
@@ -378,7 +392,7 @@ public static class CombatHooks
 #endif
                 int maxEnergy = RunTweaksSaveManager.GetEffectivePreRunTweaks().MaxEnergy;
                 var player = GameHelper.GetActivePlayer();
-                if (player != null && maxEnergy > 0 && player.MaxEnergy != maxEnergy)
+                if (player != null && maxEnergy > 0 && maxEnergy != 3 && player.MaxEnergy != maxEnergy)
                 {
                     player.MaxEnergy = maxEnergy;
                 }
@@ -488,44 +502,21 @@ public static class CombatHooks
     }
 
     /// <summary>
-    /// Processes damage dealt to enemies. If OneHitKill is active, boosts damage significantly.
+    /// Processes damage dealt to enemies. If OneHitKill is active, guarantees lethal damage even at high Endless HP.
     /// </summary>
-    public static int ProcessMonsterIncomingDamage(int incomingDamage)
+    public static int ProcessMonsterIncomingDamage(int incomingDamage, int targetCurrentHp = 0)
     {
         if (RuntimeStateManager.OneHitKillEnabled || ConfigManager.Current.CombatSandbox.OneHitKill)
         {
             if (incomingDamage > 0)
             {
-                int lethal = Math.Max(incomingDamage, 99999);
+                int lethal = ModMath.ComputeOneHitKillDamage(incomingDamage, targetCurrentHp);
                 ModLogger.Info($"CombatHook: OneHitKill modified damage {incomingDamage} -> {lethal}");
                 return lethal;
             }
         }
 
         return incomingDamage;
-    }
-
-    /// <summary>
-    /// Computes turn start card draw count including sandbox bonuses.
-    /// </summary>
-    public static int ProcessCardDrawCount(int baseDraw)
-    {
-        int bonus = ConfigManager.Current.CombatSandbox.BonusDrawPerTurn;
-        if (RuntimeStateManager.OverrideCardDrawCount.HasValue)
-        {
-            int overridden = RuntimeStateManager.OverrideCardDrawCount.Value;
-            ModLogger.Verbose("CombatHooks", $"ProcessCardDrawCount: overridden {baseDraw} -> {overridden}");
-            return overridden;
-        }
-
-        if (bonus > 0)
-        {
-            int boosted = baseDraw + bonus;
-            ModLogger.Verbose("CombatHooks", $"ProcessCardDrawCount: base={baseDraw} + bonus={bonus} -> {boosted}");
-            return boosted;
-        }
-
-        return baseDraw;
     }
 
     /// <summary>

@@ -1,10 +1,12 @@
 using System;
 using System.Linq;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using AIOTweaks.Core;
 using AIOTweaks.Core.Logging;
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Entities.Creatures;
+using MegaCrit.Sts2.Core.GameActions.Multiplayer;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Models;
 
@@ -45,23 +47,13 @@ public static class StatusDirector
                 var mutable = canonical.ToMutable(amount);
                 if (mutable != null)
                 {
-                    ModLogger.Verbose("StatusDirector", $"Calling PowerCmd.Apply for '{mutable.GetType().Name}' on target...");
-                    try
-                    {
-                        TaskHelper.RunSafely(PowerCmd.Apply(null!, mutable, target, (decimal)amount, applier ?? target, null!, false));
-                    }
-                    catch (Exception ex)
-                    {
-                        ModLogger.Warn($"PowerCmd.Apply direct notice: {ex.Message}; fallback to target.ApplyPowerInternal");
-                        target.ApplyPowerInternal(mutable);
-                    }
+                    string typeName = canonical.GetType().Name;
+                    string pName = !string.IsNullOrWhiteSpace(canonical.Title?.GetFormattedText())
+                        ? canonical.Title.GetFormattedText()
+                        : typeName;
 
-                    string pName = !string.IsNullOrWhiteSpace(canonical.Title?.GetFormattedText()) 
-                        ? canonical.Title.GetFormattedText() 
-                        : canonical.GetType().Name;
-                    ModLogger.Info($"Applied {amount}x status '{pName}' to {(target.IsPlayer ? "Player" : "Enemy")}.");
-                    OnStatusApplied?.Invoke(target, canonical.GetType().Name, amount);
-                    OnStatusesChanged?.Invoke();
+                    ModLogger.Verbose("StatusDirector", $"Calling PowerCmd.Apply for '{mutable.GetType().Name}' on target...");
+                    TaskHelper.RunSafely(ApplyPowerAsync(mutable, target, amount, applier ?? target, typeName, pName));
                     return true;
                 }
             }
@@ -95,18 +87,7 @@ public static class StatusDirector
         {
             string pName = power.GetType().Name;
             ModLogger.Verbose("StatusDirector", $"Removing power '{pName}' from creature...");
-            try
-            {
-                TaskHelper.RunSafely(PowerCmd.Remove(power));
-            }
-            catch
-            {
-                target.RemovePowerInternal(power);
-            }
-
-            ModLogger.Info($"Removed status '{pName}' from {(target.IsPlayer ? "Player" : "Enemy")}.");
-            OnStatusRemoved?.Invoke(target, pName);
-            OnStatusesChanged?.Invoke();
+            TaskHelper.RunSafely(RemovePowerAsync(target, power, pName));
             return true;
         }
         catch (Exception ex)
@@ -159,31 +140,7 @@ public static class StatusDirector
             }
 
             ModLogger.Verbose("StatusDirector", $"Modifying amount of power '{power.GetType().Name}' by {delta} (current={power.Amount})...");
-            try
-            {
-                TaskHelper.RunSafely(PowerCmd.ModifyAmount(null!, power, (decimal)delta, applier ?? target, null!, false));
-            }
-            catch
-            {
-                try
-                {
-                    var prop = typeof(PowerModel).GetProperty("Amount");
-                    if (prop != null && prop.CanWrite)
-                    {
-                        prop.SetValue(power, power.Amount + delta);
-                    }
-                    else
-                    {
-                        var field = typeof(PowerModel).GetField("_amount", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public) ??
-                                    typeof(PowerModel).GetField("<Amount>k__BackingField", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                        field?.SetValue(power, power.Amount + delta);
-                    }
-                    target.InvokePowerModified(power, delta, false);
-                }
-                catch { }
-            }
-
-            OnStatusesChanged?.Invoke();
+            TaskHelper.RunSafely(ModifyPowerAmountAsync(target, power, delta, applier ?? target));
             return true;
         }
         catch (Exception ex)
@@ -191,6 +148,70 @@ public static class StatusDirector
             ModLogger.Error($"Failed to modify status amount for '{power.GetType().Name}'", ex);
             return false;
         }
+    }
+
+    private static async Task ApplyPowerAsync(PowerModel mutable, Creature target, int amount, Creature applier, string typeName, string displayName)
+    {
+        try
+        {
+            await PowerCmd.Apply(new BlockingPlayerChoiceContext(), mutable, target, (decimal)amount, applier, null, false);
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Warn($"PowerCmd.Apply failed for '{typeName}': {ex.Message}; fallback to target.ApplyPowerInternal");
+            target.ApplyPowerInternal(mutable);
+        }
+
+        ModLogger.Info($"Applied {amount}x status '{displayName}' to {(target.IsPlayer ? "Player" : "Enemy")}.");
+        OnStatusApplied?.Invoke(target, typeName, amount);
+        OnStatusesChanged?.Invoke();
+    }
+
+    private static async Task RemovePowerAsync(Creature target, PowerModel power, string powerName)
+    {
+        try
+        {
+            await PowerCmd.Remove(power);
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Warn($"PowerCmd.Remove failed for '{powerName}': {ex.Message}; fallback to target.RemovePowerInternal");
+            target.RemovePowerInternal(power);
+        }
+
+        ModLogger.Info($"Removed status '{powerName}' from {(target.IsPlayer ? "Player" : "Enemy")}.");
+        OnStatusRemoved?.Invoke(target, powerName);
+        OnStatusesChanged?.Invoke();
+    }
+
+    private static async Task ModifyPowerAmountAsync(Creature target, PowerModel power, int delta, Creature applier)
+    {
+        try
+        {
+            await PowerCmd.ModifyAmount(new BlockingPlayerChoiceContext(), power, (decimal)delta, applier, null, false);
+        }
+        catch (Exception ex)
+        {
+            ModLogger.Warn($"PowerCmd.ModifyAmount failed for '{power.GetType().Name}': {ex.Message}; using direct fallback.");
+            try
+            {
+                var prop = typeof(PowerModel).GetProperty("Amount");
+                if (prop != null && prop.CanWrite)
+                {
+                    prop.SetValue(power, power.Amount + delta);
+                }
+                else
+                {
+                    var field = typeof(PowerModel).GetField("_amount", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public) ??
+                                typeof(PowerModel).GetField("<Amount>k__BackingField", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                    field?.SetValue(power, power.Amount + delta);
+                }
+                target.InvokePowerModified(power, delta, false);
+            }
+            catch { }
+        }
+
+        OnStatusesChanged?.Invoke();
     }
 
     /// <summary>

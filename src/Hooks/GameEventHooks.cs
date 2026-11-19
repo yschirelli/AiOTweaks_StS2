@@ -37,6 +37,7 @@ namespace AIOTweaks.Hooks;
 /// </summary>
 public static class GameEventHooks
 {
+#if DEBUG
     private static void LogEvent(string category, string message)
     {
         try
@@ -870,4 +871,5 @@ public static class GameEventHooks
             }
         }
     }
+#endif
 }

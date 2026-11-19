@@ -47,677 +47,6 @@ using MegaCrit.Sts2.Core.Nodes.Screens.ScreenContext;
 
 namespace AIOTweaks.Hooks;
 
-[JsonSerializable(typeof(ActiveRunTweaksSnapshot))]
-[JsonSourceGenerationOptions(WriteIndented = true, PropertyNameCaseInsensitive = true)]
-internal partial class ActiveRunTweaksJsonContext : JsonSerializerContext
-{
-}
-
-/// <summary>
-/// Serializable data container representing the immutable pre-run configuration snapshot bound to an active run.
-/// Persists across game restarts, quits, relogs, and endless loops.
-/// </summary>
-public sealed class ActiveRunTweaksSnapshot
-{
-    [JsonPropertyName("profileId")]
-    public int ProfileId { get; set; } = 0;
-
-    [JsonPropertyName("startTime")]
-    public long StartTime { get; set; } = 0;
-
-    [JsonPropertyName("runSeed")]
-    public string RunSeed { get; set; } = "";
-
-    [JsonPropertyName("isCustom")]
-    public bool IsCustom { get; set; } = false;
-
-    [JsonPropertyName("endlessLoopCount")]
-    public int EndlessLoopCount { get; set; } = 0;
-
-    [JsonPropertyName("savedAtUtc")]
-    public DateTime SavedAtUtc { get; set; } = DateTime.UtcNow;
-
-    [JsonPropertyName("preRunTweaks")]
-    public PreRunTweaksConfig PreRunTweaks { get; set; } = new();
-
-    [JsonPropertyName("runSettings")]
-    public RunSettings RunSettings { get; set; } = new();
-
-    public ActiveRunTweaksSnapshot Clone()
-    {
-        return new ActiveRunTweaksSnapshot
-        {
-            ProfileId = ProfileId,
-            StartTime = StartTime,
-            RunSeed = RunSeed,
-            IsCustom = IsCustom,
-            EndlessLoopCount = EndlessLoopCount,
-            SavedAtUtc = SavedAtUtc,
-            PreRunTweaks = ClonePreRunTweaks(PreRunTweaks),
-            RunSettings = RunSettings.Clone()
-        };
-    }
-
-    public static PreRunTweaksConfig ClonePreRunTweaks(PreRunTweaksConfig source)
-    {
-        if (source == null) return new PreRunTweaksConfig();
-        return new PreRunTweaksConfig
-        {
-            CustomSeed = source.CustomSeed,
-            BypassTutorialAndDiscoveryLocks = source.BypassTutorialAndDiscoveryLocks,
-            GoldRewardMultiplier = source.GoldRewardMultiplier,
-            ShopDiscountMultiplier = source.ShopDiscountMultiplier,
-            CardRewardCount = source.CardRewardCount,
-            StartingGoldBonus = source.StartingGoldBonus,
-            StartingMaxHpBonus = source.StartingMaxHpBonus,
-            ForceNeowBonus = source.ForceNeowBonus,
-            MapRoomCount = source.MapRoomCount,
-            PlayerDamageMultiplier = source.PlayerDamageMultiplier,
-            PlayerDefendMultiplier = source.PlayerDefendMultiplier,
-            MaxEnergy = source.MaxEnergy,
-            EnemyHealthMultiplier = source.EnemyHealthMultiplier,
-            EnemyDamageMultiplier = source.EnemyDamageMultiplier,
-            EnemyDefendMultiplier = source.EnemyDefendMultiplier,
-            FreeMapNavigation = source.FreeMapNavigation,
-            PotionSlots = source.PotionSlots,
-            AllowMultipleRelics = source.AllowMultipleRelics,
-            EndlessMode = new EndlessModeConfig
-            {
-                Enabled = source.EndlessMode.Enabled,
-                EnemyScalingMultiplier = source.EndlessMode.EnemyScalingMultiplier
-            },
-            MapNodeDistribution = new MapNodeDistributionConfig
-            {
-                EliteWeightMultiplier = source.MapNodeDistribution.EliteWeightMultiplier,
-                ShopWeightMultiplier = source.MapNodeDistribution.ShopWeightMultiplier,
-                EventWeightMultiplier = source.MapNodeDistribution.EventWeightMultiplier,
-                RestSiteWeightMultiplier = source.MapNodeDistribution.RestSiteWeightMultiplier,
-                CombatWeightMultiplier = source.MapNodeDistribution.CombatWeightMultiplier,
-                TreasureRoomMultiplier = source.MapNodeDistribution.TreasureRoomMultiplier
-            }
-        };
-    }
-}
-
-/// <summary>
-/// Manages persistence, lifecycle, and retrieval of active run pre-run tweaks.
-/// Ensures runs generated with custom map generation parameters remain immutable across sessions,
-/// endless loops inherit the original snapshot, and default vanilla runs remain non-custom.
-/// </summary>
-public static class RunTweaksSaveManager
-{
-    private const string SnapshotFilePrefix = "active_run_tweaks_p";
-    private static readonly object FileLock = new();
-
-    private static readonly JsonSerializerOptions JsonOpts = new(ActiveRunTweaksJsonContext.Default.Options)
-    {
-        WriteIndented = true,
-        PropertyNameCaseInsensitive = true
-    };
-
-    public static ActiveRunTweaksSnapshot? ActiveSnapshot { get; private set; } = null;
-    public static bool HasActiveRunSnapshot => ActiveSnapshot != null;
-
-    public static string GetSnapshotPath(int profileId)
-    {
-        string rootDir = ModLogger.GetModRootDirectory();
-        return Path.Combine(rootDir, $"{SnapshotFilePrefix}{profileId}.json");
-    }
-
-    public static int GetCurrentProfileId()
-    {
-        try
-        {
-            if (MegaCrit.Sts2.Core.Saves.SaveManager.Instance != null)
-            {
-                return MegaCrit.Sts2.Core.Saves.SaveManager.Instance.CurrentProfileId;
-            }
-        }
-        catch { }
-        return 0;
-    }
-
-    public static void Initialize()
-    {
-        ModLogger.Verbose("RunTweaksSaveManager", "Initializing RunTweaksSaveManager subsystem...");
-        TryLoadFromDisk(GetCurrentProfileId());
-    }
-
-    public static bool TryLoadFromDisk(int profileId)
-    {
-        lock (FileLock)
-        {
-            try
-            {
-                string path = GetSnapshotPath(profileId);
-                if (File.Exists(path))
-                {
-                    string json = File.ReadAllText(path);
-                    var loaded = JsonSerializer.Deserialize<ActiveRunTweaksSnapshot>(json, JsonOpts);
-                    if (loaded != null)
-                    {
-                        ActiveSnapshot = loaded;
-                        RuntimeStateManager.CurrentEndlessLoopCount = loaded.EndlessLoopCount;
-                        ModLogger.Info($"RunTweaksSaveManager: Loaded persisted active run snapshot for profile {profileId} (IsCustom={loaded.IsCustom}, RoomCount={loaded.PreRunTweaks.MapRoomCount}, Endless={loaded.PreRunTweaks.EndlessMode.Enabled}, Loop={loaded.EndlessLoopCount})");
-                        return true;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                ModLogger.Error($"RunTweaksSaveManager: Error reading snapshot for profile {profileId}", ex);
-            }
-            return false;
-        }
-    }
-
-    public static void SaveActiveSnapshot()
-    {
-        if (ActiveSnapshot == null) return;
-        lock (FileLock)
-        {
-            try
-            {
-                string path = GetSnapshotPath(ActiveSnapshot.ProfileId);
-                string? dir = Path.GetDirectoryName(path);
-                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                {
-                    Directory.CreateDirectory(dir);
-                }
-                string json = JsonSerializer.Serialize(ActiveSnapshot, JsonOpts);
-                File.WriteAllText(path, json);
-                ModLogger.Info($"RunTweaksSaveManager: Saved active run tweaks snapshot to {path}");
-            }
-            catch (Exception ex)
-            {
-                ModLogger.Error("RunTweaksSaveManager: Failed to write active run tweaks snapshot", ex);
-            }
-        }
-    }
-
-    public static void StartNewRun(RunState runState)
-    {
-        int profileId = GetCurrentProfileId();
-        var pendingTweaks = ConfigManager.Current.PreRunTweaks;
-        var pendingSettings = ConfigManager.ActiveRunSettings;
-
-        bool isCustom = IsCustomRun(pendingTweaks, pendingSettings);
-
-        var snapshot = new ActiveRunTweaksSnapshot
-        {
-            ProfileId = profileId,
-            StartTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-            RunSeed = runState?.Rng?.StringSeed ?? runState?.Rng?.Seed.ToString() ?? "",
-            IsCustom = isCustom,
-            EndlessLoopCount = 0,
-            SavedAtUtc = DateTime.UtcNow,
-            PreRunTweaks = ActiveRunTweaksSnapshot.ClonePreRunTweaks(pendingTweaks),
-            RunSettings = pendingSettings.Clone()
-        };
-
-        ActiveSnapshot = snapshot;
-        RuntimeStateManager.CurrentEndlessLoopCount = 0;
-        RuntimeStateManager.FreeMapNavigationEnabled = snapshot.PreRunTweaks.FreeMapNavigation;
-        MapGenerationHooks.ResetEventVisitCounts();
-        SaveActiveSnapshot();
-
-#if DEBUG
-        AIOTweaks.Core.Diagnostics.RunDiagnosticLogger.StartRunSession(runState, snapshot, ConfigManager.Current);
-#endif
-
-        ModLogger.Info($"RunTweaksSaveManager: Started NEW run snapshot (Profile={profileId}, IsCustom={isCustom}, RoomCount={snapshot.PreRunTweaks.MapRoomCount}, Endless={snapshot.PreRunTweaks.EndlessMode.Enabled})");
-    }
-
-    public static void LoadSavedRun(RunState runState, MegaCrit.Sts2.Core.Saves.SerializableRun? save)
-    {
-        int profileId = GetCurrentProfileId();
-        ModLogger.Verbose("RunTweaksSaveManager", $"Loading saved run for profile {profileId}...");
-
-        bool loaded = TryLoadFromDisk(profileId);
-        if (!loaded)
-        {
-            // If no custom snapshot was saved on disk for this run, the run was started as a vanilla default run.
-            // Create a clean default snapshot so pending modified menu tweaks do NOT contaminate this existing run!
-            ModLogger.Info($"RunTweaksSaveManager: No custom snapshot found on disk for profile {profileId}. Binding clean default snapshot (GameMode.Standard).");
-            ActiveSnapshot = new ActiveRunTweaksSnapshot
-            {
-                ProfileId = profileId,
-                StartTime = save?.StartTime ?? 0,
-                IsCustom = false,
-                EndlessLoopCount = 0,
-                PreRunTweaks = new PreRunTweaksConfig(),
-                RunSettings = new RunSettings()
-            };
-            RuntimeStateManager.CurrentEndlessLoopCount = 0;
-            RuntimeStateManager.FreeMapNavigationEnabled = false;
-        }
-        else if (ActiveSnapshot != null)
-        {
-            RuntimeStateManager.CurrentEndlessLoopCount = ActiveSnapshot.EndlessLoopCount;
-            RuntimeStateManager.FreeMapNavigationEnabled = ActiveSnapshot.PreRunTweaks.FreeMapNavigation;
-        }
-        MapGenerationHooks.ResetEventVisitCounts();
-
-#if DEBUG
-        AIOTweaks.Core.Diagnostics.RunDiagnosticLogger.StartRunSession(runState, ActiveSnapshot, ConfigManager.Current);
-#endif
-    }
-
-    public static void ClearActiveRun(string reason)
-    {
-        int profileId = ActiveSnapshot?.ProfileId ?? GetCurrentProfileId();
-        ModLogger.Info($"RunTweaksSaveManager: Clearing active run snapshot (Reason: {reason}, Profile: {profileId}).");
-
-#if DEBUG
-        AIOTweaks.Core.Diagnostics.RunDiagnosticLogger.CloseRunSession(reason);
-#endif
-
-        ActiveSnapshot = null;
-        RuntimeStateManager.CurrentEndlessLoopCount = 0;
-        RuntimeStateManager.FreeMapNavigationEnabled = false;
-        MapGenerationHooks.ResetEventVisitCounts();
-
-        lock (FileLock)
-        {
-            try
-            {
-                string path = GetSnapshotPath(profileId);
-                if (File.Exists(path))
-                {
-                    File.Delete(path);
-                    ModLogger.Verbose("RunTweaksSaveManager", $"Deleted snapshot file: {path}");
-                }
-            }
-            catch (Exception ex)
-            {
-                ModLogger.Error($"RunTweaksSaveManager: Failed to delete snapshot file for profile {profileId}", ex);
-            }
-        }
-    }
-
-    public static string? GetActiveRunSeed()
-    {
-        string? s = ActiveSnapshot?.RunSeed;
-        if (!string.IsNullOrEmpty(s)) return s;
-        if (RunManager.Instance != null)
-        {
-            var runState = MapGenerationHooks.GetRunState(RunManager.Instance);
-            return runState?.Rng?.StringSeed;
-        }
-        return null;
-    }
-
-    public static void IncrementEndlessLoop()
-    {
-        if (ActiveSnapshot != null)
-        {
-            ActiveSnapshot.PreRunTweaks.EndlessMode.Enabled = true;
-            ActiveSnapshot.EndlessLoopCount++;
-            RuntimeStateManager.CurrentEndlessLoopCount = ActiveSnapshot.EndlessLoopCount;
-            SaveActiveSnapshot();
-            ModLogger.Info($"RunTweaksSaveManager: Endless loop incremented to {ActiveSnapshot.EndlessLoopCount} (Scaling factor: {Math.Pow(ActiveSnapshot.PreRunTweaks.EndlessMode.EnemyScalingMultiplier, ActiveSnapshot.EndlessLoopCount):F2}x)");
-        }
-        else
-        {
-            RuntimeStateManager.CurrentEndlessLoopCount++;
-        }
-    }
-
-    public static readonly MethodInfo? RecalculateTravelabilityMethod = AccessTools.Method(typeof(NMapScreen), "RecalculateTravelability");
-
-    public static bool IsEndlessModeActive()
-    {
-        if (ActiveSnapshot != null && ActiveSnapshot.PreRunTweaks.EndlessMode.Enabled)
-        {
-            return true;
-        }
-        return ConfigManager.Current?.PreRunTweaks?.EndlessMode?.Enabled ?? false;
-    }
-
-    public static bool IsFreeMapNavigationActive()
-    {
-        if (ActiveSnapshot != null)
-        {
-            return ActiveSnapshot.PreRunTweaks.FreeMapNavigation || RuntimeStateManager.FreeMapNavigationEnabled;
-        }
-        return RuntimeStateManager.FreeMapNavigationEnabled || (ConfigManager.Current?.PreRunTweaks?.FreeMapNavigation ?? false);
-    }
-
-    public static void SetFreeMapNavigation(bool enabled)
-    {
-        RuntimeStateManager.FreeMapNavigationEnabled = enabled;
-        if (ConfigManager.Current?.PreRunTweaks != null)
-        {
-            ConfigManager.Current.PreRunTweaks.FreeMapNavigation = enabled;
-        }
-        if (ActiveSnapshot?.PreRunTweaks != null)
-        {
-            ActiveSnapshot.PreRunTweaks.FreeMapNavigation = enabled;
-            SaveActiveSnapshot();
-        }
-        ModLogger.Info($"RunTweaksSaveManager: FreeMapNavigation set to {enabled} (ActiveSnapshot={(ActiveSnapshot != null ? "updated" : "none")})");
-    }
-
-    public static bool IsInCombat()
-    {
-        try
-        {
-            // If map screen is open and travel is enabled, the player is on the map and allowed to choose the next node.
-            var mapScreen = MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen.Instance;
-            if (mapScreen != null && mapScreen.IsTravelEnabled)
-            {
-                return false;
-            }
-
-            if (CombatManager.Instance != null && (CombatManager.Instance.IsInProgress || CombatManager.Instance.IsStarting))
-            {
-                return true;
-            }
-
-            // Check if ActionQueueSynchronizer is in any combat phase (PreCombatSetup, PlayPhase, NotPlayPhase, EndTurnPhaseOne)
-            var syncState = RunManager.Instance?.ActionQueueSynchronizer?.CombatState;
-            if (syncState.HasValue && syncState.Value != ActionSynchronizerCombatState.NotInCombat)
-            {
-                return true;
-            }
-        }
-        catch (Exception ex)
-        {
-            ModLogger.Error("Error checking IsInCombat", ex);
-        }
-        return false;
-    }
-
-    private static readonly Callable BossProceedCallable = Callable.From<NButton>(OnRescuedBossProceedClicked);
-
-    private static void OnRescuedBossProceedClicked(NButton btn)
-    {
-        try
-        {
-            btn.Disable();
-            ModLogger.Info("Rescued Boss Room Proceed Button clicked! Initiating act transition.");
-            if (RunManager.Instance?.ActChangeSynchronizer != null)
-            {
-                AccessTools.Field(typeof(ActChangeSynchronizer), "_lastTransitioningActIndex")
-                    ?.SetValue(RunManager.Instance.ActChangeSynchronizer, -1);
-                RunManager.Instance.ActChangeSynchronizer.SetLocalPlayerReady();
-            }
-            else if (RunManager.Instance != null)
-            {
-                TaskHelper.RunSafely(RunManager.Instance.EnterNextAct());
-            }
-        }
-        catch (Exception ex)
-        {
-            ModLogger.Error("Error handling Boss Proceed button click", ex);
-        }
-    }
-
-    public static void HideCombatRoomProceedButton()
-    {
-        try
-        {
-            var combatRoom = NCombatRoom.Instance;
-            if (combatRoom != null && GodotObject.IsInstanceValid(combatRoom) && combatRoom.Mode != CombatRoomMode.VisualOnly)
-            {
-                var proceedBtn = combatRoom.ProceedButton;
-                if (proceedBtn != null && GodotObject.IsInstanceValid(proceedBtn) && proceedBtn.Visible)
-                {
-                    proceedBtn.Visible = false;
-                    proceedBtn.Disable();
-                }
-            }
-        }
-        catch { }
-    }
-
-    public static void RescueBossRoomProceed()
-    {
-        try
-        {
-            var runManager = RunManager.Instance;
-            var runState = runManager?.DebugOnlyGetState();
-            if (runManager == null || runState == null) return;
-
-            var currentRoom = runState.CurrentRoom;
-            if (currentRoom == null || currentRoom.RoomType != RoomType.Boss) return;
-
-            // CRITICAL: The proceed button must ONLY be rescued/shown if the boss combat is ACTUALLY FINISHED!
-            // When entering a boss combat or while fighting, IsPreFinished is false.
-            if (currentRoom is CombatRoom combatRoomData && !combatRoomData.IsPreFinished)
-            {
-                HideCombatRoomProceedButton();
-                return;
-            }
-
-            // If still in active combat, wait until combat ends
-            if (IsInCombat())
-            {
-                HideCombatRoomProceedButton();
-                return;
-            }
-
-            var combatRoomCheck = NCombatRoom.Instance;
-            if (combatRoomCheck != null && GodotObject.IsInstanceValid(combatRoomCheck) && combatRoomCheck.Mode == CombatRoomMode.ActiveCombat)
-            {
-                HideCombatRoomProceedButton();
-                return;
-            }
-
-            // Ensure ActChangeSynchronizer's _lastTransitioningActIndex is reset if it blocks the current act
-            if (runManager.ActChangeSynchronizer != null)
-            {
-                var lastActField = AccessTools.Field(typeof(ActChangeSynchronizer), "_lastTransitioningActIndex");
-                int lastAct = (int)(lastActField?.GetValue(runManager.ActChangeSynchronizer) ?? -1);
-                if (lastAct >= runState.CurrentActIndex)
-                {
-                    lastActField?.SetValue(runManager.ActChangeSynchronizer, -1);
-                    ModLogger.Info($"RescueBossRoomProceed: Reset _lastTransitioningActIndex from {lastAct} to -1.");
-                }
-            }
-
-            var rewardsScreen = NOverlayStack.Instance?.Peek() as NRewardsScreen;
-            if (rewardsScreen != null && GodotObject.IsInstanceValid(rewardsScreen))
-            {
-                var disableField = AccessTools.Field(typeof(NRewardsScreen), "_disableProceedForever");
-                var proceedBtnField = AccessTools.Field(typeof(NRewardsScreen), "_proceedButton");
-                var proceedBtn = proceedBtnField?.GetValue(rewardsScreen) as NProceedButton;
-
-                if (proceedBtn != null && GodotObject.IsInstanceValid(proceedBtn))
-                {
-                    bool isForeverDisabled = (bool)(disableField?.GetValue(rewardsScreen) ?? false);
-                    if (isForeverDisabled || !proceedBtn.IsEnabled)
-                    {
-                        disableField?.SetValue(rewardsScreen, false);
-                        proceedBtn.Visible = true;
-                        proceedBtn.UpdateText(NProceedButton.ProceedLoc);
-                        proceedBtn.Enable();
-                        proceedBtn.SetPulseState(true);
-                    }
-                }
-                return;
-            }
-
-            var combatRoom = NCombatRoom.Instance;
-            if (combatRoom != null && GodotObject.IsInstanceValid(combatRoom))
-            {
-                var proceedBtn = combatRoom.ProceedButton;
-                if (proceedBtn != null && GodotObject.IsInstanceValid(proceedBtn))
-                {
-                    if (!proceedBtn.Visible || !proceedBtn.IsEnabled)
-                    {
-                        proceedBtn.Visible = true;
-                        proceedBtn.UpdateText(NProceedButton.ProceedLoc);
-                        proceedBtn.Enable();
-                        proceedBtn.SetPulseState(true);
-
-                        if (!proceedBtn.IsConnected(NClickableControl.SignalName.Released, BossProceedCallable))
-                        {
-                            proceedBtn.Connect(NClickableControl.SignalName.Released, BossProceedCallable);
-                        }
-                    }
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            ModLogger.Error("Error in RescueBossRoomProceed", ex);
-        }
-    }
-
-    public static void RefreshMapNavigationState(bool isFreeRoam)
-    {
-        try
-        {
-            if (IsInCombat()) return;
-            var screen = MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen.Instance;
-            if (screen != null && GodotObject.IsInstanceValid(screen))
-            {
-                screen.IsTraveling = false;
-                if (!isFreeRoam)
-                {
-                    RecalculateTravelabilityMethod?.Invoke(screen, null);
-                }
-                screen.RefreshAllPointVisuals();
-                ModLogger.Info($"RunTweaksSaveManager: Refreshed map navigation state (isFreeRoam={isFreeRoam})");
-            }
-        }
-        catch (Exception ex)
-        {
-            ModLogger.Error("Error refreshing map navigation state", ex);
-        }
-    }
-
-    public static PreRunTweaksConfig GetEffectivePreRunTweaks()
-    {
-        if (ActiveSnapshot != null)
-        {
-            bool snapshotChanged = false;
-            if (ConfigManager.Current?.PreRunTweaks?.EndlessMode?.Enabled == true && !ActiveSnapshot.PreRunTweaks.EndlessMode.Enabled)
-            {
-                ActiveSnapshot.PreRunTweaks.EndlessMode.Enabled = true;
-                ActiveSnapshot.PreRunTweaks.EndlessMode.EnemyScalingMultiplier = ConfigManager.Current.PreRunTweaks.EndlessMode.EnemyScalingMultiplier;
-                snapshotChanged = true;
-            }
-            if (ConfigManager.Current?.PreRunTweaks != null)
-            {
-                var cur = ConfigManager.Current.PreRunTweaks;
-                var snap = ActiveSnapshot.PreRunTweaks;
-                if (cur.FreeMapNavigation != snap.FreeMapNavigation)
-                {
-                    snap.FreeMapNavigation = cur.FreeMapNavigation;
-                    snapshotChanged = true;
-                }
-                if (Math.Abs(cur.PlayerDamageMultiplier - snap.PlayerDamageMultiplier) > 0.001f)
-                {
-                    snap.PlayerDamageMultiplier = cur.PlayerDamageMultiplier;
-                    snapshotChanged = true;
-                }
-                if (Math.Abs(cur.PlayerDefendMultiplier - snap.PlayerDefendMultiplier) > 0.001f)
-                {
-                    snap.PlayerDefendMultiplier = cur.PlayerDefendMultiplier;
-                    snapshotChanged = true;
-                }
-                if (Math.Abs(cur.EnemyHealthMultiplier - snap.EnemyHealthMultiplier) > 0.001f)
-                {
-                    snap.EnemyHealthMultiplier = cur.EnemyHealthMultiplier;
-                    snapshotChanged = true;
-                }
-                if (Math.Abs(cur.EnemyDamageMultiplier - snap.EnemyDamageMultiplier) > 0.001f)
-                {
-                    snap.EnemyDamageMultiplier = cur.EnemyDamageMultiplier;
-                    snapshotChanged = true;
-                }
-                if (Math.Abs(cur.EnemyDefendMultiplier - snap.EnemyDefendMultiplier) > 0.001f)
-                {
-                    snap.EnemyDefendMultiplier = cur.EnemyDefendMultiplier;
-                    snapshotChanged = true;
-                }
-                if (cur.MaxEnergy > 0 && cur.MaxEnergy != snap.MaxEnergy)
-                {
-                    snap.MaxEnergy = cur.MaxEnergy;
-                    snapshotChanged = true;
-                }
-            }
-            if (snapshotChanged)
-            {
-                SaveActiveSnapshot();
-            }
-            return ActiveSnapshot.PreRunTweaks;
-        }
-        return ConfigManager.Current.PreRunTweaks;
-    }
-
-    public static RunSettings GetEffectiveRunSettings()
-    {
-        if (ActiveSnapshot != null)
-        {
-            return ActiveSnapshot.RunSettings;
-        }
-        return ConfigManager.ActiveRunSettings;
-    }
-
-    public static bool IsMapTweakModified(PreRunTweaksConfig preRun, RunSettings runSettings)
-    {
-        if (preRun == null || runSettings == null) return false;
-        var dist = preRun.MapNodeDistribution;
-
-        return Math.Abs(dist.EliteWeightMultiplier - 1.0f) > 0.001f ||
-               Math.Abs(dist.ShopWeightMultiplier - 1.0f) > 0.001f ||
-               Math.Abs(dist.EventWeightMultiplier - 1.0f) > 0.001f ||
-               Math.Abs(dist.RestSiteWeightMultiplier - 1.0f) > 0.001f ||
-               Math.Abs(dist.CombatWeightMultiplier - 1.0f) > 0.001f ||
-               Math.Abs(dist.TreasureRoomMultiplier - 1.0f) > 0.001f ||
-               Math.Abs(runSettings.EliteSpawnMultiplier - 1.0f) > 0.001f ||
-               Math.Abs(runSettings.ShopSpawnMultiplier - 1.0f) > 0.001f ||
-               Math.Abs(runSettings.EventSpawnMultiplier - 1.0f) > 0.001f ||
-               preRun.MapRoomCount != 15 ||
-               preRun.FreeMapNavigation ||
-               RuntimeStateManager.FreeMapNavigationEnabled ||
-               preRun.EndlessMode.Enabled;
-    }
-
-    public static bool IsCustomRun(PreRunTweaksConfig preRun, RunSettings runSettings)
-    {
-        if (IsMapTweakModified(preRun, runSettings)) return true;
-        if (!string.IsNullOrWhiteSpace(preRun.CustomSeed) || !string.IsNullOrWhiteSpace(runSettings.CustomSeed)) return true;
-
-        return Math.Abs(preRun.GoldRewardMultiplier - 1.0f) > 0.001f ||
-               Math.Abs(preRun.ShopDiscountMultiplier - 1.0f) > 0.001f ||
-               preRun.CardRewardCount != 3 ||
-               preRun.StartingGoldBonus != 0 ||
-               preRun.StartingMaxHpBonus != 0 ||
-               Math.Abs(preRun.PlayerDamageMultiplier - 1.0f) > 0.001f ||
-               Math.Abs(preRun.PlayerDefendMultiplier - 1.0f) > 0.001f ||
-               preRun.MaxEnergy != 3 ||
-               Math.Abs(preRun.EnemyHealthMultiplier - 1.0f) > 0.001f ||
-               Math.Abs(preRun.EnemyDamageMultiplier - 1.0f) > 0.001f ||
-               Math.Abs(preRun.EnemyDefendMultiplier - 1.0f) > 0.001f ||
-               preRun.PotionSlots != 3 ||
-               preRun.AllowMultipleRelics ||
-               Math.Abs(runSettings.GoldMultiplier - 1.0f) > 0.001f ||
-               runSettings.ActiveModifiers.Count > 0 ||
-               runSettings.CustomStartingCards.Count > 0 ||
-               runSettings.CustomStartingRelics.Count > 0 ||
-               runSettings.DraftModeEnabled;
-    }
-
-    public static bool IsCustomRunPending()
-    {
-        return IsCustomRun(ConfigManager.Current.PreRunTweaks, ConfigManager.ActiveRunSettings);
-    }
-
-    public static bool AreMapTweaksModified()
-    {
-        return IsMapTweakModified(GetEffectivePreRunTweaks(), GetEffectiveRunSettings());
-    }
-
-    public static bool IsRunActiveAndCustom()
-    {
-        return ActiveSnapshot?.IsCustom == true;
-    }
-}
-
 /// <summary>
 /// Intercepts map node generation weights (Elites, Shops, Unknowns, Rest Sites, Combats),
 /// map floor/room length, Neow/Ancient room assignment, and free map navigation (Flying Boots mode).
@@ -735,6 +64,22 @@ public static class MapGenerationHooks
     private static readonly FieldInfo? RoomSetAncientField = typeof(RoomSet).GetField("_ancient", BindingFlags.NonPublic | BindingFlags.Instance);
     private static readonly FieldInfo? RoomSetBossField = typeof(RoomSet).GetField("_boss", BindingFlags.NonPublic | BindingFlags.Instance);
     private static readonly FieldInfo? ActModelRoomsField = typeof(ActModel).GetField("_rooms", BindingFlags.NonPublic | BindingFlags.Instance);
+
+    private static readonly FieldInfo? SaveManagerSaveStoreField = typeof(SaveManager).GetField("_saveStore", BindingFlags.Instance | BindingFlags.NonPublic);
+    private static readonly FieldInfo? ActChangeSyncLastActField = AccessTools.Field(typeof(ActChangeSynchronizer), "_lastTransitioningActIndex");
+    private static readonly FieldInfo? NMapPointScreenField = AccessTools.Field(typeof(NMapPoint), "_screen");
+    private static readonly FieldInfo? NMapScreenMapPointDictField = AccessTools.Field(typeof(NMapScreen), "_mapPointDictionary");
+    private static readonly FieldInfo? NMapScreenSecondBossNodeField = AccessTools.Field(typeof(NMapScreen), "_secondBossPointNode");
+    private static readonly FieldInfo? NMapScreenBossNodeField = AccessTools.Field(typeof(NMapScreen), "_bossPointNode");
+    private static readonly FieldInfo? NMapScreenMapField = AccessTools.Field(typeof(NMapScreen), "_map");
+    private static readonly FieldInfo? NMapScreenDistYField = AccessTools.Field(typeof(NMapScreen), "_distY");
+    private static readonly FieldInfo? NMapBgWindowField = AccessTools.Field(typeof(NMapBg), "_window");
+    private static readonly FieldInfo? NMapBgOffsetXField = AccessTools.Field(typeof(NMapBg), "_offsetX");
+    private static readonly FieldInfo? NMapBgDrawingsField = AccessTools.Field(typeof(NMapBg), "_drawings");
+    private static readonly FieldInfo? NMapBgMapTopField = AccessTools.Field(typeof(NMapBg), "_mapTop");
+    private static readonly FieldInfo? NMapBgMapMidField = AccessTools.Field(typeof(NMapBg), "_mapMid");
+    private static readonly FieldInfo? NMapBgMapBotField = AccessTools.Field(typeof(NMapBg), "_mapBot");
+    private static readonly FieldInfo? NMapBgRunStateField = AccessTools.Field(typeof(NMapBg), "_runState");
 
     public static RunState? GetRunState(RunManager? runManager)
     {
@@ -1196,8 +541,7 @@ public static class MapGenerationHooks
                 // Reset ActChangeSynchronizer's _lastTransitioningActIndex so act transitions in the new loop are never blocked
                 if (RunManager.Instance.ActChangeSynchronizer != null)
                 {
-                    AccessTools.Field(typeof(ActChangeSynchronizer), "_lastTransitioningActIndex")
-                        ?.SetValue(RunManager.Instance.ActChangeSynchronizer, -1);
+                    ActChangeSyncLastActField?.SetValue(RunManager.Instance.ActChangeSynchronizer, -1);
                 }
 
                 await RunManager.Instance.EnterAct(0, true);
@@ -1306,100 +650,38 @@ public static class MapGenerationHooks
     #region Abandon Run & File Deletion Failsafes
 
     /// <summary>
-    /// Forcefully deletes all current run save files from the local filesystem and Steam Remote Storage.
-    /// Works around Godot's DirAccess.RemoveAbsolute failures on Linux.
+    /// Forcefully deletes the current profile's active run save file from local storage and the save store.
+    /// Scoped strictly to the active profile and save type (singleplayer vs multiplayer) to never touch other profiles,
+    /// vanilla runs, or other Steam accounts.
     /// </summary>
-    public static void ForceDeleteCurrentRunSaves()
+    public static void ForceDeleteCurrentRunSaves(bool multiplayer = false)
     {
         try
         {
-            int currentProfile = 1;
-            try
+            if (MegaCrit.Sts2.Core.Saves.SaveManager.Instance?.IsProfileInitialized != true)
             {
-                if (MegaCrit.Sts2.Core.Saves.SaveManager.Instance?.IsProfileInitialized == true)
-                {
-                    currentProfile = MegaCrit.Sts2.Core.Saves.SaveManager.Instance.CurrentProfileId;
-                }
+                return;
             }
-            catch { }
 
-            var profilesToCheck = new HashSet<int> { currentProfile, 1, 2, 3 };
+            int currentProfile = MegaCrit.Sts2.Core.Saves.SaveManager.Instance.CurrentProfileId;
+            string[] relativeFiles = multiplayer
+                ? new[] { "current_run_mp.save", "current_run_mp.save.backup" }
+                : new[] { "current_run.save", "current_run.save.backup" };
 
-            foreach (int p in profilesToCheck)
+            foreach (var file in relativeFiles)
             {
                 try
                 {
-                    string[] relativeFiles = new[]
+                    string scopedPath = MegaCrit.Sts2.Core.Saves.UserDataPathProvider.GetProfileScopedPath(currentProfile, $"saves/{file}", null, null);
+                    DeletePhysicalFile(scopedPath);
+                }
+                catch { }
+
+                try
+                {
+                    if (SaveManagerSaveStoreField?.GetValue(MegaCrit.Sts2.Core.Saves.SaveManager.Instance) is ISaveStore store)
                     {
-                        "current_run.save",
-                        "current_run.save.backup",
-                        "current_run_mp.save",
-                        "current_run_mp.save.backup"
-                    };
-
-                    foreach (var file in relativeFiles)
-                    {
-                        try
-                        {
-                            string pModded = MegaCrit.Sts2.Core.Saves.UserDataPathProvider.GetProfileScopedPath(p, $"saves/{file}", null, null);
-                            DeletePhysicalFile(pModded);
-                        }
-                        catch { }
-
-                        try
-                        {
-                            string localBasePath = Path.Combine(
-                                System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile),
-                                ".local/share/SlayTheSpire2/steam"
-                            );
-                            if (Directory.Exists(localBasePath))
-                            {
-                                foreach (var userDir in Directory.GetDirectories(localBasePath))
-                                {
-                                    string moddedPath = Path.Combine(userDir, $"modded/profile{p}/saves/{file}");
-                                    DeletePhysicalFile(moddedPath);
-                                    string unmoddedPath = Path.Combine(userDir, $"profile{p}/saves/{file}");
-                                    DeletePhysicalFile(unmoddedPath);
-                                }
-                            }
-                        }
-                        catch { }
-
-                        try
-                        {
-                            string steamUserdataPath = Path.Combine(
-                                System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile),
-                                ".local/share/Steam/userdata"
-                            );
-                            if (Directory.Exists(steamUserdataPath))
-                            {
-                                foreach (var uDir in Directory.GetDirectories(steamUserdataPath))
-                                {
-                                    string sts2RemoteDir = Path.Combine(uDir, "2868840/remote");
-                                    if (Directory.Exists(sts2RemoteDir))
-                                    {
-                                        string mSave = Path.Combine(sts2RemoteDir, $"modded/profile{p}/saves/{file}");
-                                        DeletePhysicalFile(mSave);
-                                        string uSave = Path.Combine(sts2RemoteDir, $"profile{p}/saves/{file}");
-                                        DeletePhysicalFile(uSave);
-                                    }
-                                }
-                            }
-                        }
-                        catch { }
-
-                        try
-                        {
-                            if (MegaCrit.Sts2.Core.Saves.SaveManager.Instance != null)
-                            {
-                                var saveStoreField = typeof(MegaCrit.Sts2.Core.Saves.SaveManager).GetField("_saveStore", BindingFlags.Instance | BindingFlags.NonPublic);
-                                if (saveStoreField?.GetValue(MegaCrit.Sts2.Core.Saves.SaveManager.Instance) is ISaveStore store)
-                                {
-                                    store.DeleteFile(MegaCrit.Sts2.Core.Saves.Managers.RunSaveManager.GetRunSavePath(p, file));
-                                }
-                            }
-                        }
-                        catch { }
+                        store.DeleteFile(MegaCrit.Sts2.Core.Saves.Managers.RunSaveManager.GetRunSavePath(currentProfile, file));
                     }
                 }
                 catch { }
@@ -1500,7 +782,7 @@ public static class MapGenerationHooks
 
             try
             {
-                ForceDeleteCurrentRunSaves();
+                ForceDeleteCurrentRunSaves(multiplayer: true);
                 RunTweaksSaveManager.ClearActiveRun("DeleteCurrentMultiplayerRun");
             }
             catch (Exception ex)
@@ -1636,16 +918,15 @@ public static class MapGenerationHooks
                 if (!AreMapTweaksModified()) return;
 
                 var dist = RunTweaksSaveManager.GetEffectivePreRunTweaks().MapNodeDistribution;
-                var runSettings = RunTweaksSaveManager.GetEffectiveRunSettings();
                 int desiredRooms = Math.Max(15, RunTweaksSaveManager.GetEffectivePreRunTweaks().MapRoomCount);
                 float roomScale = desiredRooms > 15 ? (float)desiredRooms / 15.0f : 1.0f;
 
                 float combatMult = dist.CombatWeightMultiplier;
                 float normalize = 1.0f / Math.Max(0.01f, combatMult);
 
-                float eliteMult = dist.EliteWeightMultiplier * runSettings.EliteSpawnMultiplier * roomScale * normalize;
-                float shopMult = dist.ShopWeightMultiplier * runSettings.ShopSpawnMultiplier * roomScale * normalize;
-                float eventMult = dist.EventWeightMultiplier * runSettings.EventSpawnMultiplier * roomScale * normalize;
+                float eliteMult = dist.EliteWeightMultiplier * roomScale * normalize;
+                float shopMult = dist.ShopWeightMultiplier * roomScale * normalize;
+                float eventMult = dist.EventWeightMultiplier * roomScale * normalize;
                 float restMult = dist.RestSiteWeightMultiplier * roomScale * normalize;
 
                 ModLogger.Verbose("MapGenerationHooks", $"MapPointTypeCounts constructor postfix: raw Elites={__instance.NumOfElites}, Shops={__instance.NumOfShops}, Unknowns={__instance.NumOfUnknowns}, Rests={__instance.NumOfRests}, roomScale={roomScale:F2}");
@@ -1707,49 +988,8 @@ public static class MapGenerationHooks
             }
         }
 
-        public static List<int> CalculateTreasureRows(int rowCount, float treasureMultiplier)
-        {
-            var rows = new List<int>();
-            if (treasureMultiplier <= 0.001f || rowCount < 4)
-            {
-                return rows;
-            }
-
-            float effectiveMultiplier = (rowCount / 15.0f) * treasureMultiplier;
-            int numTreasureRows = Math.Max(1, (int)Math.Round(effectiveMultiplier));
-
-            // Available intermediate rows span from row 2 to rowCount - 2
-            // (row 1 is starting monster row, rowCount - 1 is rest site before boss)
-            int maxPossibleTreasureRows = Math.Max(1, rowCount - 3);
-            numTreasureRows = Math.Min(numTreasureRows, maxPossibleTreasureRows);
-
-            if (numTreasureRows == 1 && rowCount == 15 && Math.Abs(treasureMultiplier - 1.0f) < 0.001f)
-            {
-                // Preserve exact vanilla 15-floor standard position (15 - 7 = 8)
-                rows.Add(8);
-                return rows;
-            }
-
-            // Distribute treasure rows with proportional spacing across the playable floor span
-            float step = (float)(rowCount - 1) / (numTreasureRows + 1);
-            for (int i = 1; i <= numTreasureRows; i++)
-            {
-                int r = (int)Math.Round(i * step);
-                r = Math.Clamp(r, 2, rowCount - 2);
-
-                if (rows.Count > 0 && r <= rows[^1])
-                {
-                    r = rows[^1] + 1;
-                }
-
-                if (r <= rowCount - 2)
-                {
-                    rows.Add(r);
-                }
-            }
-
-            return rows;
-        }
+        public static List<int> CalculateTreasureRows(int rowCount, float treasureMultiplier) =>
+            ModMath.CalculateTreasureRows(rowCount, treasureMultiplier);
 
         [HarmonyPrefix]
         public static bool Prefix(StandardActMap __instance)
@@ -1939,6 +1179,8 @@ public static class MapGenerationHooks
         [HarmonyPrefix]
         public static bool Prefix(MapPoint currentMapPoint, ref List<List<MapPoint>> __result)
         {
+            if (!AreMapTweaksModified()) return true;
+
             try
             {
                 var result = new List<List<MapPoint>>();
@@ -1991,6 +1233,8 @@ public static class MapGenerationHooks
         [HarmonyPrefix]
         public static bool Prefix(MapPoint?[,] grid, HashSet<MapPoint> startMapPoints, MapPoint startingMapPoint, MegaCrit.Sts2.Core.Random.Rng rng)
         {
+            if (!AreMapTweaksModified()) return true;
+
             try
             {
                 int iterations = 0;
@@ -2030,6 +1274,8 @@ public static class MapGenerationHooks
         [HarmonyPrefix]
         public static bool Prefix(MapPoint?[,] grid, ref MapPoint?[,] __result)
         {
+            if (!AreMapTweaksModified()) return true;
+
             try
             {
                 int length = grid.GetLength(0);
@@ -2164,8 +1410,7 @@ public static class MapGenerationHooks
 
             if (RunTweaksSaveManager.IsFreeMapNavigationActive())
             {
-                var screen = AccessTools.Field(typeof(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapPoint), "_screen")?.GetValue(__instance)
-                    as MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen ?? MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen.Instance;
+                var screen = NMapPointScreenField?.GetValue(__instance) as NMapScreen ?? NMapScreen.Instance;
                 if (screen != null && screen.IsTraveling)
                 {
                     __result = false;
@@ -2228,8 +1473,7 @@ public static class MapGenerationHooks
             {
                 if (RunTweaksSaveManager.IsFreeMapNavigationActive() && !RunTweaksSaveManager.IsInCombat())
                 {
-                    var dict = AccessTools.Field(typeof(MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen), "_mapPointDictionary")
-                        ?.GetValue(__instance) as System.Collections.IDictionary;
+                    var dict = NMapScreenMapPointDictField?.GetValue(__instance) as System.Collections.IDictionary;
                     if (dict != null)
                     {
                         foreach (var val in dict.Values)
@@ -2358,20 +1602,20 @@ public static class MapGenerationHooks
     /// </summary>
     public static float GetMaxScrollTop(NMapScreen screen)
     {
-        var secondBoss = AccessTools.Field(typeof(NMapScreen), "_secondBossPointNode")?.GetValue(screen) as Control;
-        var boss = AccessTools.Field(typeof(NMapScreen), "_bossPointNode")?.GetValue(screen) as Control;
+        var secondBoss = NMapScreenSecondBossNodeField?.GetValue(screen) as Control;
+        var boss = NMapScreenBossNodeField?.GetValue(screen) as Control;
         Control? topNode = secondBoss ?? boss;
         if (topNode != null)
         {
             return Math.Max(1800f, -topNode.Position.Y - 180f);
         }
 
-        var map = AccessTools.Field(typeof(NMapScreen), "_map")?.GetValue(screen) as ActMap;
+        var map = NMapScreenMapField?.GetValue(screen) as ActMap;
         if (map == null) return 1800f;
 
         int rowCount = map.GetRowCount();
         float num = (map.SecondBossMapPoint != null) ? 0.9f : 1f;
-        float distY = (float)(AccessTools.Field(typeof(NMapScreen), "_distY")?.GetValue(screen) ?? (166.0714f * num));
+        float distY = (float)(NMapScreenDistYField?.GetValue(screen) ?? (166.0714f * num));
         float totalHeight = (rowCount - 1) * distY;
         float bossSpacing = (map.SecondBossMapPoint != null) ? 430f : 395f;
         float bossY = 740f - totalHeight - bossSpacing;
@@ -2386,8 +1630,7 @@ public static class MapGenerationHooks
 
     private static Vector2 GetMapBgViewportSize(NMapBg mapBg)
     {
-        var windowField = AccessTools.Field(typeof(NMapBg), "_window");
-        if (windowField?.GetValue(mapBg) is Window window)
+        if (NMapBgWindowField?.GetValue(mapBg) is Window window)
         {
             return new Vector2(window.Size.X, window.Size.Y);
         }
@@ -2398,7 +1641,7 @@ public static class MapGenerationHooks
     {
         float bgTop = -1620f - extraOffsetY;
         float adjustY = -1540f - extraOffsetY;
-        float offsetX = (float)(AccessTools.Field(typeof(NMapBg), "_offsetX")?.GetValue(mapBg) ?? mapBg.Position.X);
+        float offsetX = (float)(NMapBgOffsetXField?.GetValue(mapBg) ?? mapBg.Position.X);
         Vector2 viewportSize = GetMapBgViewportSize(mapBg);
 
         if (viewportSize.Y > 0f)
@@ -2419,7 +1662,7 @@ public static class MapGenerationHooks
             mapBg.Position = new Vector2(offsetX, bgTop);
         }
 
-        var drawings = AccessTools.Field(typeof(NMapBg), "_drawings")?.GetValue(mapBg) as NMapDrawings;
+        var drawings = NMapBgDrawingsField?.GetValue(mapBg) as NMapDrawings;
         drawings?.RepositionBasedOnBackground(mapBg);
     }
 
@@ -2442,10 +1685,10 @@ public static class MapGenerationHooks
             int extraSections = (int)Math.Ceiling(extraHeight / 1080f);
             _currentExtraOffsetY = extraSections * 1080f;
 
-            var mapTop = AccessTools.Field(typeof(NMapBg), "_mapTop")?.GetValue(mapBg) as TextureRect;
-            var mapMid = AccessTools.Field(typeof(NMapBg), "_mapMid")?.GetValue(mapBg) as TextureRect;
-            var mapBot = AccessTools.Field(typeof(NMapBg), "_mapBot")?.GetValue(mapBg) as TextureRect;
-            var runState = AccessTools.Field(typeof(NMapBg), "_runState")?.GetValue(mapBg) as RunState;
+            var mapTop = NMapBgMapTopField?.GetValue(mapBg) as TextureRect;
+            var mapMid = NMapBgMapMidField?.GetValue(mapBg) as TextureRect;
+            var mapBot = NMapBgMapBotField?.GetValue(mapBg) as TextureRect;
+            var runState = NMapBgRunStateField?.GetValue(mapBg) as RunState;
 
             // Ensure vanilla MapTop, MapMid, and MapBot maintain exact standard dimensions
             if (mapTop != null)
@@ -3478,13 +2721,12 @@ public static class MapGenerationHooks
         {
             try
             {
-                if (__instance.ActChangeSynchronizer != null)
+                if (__instance.ActChangeSynchronizer != null && ActChangeSyncLastActField != null)
                 {
-                    var field = AccessTools.Field(typeof(ActChangeSynchronizer), "_lastTransitioningActIndex");
-                    int lastAct = (int)(field?.GetValue(__instance.ActChangeSynchronizer) ?? -1);
+                    int lastAct = (int)(ActChangeSyncLastActField.GetValue(__instance.ActChangeSynchronizer) ?? -1);
                     if (lastAct >= actIndex)
                     {
-                        field?.SetValue(__instance.ActChangeSynchronizer, -1);
+                        ActChangeSyncLastActField.SetValue(__instance.ActChangeSynchronizer, -1);
                         ModLogger.Info($"RunManagerSetActInternalPatch: Reset _lastTransitioningActIndex from {lastAct} to -1 for act {actIndex}.");
                     }
                 }
@@ -3509,13 +2751,12 @@ public static class MapGenerationHooks
             try
             {
                 var runState = RunManager.Instance?.DebugOnlyGetState();
-                if (RunManager.Instance?.ActChangeSynchronizer != null && runState != null)
+                if (RunManager.Instance?.ActChangeSynchronizer != null && runState != null && ActChangeSyncLastActField != null)
                 {
-                    var field = AccessTools.Field(typeof(ActChangeSynchronizer), "_lastTransitioningActIndex");
-                    int lastAct = (int)(field?.GetValue(RunManager.Instance.ActChangeSynchronizer) ?? -1);
+                    int lastAct = (int)(ActChangeSyncLastActField.GetValue(RunManager.Instance.ActChangeSynchronizer) ?? -1);
                     if (lastAct >= runState.CurrentActIndex)
                     {
-                        field?.SetValue(RunManager.Instance.ActChangeSynchronizer, -1);
+                        ActChangeSyncLastActField.SetValue(RunManager.Instance.ActChangeSynchronizer, -1);
                         ModLogger.Info($"NRewardsScreenOnProceedButtonPressedPatch: Resetting _lastTransitioningActIndex from {lastAct} to -1.");
                     }
                 }
@@ -3641,13 +2882,31 @@ public static class MapGenerationHooks
                 }
 
                 var actHistory = state.MapPointHistory[actIndex];
-                int floorIndex = actFloor - 1;
-                if (actHistory == null || floorIndex < 0 || floorIndex >= actHistory.Count)
+                if (actHistory == null || actHistory.Count == 0)
                 {
                     return;
                 }
 
-                var historyEntry = actHistory[floorIndex];
+                MapPointHistoryEntry? historyEntry = null;
+                if (RuntimeStateManager.CurrentEndlessLoopCount > 0)
+                {
+                    // In Endless Mode loops, indices 0..N-1 belong to previous loops.
+                    // Match against the latest appended entry for this act when it matches the room being restored.
+                    var latest = actHistory[^1];
+                    if (latest != null && (latest.MapPointType == pointType || pointType == MapPointType.Unknown))
+                    {
+                        historyEntry = latest;
+                    }
+                }
+                else
+                {
+                    int floorIndex = actFloor - 1;
+                    if (floorIndex >= 0 && floorIndex < actHistory.Count)
+                    {
+                        historyEntry = actHistory[floorIndex];
+                    }
+                }
+
                 if (historyEntry == null || historyEntry.Rooms == null || historyEntry.Rooms.Count == 0)
                 {
                     return;
@@ -3719,6 +2978,14 @@ public static class MapGenerationHooks
             {
                 ModLogger.Error("[RunManagerEnterMapPointInternalPatch] Error while checking/restoring room from history", ex);
             }
+        }
+
+        [HarmonyFinalizer]
+        public static Exception? Finalizer(Exception? __exception)
+        {
+            // Ensure a suppressed MarkRoomVisited flag can never leak to a subsequent room entry.
+            ActModelMarkRoomVisitedPatch.SuppressNextMarkRoomVisited = false;
+            return __exception;
         }
     }
 

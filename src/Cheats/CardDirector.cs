@@ -22,6 +22,100 @@ public static class CardDirector
     public static event Action<string>? OnCardRemoved;
     public static event Action? OnDeckChanged;
 
+    private static bool CardMatchesId(CardModel? card, string cardId)
+    {
+        return card != null && (
+            card.GetType().Name.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
+            card.Id.Entry.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
+            (!string.IsNullOrEmpty(card.Title) && card.Title.Equals(cardId, StringComparison.OrdinalIgnoreCase))
+        );
+    }
+
+    private static CardModel? FindMatchingCard(MegaCrit.Sts2.Core.Entities.Players.Player? player, string cardId, bool includeDeck = true)
+    {
+        if (player == null || string.IsNullOrWhiteSpace(cardId)) return null;
+
+        if (includeDeck && player.Deck?.Cards != null)
+        {
+            var deckMatch = player.Deck.Cards.FirstOrDefault(c => CardMatchesId(c, cardId));
+            if (deckMatch != null) return deckMatch;
+        }
+
+        if (player.PlayerCombatState != null)
+        {
+            foreach (var pile in player.PlayerCombatState.AllPiles)
+            {
+                var combatMatch = pile?.Cards?.FirstOrDefault(c => CardMatchesId(c, cardId));
+                if (combatMatch != null) return combatMatch;
+            }
+        }
+
+        return null;
+    }
+
+    private static void SyncLinkedCards(CardModel card, Action<CardModel> mutate)
+    {
+        var player = GameHelper.GetActivePlayer();
+        if (player == null) return;
+
+        if (card.DeckVersion != null && player.Deck?.Cards != null && player.Deck.Cards.Contains(card.DeckVersion))
+        {
+            mutate(card.DeckVersion);
+            player.Deck.InvokeContentsChanged();
+        }
+        else if (player.PlayerCombatState != null && player.Deck?.Cards != null && player.Deck.Cards.Contains(card))
+        {
+            var combatCards = player.PlayerCombatState.AllCards?
+                .Where(c => c != null && (c.DeckVersion == card || c.CloneOf == card))
+                .ToList();
+            if (combatCards != null)
+            {
+                foreach (var combatCard in combatCards)
+                {
+                    mutate(combatCard);
+                    combatCard.Pile?.InvokeContentsChanged();
+                }
+            }
+        }
+    }
+
+    private static void ApplyEnchantmentToSingleCard(CardModel target, EnchantmentModel canonical, decimal amount)
+    {
+        if (target.Enchantment != null)
+        {
+            try { CardCmd.ClearEnchantment(target); } catch { target.ClearEnchantmentInternal(); }
+        }
+
+        var ench = GameHelper.CreateEnchantment(canonical, amount);
+        if (ench != null)
+        {
+            try
+            {
+                _ = CardCmd.Enchant(ench, target, amount);
+            }
+            catch
+            {
+                target.EnchantInternal(ench, amount);
+                ench.ModifyCard();
+                target.FinalizeUpgradeInternal();
+            }
+        }
+        else
+        {
+            target.EnchantInternal(canonical, amount);
+            canonical.ModifyCard();
+            target.FinalizeUpgradeInternal();
+        }
+
+        if (target.Enchantment != null)
+        {
+            target.Enchantment.Amount = (int)amount;
+            try { target.Enchantment.ModifyCard(); } catch { }
+            try { target.FinalizeUpgradeInternal(); } catch { }
+            try { target.DynamicVars?.RecalculateForUpgradeOrEnchant(); } catch { }
+        }
+    }
+
     /// <summary>
     /// Adds a card directly and immediately into the player's master deck.
     /// If currently in combat, also adds an active instance to the player's combat draw pile.
@@ -383,37 +477,11 @@ public static class CardDirector
 
         try
         {
-            if (player?.Deck?.Cards != null)
+            var match = FindMatchingCard(player, cardId);
+            if (match != null)
             {
-                var card = player.Deck.Cards.FirstOrDefault(c => 
-                    c != null && (
-                        c.GetType().Name.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
-                        c.Id.Entry.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
-                        (!string.IsNullOrEmpty(c.Title) && c.Title.Equals(cardId, StringComparison.OrdinalIgnoreCase))
-                    ));
-                if (card != null)
-                {
-                    ModLogger.Verbose("CardDirector", $"Found matching card in player.Deck: {card.GetType().Name}");
-                    return RemoveCard(card);
-                }
-            }
-
-            if (player?.PlayerCombatState != null)
-            {
-                foreach (var pile in player.PlayerCombatState.AllPiles)
-                {
-                    var combatCard = pile?.Cards?.FirstOrDefault(c => 
-                        c != null && (
-                            c.GetType().Name.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
-                            c.Id.Entry.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
-                            (!string.IsNullOrEmpty(c.Title) && c.Title.Equals(cardId, StringComparison.OrdinalIgnoreCase))
-                        ));
-                    if (combatCard != null)
-                    {
-                        ModLogger.Verbose("CardDirector", $"Found matching card in combat pile: {combatCard.GetType().Name}");
-                        return RemoveCard(combatCard);
-                    }
-                }
+                ModLogger.Verbose("CardDirector", $"Found matching card to remove: {match.GetType().Name}");
+                return RemoveCard(match);
             }
 
             ModLogger.Verbose("CardDirector", $"Card '{cardId}' not directly matched; sending DevConsole command 'remove {cardId}'");
@@ -456,34 +524,13 @@ public static class CardDirector
             }
             card.Pile?.InvokeContentsChanged();
 
-            var player = GameHelper.GetActivePlayer();
-            if (player != null)
+            SyncLinkedCards(card, linked =>
             {
-                if (card.DeckVersion != null && player.Deck?.Cards != null && player.Deck.Cards.Contains(card.DeckVersion))
+                if (linked.IsUpgraded != targetUpgraded)
                 {
-                    var master = card.DeckVersion;
-                    if (master.IsUpgraded != targetUpgraded)
-                    {
-                        if (targetUpgraded) master.UpgradeInternal(); else master.DowngradeInternal();
-                        player.Deck.InvokeContentsChanged();
-                    }
+                    if (targetUpgraded) linked.UpgradeInternal(); else linked.DowngradeInternal();
                 }
-                else if (player.PlayerCombatState != null && player.Deck?.Cards != null && player.Deck.Cards.Contains(card))
-                {
-                    var combatCards = player.PlayerCombatState.AllCards?.Where(c => c != null && (c.DeckVersion == card || c.CloneOf == card)).ToList();
-                    if (combatCards != null)
-                    {
-                        foreach (var combatCard in combatCards)
-                        {
-                            if (combatCard.IsUpgraded != targetUpgraded)
-                            {
-                                if (targetUpgraded) combatCard.UpgradeInternal(); else combatCard.DowngradeInternal();
-                                combatCard.Pile?.InvokeContentsChanged();
-                            }
-                        }
-                    }
-                }
-            }
+            });
 
             OnDeckChanged?.Invoke();
             return true;
@@ -504,38 +551,11 @@ public static class CardDirector
         if (string.IsNullOrWhiteSpace(cardId)) return false;
         try
         {
-            var player = GameHelper.GetActivePlayer();
-            if (player?.Deck?.Cards != null)
+            var match = FindMatchingCard(GameHelper.GetActivePlayer(), cardId);
+            if (match != null)
             {
-                var card = player.Deck.Cards.FirstOrDefault(c => 
-                    c != null && (
-                        c.GetType().Name.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
-                        c.Id.Entry.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
-                        (!string.IsNullOrEmpty(c.Title) && c.Title.Equals(cardId, StringComparison.OrdinalIgnoreCase))
-                    ));
-                if (card != null)
-                {
-                    ModLogger.Verbose("CardDirector", $"Found matching card in player.Deck to toggle upgrade: {card.GetType().Name}");
-                    return ToggleUpgradeCard(card);
-                }
-            }
-
-            if (player?.PlayerCombatState != null)
-            {
-                foreach (var pile in player.PlayerCombatState.AllPiles)
-                {
-                    var combatCard = pile?.Cards?.FirstOrDefault(c => 
-                        c != null && (
-                            c.GetType().Name.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
-                            c.Id.Entry.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
-                            (!string.IsNullOrEmpty(c.Title) && c.Title.Equals(cardId, StringComparison.OrdinalIgnoreCase))
-                        ));
-                    if (combatCard != null)
-                    {
-                        ModLogger.Verbose("CardDirector", $"Found matching card in combat pile to toggle upgrade: {combatCard.GetType().Name}");
-                        return ToggleUpgradeCard(combatCard);
-                    }
-                }
+                ModLogger.Verbose("CardDirector", $"Found matching card to toggle upgrade: {match.GetType().Name}");
+                return ToggleUpgradeCard(match);
             }
 
             ModLogger.Verbose("CardDirector", $"Card '{cardId}' not directly found in deck; executing DevConsole command 'upgrade {cardId}'");
@@ -710,23 +730,11 @@ public static class CardDirector
 
         try
         {
-            var player = GameHelper.GetActivePlayer();
-            if (player?.PlayerCombatState != null)
+            var combatCard = FindMatchingCard(GameHelper.GetActivePlayer(), cardId, includeDeck: false);
+            if (combatCard != null)
             {
-                foreach (var pile in player.PlayerCombatState.AllPiles)
-                {
-                    var combatCard = pile?.Cards?.FirstOrDefault(c => 
-                        c != null && (
-                            c.GetType().Name.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
-                            c.Id.Entry.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
-                            (!string.IsNullOrEmpty(c.Title) && c.Title.Equals(cardId, StringComparison.OrdinalIgnoreCase))
-                        ));
-                    if (combatCard != null)
-                    {
-                        ModLogger.Verbose("CardDirector", $"Found matching combat card to exhaust: {combatCard.GetType().Name}");
-                        return ExhaustCard(combatCard);
-                    }
-                }
+                ModLogger.Verbose("CardDirector", $"Found matching combat card to exhaust: {combatCard.GetType().Name}");
+                return ExhaustCard(combatCard);
             }
 
             ModLogger.Warn($"Cannot exhaust card '{cardId}': not found in any active combat pile.");
@@ -765,108 +773,10 @@ public static class CardDirector
                 return false;
             }
 
-            // Always clear existing enchantment first so amount and type can be cleanly applied
-            if (card.Enchantment != null)
-            {
-                try { CardCmd.ClearEnchantment(card); } catch { card.ClearEnchantmentInternal(); }
-            }
-
-            var ench = GameHelper.CreateEnchantment(canonical, amount);
-            if (ench != null)
-            {
-                try
-                {
-                    _ = CardCmd.Enchant(ench, card, amount);
-                }
-                catch
-                {
-                    card.EnchantInternal(ench, amount);
-                    ench.ModifyCard();
-                    card.FinalizeUpgradeInternal();
-                }
-            }
-            else
-            {
-                card.EnchantInternal(canonical, amount);
-                canonical.ModifyCard();
-                card.FinalizeUpgradeInternal();
-            }
-
-            // Ensure amount and card calculations are strictly updated
-            if (card.Enchantment != null)
-            {
-                card.Enchantment.Amount = (int)amount;
-                try { card.Enchantment.ModifyCard(); } catch { }
-                try { card.FinalizeUpgradeInternal(); } catch { }
-                try { card.DynamicVars?.RecalculateForUpgradeOrEnchant(); } catch { }
-            }
-
+            ApplyEnchantmentToSingleCard(card, canonical, amount);
             card.Pile?.InvokeContentsChanged();
 
-            var player = GameHelper.GetActivePlayer();
-            if (player != null)
-            {
-                if (card.DeckVersion != null && player.Deck?.Cards != null && player.Deck.Cards.Contains(card.DeckVersion))
-                {
-                    var master = card.DeckVersion;
-                    if (master.Enchantment != null)
-                    {
-                        try { CardCmd.ClearEnchantment(master); } catch { master.ClearEnchantmentInternal(); }
-                    }
-                    var masterEnch = GameHelper.CreateEnchantment(canonical, amount) ?? canonical;
-                    try 
-                    { 
-                        _ = CardCmd.Enchant(masterEnch, master, amount); 
-                    } 
-                    catch 
-                    { 
-                        master.EnchantInternal(masterEnch, amount); 
-                        masterEnch.ModifyCard(); 
-                        master.FinalizeUpgradeInternal(); 
-                    }
-                    if (master.Enchantment != null)
-                    {
-                        master.Enchantment.Amount = (int)amount;
-                        try { master.Enchantment.ModifyCard(); } catch { }
-                        try { master.FinalizeUpgradeInternal(); } catch { }
-                        try { master.DynamicVars?.RecalculateForUpgradeOrEnchant(); } catch { }
-                    }
-                    player.Deck.InvokeContentsChanged();
-                }
-                else if (player.PlayerCombatState != null && player.Deck?.Cards != null && player.Deck.Cards.Contains(card))
-                {
-                    var combatCards = player.PlayerCombatState.AllCards?.Where(c => c != null && (c.DeckVersion == card || c.CloneOf == card)).ToList();
-                    if (combatCards != null)
-                    {
-                        foreach (var combatCard in combatCards)
-                        {
-                            if (combatCard.Enchantment != null)
-                            {
-                                try { CardCmd.ClearEnchantment(combatCard); } catch { combatCard.ClearEnchantmentInternal(); }
-                            }
-                            var combatEnch = GameHelper.CreateEnchantment(canonical, amount) ?? canonical;
-                            try 
-                            { 
-                                _ = CardCmd.Enchant(combatEnch, combatCard, amount); 
-                            } 
-                            catch 
-                            { 
-                                combatCard.EnchantInternal(combatEnch, amount); 
-                                combatEnch.ModifyCard(); 
-                                combatCard.FinalizeUpgradeInternal(); 
-                            }
-                            if (combatCard.Enchantment != null)
-                            {
-                                combatCard.Enchantment.Amount = (int)amount;
-                                try { combatCard.Enchantment.ModifyCard(); } catch { }
-                                try { combatCard.FinalizeUpgradeInternal(); } catch { }
-                                try { combatCard.DynamicVars?.RecalculateForUpgradeOrEnchant(); } catch { }
-                            }
-                            combatCard.Pile?.InvokeContentsChanged();
-                        }
-                    }
-                }
-            }
+            SyncLinkedCards(card, linked => ApplyEnchantmentToSingleCard(linked, canonical, amount));
 
             GameHelper.RefreshAllVisibleCards();
             ModLogger.Info($"Card '{cardName}' successfully enchanted with '{enchantmentId}' (Amount: {amount}).");
@@ -896,39 +806,14 @@ public static class CardDirector
 
         try
         {
-            try
+            static void ClearOne(CardModel target)
             {
-                CardCmd.ClearEnchantment(card);
-            }
-            catch
-            {
-                card.ClearEnchantmentInternal();
+                try { CardCmd.ClearEnchantment(target); } catch { target.ClearEnchantmentInternal(); }
             }
 
+            ClearOne(card);
             card.Pile?.InvokeContentsChanged();
-
-            var player = GameHelper.GetActivePlayer();
-            if (player != null)
-            {
-                if (card.DeckVersion != null && player.Deck?.Cards != null && player.Deck.Cards.Contains(card.DeckVersion))
-                {
-                    var master = card.DeckVersion;
-                    try { CardCmd.ClearEnchantment(master); } catch { master.ClearEnchantmentInternal(); }
-                    player.Deck.InvokeContentsChanged();
-                }
-                else if (player.PlayerCombatState != null && player.Deck?.Cards != null && player.Deck.Cards.Contains(card))
-                {
-                    var combatCards = player.PlayerCombatState.AllCards?.Where(c => c != null && (c.DeckVersion == card || c.CloneOf == card)).ToList();
-                    if (combatCards != null)
-                    {
-                        foreach (var combatCard in combatCards)
-                        {
-                            try { CardCmd.ClearEnchantment(combatCard); } catch { combatCard.ClearEnchantmentInternal(); }
-                            combatCard.Pile?.InvokeContentsChanged();
-                        }
-                    }
-                }
-            }
+            SyncLinkedCards(card, ClearOne);
 
             GameHelper.RefreshAllVisibleCards();
             ModLogger.Info($"Enchantment cleared from card '{cardName}'.");
@@ -948,38 +833,8 @@ public static class CardDirector
     public static bool EnchantCardInDeck(string cardId, string enchantmentId, decimal amount = 1)
     {
         if (string.IsNullOrWhiteSpace(cardId) || string.IsNullOrWhiteSpace(enchantmentId)) return false;
-        var player = GameHelper.GetActivePlayer();
-
-        if (player?.Deck?.Cards != null)
-        {
-            var card = player.Deck.Cards.FirstOrDefault(c => 
-                c != null && (
-                    c.GetType().Name.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
-                    c.Id.Entry.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
-                    (!string.IsNullOrEmpty(c.Title) && c.Title.Equals(cardId, StringComparison.OrdinalIgnoreCase))
-                ));
-            if (card != null)
-            {
-                return EnchantCard(card, enchantmentId, amount);
-            }
-        }
-
-        if (player?.PlayerCombatState != null)
-        {
-            foreach (var pile in player.PlayerCombatState.AllPiles)
-            {
-                var combatCard = pile?.Cards?.FirstOrDefault(c => 
-                    c != null && (
-                        c.GetType().Name.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
-                        c.Id.Entry.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
-                        (!string.IsNullOrEmpty(c.Title) && c.Title.Equals(cardId, StringComparison.OrdinalIgnoreCase))
-                    ));
-                if (combatCard != null)
-                {
-                    return EnchantCard(combatCard, enchantmentId, amount);
-                }
-            }
-        }
+        var match = FindMatchingCard(GameHelper.GetActivePlayer(), cardId);
+        if (match != null) return EnchantCard(match, enchantmentId, amount);
 
         ModLogger.Warn($"Card '{cardId}' not found to enchant.");
         return false;
@@ -991,38 +846,8 @@ public static class CardDirector
     public static bool ClearEnchantmentInDeck(string cardId)
     {
         if (string.IsNullOrWhiteSpace(cardId)) return false;
-        var player = GameHelper.GetActivePlayer();
-
-        if (player?.Deck?.Cards != null)
-        {
-            var card = player.Deck.Cards.FirstOrDefault(c => 
-                c != null && (
-                    c.GetType().Name.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
-                    c.Id.Entry.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
-                    (!string.IsNullOrEmpty(c.Title) && c.Title.Equals(cardId, StringComparison.OrdinalIgnoreCase))
-                ));
-            if (card != null)
-            {
-                return ClearEnchantment(card);
-            }
-        }
-
-        if (player?.PlayerCombatState != null)
-        {
-            foreach (var pile in player.PlayerCombatState.AllPiles)
-            {
-                var combatCard = pile?.Cards?.FirstOrDefault(c => 
-                    c != null && (
-                        c.GetType().Name.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
-                        c.Id.Entry.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
-                        (!string.IsNullOrEmpty(c.Title) && c.Title.Equals(cardId, StringComparison.OrdinalIgnoreCase))
-                    ));
-                if (combatCard != null)
-                {
-                    return ClearEnchantment(combatCard);
-                }
-            }
-        }
+        var match = FindMatchingCard(GameHelper.GetActivePlayer(), cardId);
+        if (match != null) return ClearEnchantment(match);
 
         ModLogger.Warn($"Card '{cardId}' not found to clear enchantment.");
         return false;
@@ -1040,39 +865,14 @@ public static class CardDirector
 
         try
         {
-            try
+            void ApplyOne(CardModel target)
             {
-                CardCmd.ApplyKeyword(card, keyword);
-            }
-            catch
-            {
-                card.AddKeyword(keyword);
+                try { CardCmd.ApplyKeyword(target, keyword); } catch { target.AddKeyword(keyword); }
             }
 
+            ApplyOne(card);
             card.Pile?.InvokeContentsChanged();
-
-            var player = GameHelper.GetActivePlayer();
-            if (player != null)
-            {
-                if (card.DeckVersion != null && player.Deck?.Cards != null && player.Deck.Cards.Contains(card.DeckVersion))
-                {
-                    var master = card.DeckVersion;
-                    try { CardCmd.ApplyKeyword(master, keyword); } catch { master.AddKeyword(keyword); }
-                    player.Deck.InvokeContentsChanged();
-                }
-                else if (player.PlayerCombatState != null && player.Deck?.Cards != null && player.Deck.Cards.Contains(card))
-                {
-                    var combatCards = player.PlayerCombatState.AllCards?.Where(c => c != null && (c.DeckVersion == card || c.CloneOf == card)).ToList();
-                    if (combatCards != null)
-                    {
-                        foreach (var combatCard in combatCards)
-                        {
-                            try { CardCmd.ApplyKeyword(combatCard, keyword); } catch { combatCard.AddKeyword(keyword); }
-                            combatCard.Pile?.InvokeContentsChanged();
-                        }
-                    }
-                }
-            }
+            SyncLinkedCards(card, ApplyOne);
 
             ModLogger.Info($"Keyword '{keyword}' added to card '{cardName}'.");
             OnDeckChanged?.Invoke();
@@ -1096,39 +896,14 @@ public static class CardDirector
 
         try
         {
-            try
+            void RemoveOne(CardModel target)
             {
-                CardCmd.RemoveKeyword(card, keyword);
-            }
-            catch
-            {
-                card.RemoveKeyword(keyword);
+                try { CardCmd.RemoveKeyword(target, keyword); } catch { target.RemoveKeyword(keyword); }
             }
 
+            RemoveOne(card);
             card.Pile?.InvokeContentsChanged();
-
-            var player = GameHelper.GetActivePlayer();
-            if (player != null)
-            {
-                if (card.DeckVersion != null && player.Deck?.Cards != null && player.Deck.Cards.Contains(card.DeckVersion))
-                {
-                    var master = card.DeckVersion;
-                    try { CardCmd.RemoveKeyword(master, keyword); } catch { master.RemoveKeyword(keyword); }
-                    player.Deck.InvokeContentsChanged();
-                }
-                else if (player.PlayerCombatState != null && player.Deck?.Cards != null && player.Deck.Cards.Contains(card))
-                {
-                    var combatCards = player.PlayerCombatState.AllCards?.Where(c => c != null && (c.DeckVersion == card || c.CloneOf == card)).ToList();
-                    if (combatCards != null)
-                    {
-                        foreach (var combatCard in combatCards)
-                        {
-                            try { CardCmd.RemoveKeyword(combatCard, keyword); } catch { combatCard.RemoveKeyword(keyword); }
-                            combatCard.Pile?.InvokeContentsChanged();
-                        }
-                    }
-                }
-            }
+            SyncLinkedCards(card, RemoveOne);
 
             ModLogger.Info($"Keyword '{keyword}' removed from card '{cardName}'.");
             OnDeckChanged?.Invoke();
@@ -1163,38 +938,8 @@ public static class CardDirector
     public static bool AddKeywordToDeck(string cardId, MegaCrit.Sts2.Core.Entities.Cards.CardKeyword keyword)
     {
         if (string.IsNullOrWhiteSpace(cardId)) return false;
-        var player = GameHelper.GetActivePlayer();
-
-        if (player?.Deck?.Cards != null)
-        {
-            var card = player.Deck.Cards.FirstOrDefault(c => 
-                c != null && (
-                    c.GetType().Name.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
-                    c.Id.Entry.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
-                    (!string.IsNullOrEmpty(c.Title) && c.Title.Equals(cardId, StringComparison.OrdinalIgnoreCase))
-                ));
-            if (card != null)
-            {
-                return AddKeyword(card, keyword);
-            }
-        }
-
-        if (player?.PlayerCombatState != null)
-        {
-            foreach (var pile in player.PlayerCombatState.AllPiles)
-            {
-                var combatCard = pile?.Cards?.FirstOrDefault(c => 
-                    c != null && (
-                        c.GetType().Name.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
-                        c.Id.Entry.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
-                        (!string.IsNullOrEmpty(c.Title) && c.Title.Equals(cardId, StringComparison.OrdinalIgnoreCase))
-                    ));
-                if (combatCard != null)
-                {
-                    return AddKeyword(combatCard, keyword);
-                }
-            }
-        }
+        var match = FindMatchingCard(GameHelper.GetActivePlayer(), cardId);
+        if (match != null) return AddKeyword(match, keyword);
 
         ModLogger.Warn($"Card '{cardId}' not found to add keyword '{keyword}'.");
         return false;
@@ -1206,38 +951,8 @@ public static class CardDirector
     public static bool RemoveKeywordFromDeck(string cardId, MegaCrit.Sts2.Core.Entities.Cards.CardKeyword keyword)
     {
         if (string.IsNullOrWhiteSpace(cardId)) return false;
-        var player = GameHelper.GetActivePlayer();
-
-        if (player?.Deck?.Cards != null)
-        {
-            var card = player.Deck.Cards.FirstOrDefault(c => 
-                c != null && (
-                    c.GetType().Name.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
-                    c.Id.Entry.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
-                    (!string.IsNullOrEmpty(c.Title) && c.Title.Equals(cardId, StringComparison.OrdinalIgnoreCase))
-                ));
-            if (card != null)
-            {
-                return RemoveKeyword(card, keyword);
-            }
-        }
-
-        if (player?.PlayerCombatState != null)
-        {
-            foreach (var pile in player.PlayerCombatState.AllPiles)
-            {
-                var combatCard = pile?.Cards?.FirstOrDefault(c => 
-                    c != null && (
-                        c.GetType().Name.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
-                        c.Id.Entry.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
-                        (!string.IsNullOrEmpty(c.Title) && c.Title.Equals(cardId, StringComparison.OrdinalIgnoreCase))
-                    ));
-                if (combatCard != null)
-                {
-                    return RemoveKeyword(combatCard, keyword);
-                }
-            }
-        }
+        var match = FindMatchingCard(GameHelper.GetActivePlayer(), cardId);
+        if (match != null) return RemoveKeyword(match, keyword);
 
         ModLogger.Warn($"Card '{cardId}' not found to remove keyword '{keyword}'.");
         return false;
@@ -1249,38 +964,8 @@ public static class CardDirector
     public static bool ToggleKeywordInDeck(string cardId, MegaCrit.Sts2.Core.Entities.Cards.CardKeyword keyword)
     {
         if (string.IsNullOrWhiteSpace(cardId)) return false;
-        var player = GameHelper.GetActivePlayer();
-
-        if (player?.Deck?.Cards != null)
-        {
-            var card = player.Deck.Cards.FirstOrDefault(c => 
-                c != null && (
-                    c.GetType().Name.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
-                    c.Id.Entry.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
-                    (!string.IsNullOrEmpty(c.Title) && c.Title.Equals(cardId, StringComparison.OrdinalIgnoreCase))
-                ));
-            if (card != null)
-            {
-                return ToggleKeyword(card, keyword);
-            }
-        }
-
-        if (player?.PlayerCombatState != null)
-        {
-            foreach (var pile in player.PlayerCombatState.AllPiles)
-            {
-                var combatCard = pile?.Cards?.FirstOrDefault(c => 
-                    c != null && (
-                        c.GetType().Name.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
-                        c.Id.Entry.Equals(cardId, StringComparison.OrdinalIgnoreCase) ||
-                        (!string.IsNullOrEmpty(c.Title) && c.Title.Equals(cardId, StringComparison.OrdinalIgnoreCase))
-                    ));
-                if (combatCard != null)
-                {
-                    return ToggleKeyword(combatCard, keyword);
-                }
-            }
-        }
+        var match = FindMatchingCard(GameHelper.GetActivePlayer(), cardId);
+        if (match != null) return ToggleKeyword(match, keyword);
 
         ModLogger.Warn($"Card '{cardId}' not found to toggle keyword '{keyword}'.");
         return false;

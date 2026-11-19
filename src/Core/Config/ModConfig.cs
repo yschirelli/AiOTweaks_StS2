@@ -26,27 +26,36 @@ public sealed class GeneralConfig
     public const string DefaultConsoleHotkey = "F1";
     public const string DefaultGuiOverlayHotkey = "F3";
 
+    private string _consoleHotkey = DefaultConsoleHotkey;
+    private bool _consoleHotkeySet;
+
     [JsonPropertyName("enabled")]
     public bool Enabled { get; set; } = true;
 
-    [JsonPropertyName("debugLogging")]
-    public bool DebugLogging { get; set; } = false;
-
     [JsonPropertyName("consoleHotkey")]
-    public string ConsoleHotkey { get; set; } = DefaultConsoleHotkey;
+    public string ConsoleHotkey
+    {
+        get => _consoleHotkey;
+        set
+        {
+            _consoleHotkey = value;
+            _consoleHotkeySet = true;
+        }
+    }
 
     [JsonPropertyName("guiOverlayHotkey")]
     public string GuiOverlayHotkey { get; set; } = DefaultGuiOverlayHotkey;
 
     [JsonPropertyName("toggleOverlayKey")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? ToggleOverlayKey
     {
-        get => ConsoleHotkey;
+        get => null;
         set
         {
-            if (value != null)
+            if (!_consoleHotkeySet && !string.IsNullOrWhiteSpace(value))
             {
-                ConsoleHotkey = value;
+                _consoleHotkey = value;
             }
         }
     }
@@ -181,9 +190,6 @@ public sealed class CombatSandboxConfig
     [JsonPropertyName("bonusDrawPerTurn")]
     public int BonusDrawPerTurn { get; set; } = 0;
 
-    [JsonPropertyName("maxHandSizeOverride")]
-    public int MaxHandSizeOverride { get; set; } = 10;
-
     [JsonPropertyName("infinitePotions")]
     public bool InfinitePotions { get; set; } = false;
 
@@ -193,17 +199,8 @@ public sealed class CombatSandboxConfig
 
 public sealed class UIConfig
 {
-    [JsonPropertyName("overlayScale")]
-    public float OverlayScale { get; set; } = 1.0f;
-
-    [JsonPropertyName("overlayOpacity")]
-    public float OverlayOpacity { get; set; } = 0.95f;
-
     [JsonPropertyName("showDebugConsoleOnStart")]
     public bool ShowDebugConsoleOnStart { get; set; } = false;
-
-    [JsonPropertyName("enableAudioCues")]
-    public bool EnableAudioCues { get; set; } = true;
 
     [JsonPropertyName("menuPosX")]
     public float? MenuPosX { get; set; }

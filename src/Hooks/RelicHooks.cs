@@ -24,7 +24,7 @@ public static class RelicHooks
     private static readonly FieldInfo? DequesField = typeof(RelicGrabBag).GetField("_deques", BindingFlags.NonPublic | BindingFlags.Instance);
     private static readonly FieldInfo? RefreshAllowedField = typeof(RelicGrabBag).GetField("_refreshAllowed", BindingFlags.NonPublic | BindingFlags.Instance);
 
-    private static readonly Dictionary<ulong, TopBarBaselinePositions> BaselineMap = new();
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<NTopBar, TopBarBaselinePositions> BaselineMap = new();
 
     private sealed class TopBarBaselinePositions
     {
@@ -241,12 +241,7 @@ public static class RelicHooks
 
         try
         {
-            ulong instanceId = topBar.GetInstanceId();
-            if (!BaselineMap.TryGetValue(instanceId, out var baseline))
-            {
-                baseline = new TopBarBaselinePositions();
-                BaselineMap[instanceId] = baseline;
-            }
+            var baseline = BaselineMap.GetOrCreateValue(topBar);
 
             if (!baseline.Initialized)
             {
